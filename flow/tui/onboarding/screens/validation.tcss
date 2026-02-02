@@ -1,0 +1,146 @@
+/* Validation Screen Styles */
+
+/* Re-define theme vars (Textual limitation) */
+$primary: #7c3aed;
+$primary-light: #a78bfa;
+$surface: #1e1e2e;
+$surface-light: #313244;
+$surface-lighter: #45475a;
+$text: #cdd6f4;
+$text-muted: #a6adc8;
+$text-dim: #6c7086;
+$border: #45475a;
+$success: #10b981;
+$success-light: #34d399;
+$danger: #ef4444;
+
+/* Main container */
+#validation-container {
+    align: center middle;
+    width: 100%;
+    height: 100%;
+    padding: 2;
+}
+
+/* Title */
+#validation-title {
+    text-align: center;
+    text-style: bold;
+    color: $primary-light;
+    width: 100%;
+    padding: 1;
+    margin-bottom: 0;
+}
+
+#validation-subtitle {
+    text-align: center;
+    color: $text-muted;
+    width: 100%;
+    margin-bottom: 2;
+}
+
+/* Status container */
+#validation-status {
+    width: 50;
+    min-width: 40;
+    max-width: 60;
+    background: $surface-light;
+    border: round $border;
+    padding: 3;
+    margin: 1;
+    align: center middle;
+}
+
+/* Loading state */
+#loading-state {
+    align: center middle;
+    width: 100%;
+}
+
+#loader {
+    width: 100%;
+    height: 3;
+}
+
+#loading-text {
+    text-align: center;
+    color: $text-muted;
+    padding-top: 1;
+}
+
+/* Success state */
+#success-state {
+    align: center middle;
+    width: 100%;
+}
+
+#success-icon {
+    text-align: center;
+    color: $success;
+    text-style: bold;
+    width: 100%;
+}
+
+#success-text {
+    text-align: center;
+    color: $success-light;
+    text-style: bold;
+    padding: 1;
+}
+
+#success-detail {
+    text-align: center;
+    color: $text-muted;
+}
+
+/* Error state */
+#error-state {
+    align: center middle;
+    width: 100%;
+}
+
+#error-icon {
+    text-align: center;
+    color: $danger;
+    text-style: bold;
+    width: 100%;
+}
+
+#error-text {
+    text-align: center;
+    color: $danger;
+    text-style: bold;
+    padding: 1;
+}
+
+#error-detail {
+    text-align: center;
+    color: $text-muted;
+    padding: 1;
+    text-style: italic;
+}
+
+/* Action buttons */
+#validation-actions {
+    width: 100%;
+    height: auto;
+    align: center middle;
+    margin-top: 2;
+}
+
+#back-btn {
+    margin-right: 1;
+}
+
+#retry-btn {
+    margin-right: 1;
+}
+
+#start-btn {
+    background: $success;
+    color: white;
+}
+
+#start-btn:hover {
+    background: $success-light;
+}

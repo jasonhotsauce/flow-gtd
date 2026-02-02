@@ -18,8 +18,11 @@ typer = {extras = ["all"], version = "^0.15.0"}
 # TUI Layer
 textual = "^3.0.0"
 
-# LLM Integration
-google-genai = "^1.0.0"
+# LLM Integration (Multi-provider support)
+google-genai = "^1.0.0"  # Gemini provider
+openai = {version = "^1.0.0", optional = true}  # OpenAI provider
+httpx = {version = "^0.27.0", optional = true}  # Ollama provider
+tomli = {version = "^2.0.0", python = "<3.11"}  # TOML config (required for Python <3.11, stdlib in 3.11+)
 
 # RAG / Embeddings
 sentence-transformers = "^3.0.0"
@@ -30,6 +33,11 @@ pydantic-settings = "^2.7.0"
 
 # Apple Ecosystem Sync (macOS only)
 pyobjc-framework-EventKit = {version = "^11.0", markers = "sys_platform == 'darwin'"}
+
+[tool.poetry.extras]
+openai = ["openai"]
+ollama = ["httpx"]
+all-llm = ["openai", "httpx"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
