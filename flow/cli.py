@@ -7,6 +7,7 @@ from flow.tui.app import FlowApp
 from flow.tui.screens.process import ProcessScreen
 from flow.tui.screens.action.action import ActionScreen
 from flow.tui.screens.review.review import ReviewScreen
+from flow.tui.screens.focus.focus import FocusScreen
 from flow.config import get_settings
 from flow.sync.reminders import sync_reminders_to_flow
 
@@ -89,6 +90,19 @@ def sync() -> None:
 def review() -> None:
     """Launch TUI Weekly Review (Stale, Someday, Report)."""
     FlowApp(initial_screen=ReviewScreen).run()
+
+
+@app.command()
+def focus() -> None:
+    """Launch Focus Mode - AI selects best task for your time window.
+
+    Smart Dispatcher analyzes your calendar to determine available time,
+    then selects the optimal task:
+    - < 30 mins: Quick Wins (short tasks, @admin)
+    - > 2 hours: Deep Work (high-energy tasks)
+    - Otherwise: Standard priority order
+    """
+    FlowApp(initial_screen=FocusScreen).run()
 
 
 @app.command()

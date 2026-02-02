@@ -8,7 +8,11 @@ from flow.config import get_settings
 from flow.database.sqlite import SqliteDB
 from flow.database.vectors import schedule_auto_index
 from flow.models import Item
-from flow.core.coach import suggest_clusters
+from flow.core.coach import (
+    suggest_clusters,
+    estimate_duration,
+    estimate_duration_heuristic,
+)
 
 
 class Engine:
@@ -173,12 +177,91 @@ class Engine:
         """Advance to the next item in the coach stage."""
         self._coach_index += 1
 
-    def coach_apply_suggestion(self, item_id: str, new_title: str) -> None:
-        """Apply AI suggestion to update item title."""
+    def coach_apply_suggestion(
+        self, item_id: str, new_title: str, auto_estimate_duration: bool = True
+    ) -> None:
+        """Apply AI suggestion to update item title.
+
+        If auto_estimate_duration is True (default), also estimates and sets
+        the task duration using LLM (with heuristic fallback).
+
+        Args:
+            item_id: ID of item to update.
+            new_title: New title to apply (must not be empty).
+            auto_estimate_duration: Whether to estimate duration automatically.
+
+        Raises:
+            ValueError: If new_title is empty or whitespace-only.
+        """
+        if not new_title or not new_title.strip():
+            raise ValueError("Title cannot be empty")
+
         item = self._db.get_item(item_id)
         if item:
-            self._db.update_item(item.model_copy(update={"title": new_title.strip()}))
+            updates: dict = {"title": new_title.strip()}
+
+            # Estimate duration if not already set and auto-estimate is enabled
+            if auto_estimate_duration and item.estimated_duration is None:
+                duration = estimate_duration(new_title)
+                if duration is None:
+                    # Fallback to heuristic if LLM unavailable
+                    duration = estimate_duration_heuristic(new_title)
+                updates["estimated_duration"] = duration
+
+            self._db.update_item(item.model_copy(update=updates))
         self._process_inbox = self.list_inbox()
+
+    def set_item_duration(self, item_id: str, duration_minutes: int) -> None:
+        """Set estimated duration for an item manually.
+
+        Args:
+            item_id: ID of item to update.
+            duration_minutes: Duration in minutes (must be one of: 5, 15, 30, 60, 120).
+
+        Raises:
+            ValueError: If duration_minutes is not a valid duration value.
+            ValueError: If item_id does not exist.
+        """
+        from flow.core.coach import VALID_DURATIONS
+
+        if duration_minutes not in VALID_DURATIONS:
+            raise ValueError(
+                f"Duration must be one of {VALID_DURATIONS}, got {duration_minutes}"
+            )
+
+        item = self._db.get_item(item_id)
+        if not item:
+            raise ValueError(f"Item with id '{item_id}' not found")
+
+        self._db.update_item(
+            item.model_copy(update={"estimated_duration": duration_minutes})
+        )
+
+    def estimate_item_duration(
+        self, item_id: str, use_llm: bool = True
+    ) -> Optional[int]:
+        """Estimate and set duration for an item.
+
+        Args:
+            item_id: ID of item to estimate.
+            use_llm: If True, use LLM; otherwise use heuristics only.
+
+        Returns:
+            Estimated duration in minutes, or None if item not found.
+        """
+        item = self._db.get_item(item_id)
+        if not item:
+            return None
+
+        if use_llm:
+            duration = estimate_duration(item.title)
+            if duration is None:
+                duration = estimate_duration_heuristic(item.title)
+        else:
+            duration = estimate_duration_heuristic(item.title)
+
+        self._db.update_item(item.model_copy(update={"estimated_duration": duration}))
+        return duration
 
     # ---- Weekly Review ----
     def get_stale(self, days: int = 14) -> list[Item]:

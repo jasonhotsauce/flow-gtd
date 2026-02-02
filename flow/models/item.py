@@ -18,7 +18,10 @@ class Item(BaseModel):
     status: ItemStatus = "active"
     context_tags: list[str] = Field(default_factory=list)
     parent_id: Optional[str] = None
-    created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: Optional[datetime] = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
     due_date: Optional[datetime] = None
     meta_payload: dict[str, Any] = Field(default_factory=dict)
     original_ek_id: Optional[str] = None
+    estimated_duration: Optional[int] = None  # Duration in minutes for Focus Mode

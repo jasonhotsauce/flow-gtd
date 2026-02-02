@@ -14,9 +14,13 @@ def _iso(dt: Optional[datetime]) -> Optional[str]:
 
 
 def _parse_dt(s: Optional[str]) -> Optional[datetime]:
+    """Parse ISO datetime string, returning None for invalid input."""
     if not s:
         return None
-    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
 
 
 class SqliteDB:
@@ -41,7 +45,8 @@ class SqliteDB:
                     created_at DATETIME,
                     due_date DATETIME,
                     meta_payload TEXT,
-                    original_ek_id TEXT
+                    original_ek_id TEXT,
+                    estimated_duration INTEGER
                 )
             """
             )
@@ -49,7 +54,16 @@ class SqliteDB:
                 "CREATE INDEX IF NOT EXISTS idx_status_type ON items(status, type)"
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_parent ON items(parent_id)")
+            # Migration: add estimated_duration column if missing
+            self._migrate_add_estimated_duration(conn)
             conn.commit()
+
+    def _migrate_add_estimated_duration(self, conn: sqlite3.Connection) -> None:
+        """Add estimated_duration column if it doesn't exist (migration)."""
+        cursor = conn.execute("PRAGMA table_info(items)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "estimated_duration" not in columns:
+            conn.execute("ALTER TABLE items ADD COLUMN estimated_duration INTEGER")
 
     def insert_inbox(self, item: Item) -> None:
         """Insert a single inbox item (type=inbox, status=active)."""
@@ -57,8 +71,9 @@ class SqliteDB:
             conn.execute(
                 """
                 INSERT INTO items (id, type, title, status, context_tags, parent_id,
-                                  created_at, due_date, meta_payload, original_ek_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  created_at, due_date, meta_payload, original_ek_id,
+                                  estimated_duration)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     item.id,
@@ -71,6 +86,7 @@ class SqliteDB:
                     _iso(item.due_date),
                     json.dumps(item.meta_payload),
                     item.original_ek_id,
+                    item.estimated_duration,
                 ),
             )
             conn.commit()
@@ -110,7 +126,7 @@ class SqliteDB:
                 """
                 UPDATE items SET type=?, title=?, status=?, context_tags=?,
                                 parent_id=?, created_at=?, due_date=?,
-                                meta_payload=?, original_ek_id=?
+                                meta_payload=?, original_ek_id=?, estimated_duration=?
                 WHERE id = ?
                 """,
                 (
@@ -123,6 +139,7 @@ class SqliteDB:
                     _iso(item.due_date),
                     json.dumps(item.meta_payload),
                     item.original_ek_id,
+                    item.estimated_duration,
                     item.id,
                 ),
             )
@@ -175,17 +192,53 @@ class SqliteDB:
             ).fetchall()
         return [_row_to_item(r) for r in rows]
 
+    def list_actions_by_duration(
+        self,
+        max_duration: Optional[int] = None,
+        min_duration: Optional[int] = None,
+        status: str = "active",
+    ) -> list[Item]:
+        """Return active items filtered by estimated_duration range (for Focus Mode)."""
+        with sqlite3.connect(self._path) as conn:
+            conn.row_factory = sqlite3.Row
+            query = "SELECT * FROM items WHERE status = ?"
+            params: list = [status]
+
+            if max_duration is not None:
+                query += " AND (estimated_duration IS NULL OR estimated_duration <= ?)"
+                params.append(max_duration)
+            if min_duration is not None:
+                query += " AND (estimated_duration IS NULL OR estimated_duration >= ?)"
+                params.append(min_duration)
+
+            query += " ORDER BY created_at ASC"
+            rows = conn.execute(query, params).fetchall()
+        return [_row_to_item(r) for r in rows]
+
 
 def _row_to_item(row: sqlite3.Row) -> Item:
+    """Convert database row to Item, handling malformed data gracefully."""
+    # Parse JSON fields with fallback for malformed data
+    try:
+        context_tags = json.loads(row["context_tags"] or "[]")
+    except json.JSONDecodeError:
+        context_tags = []
+
+    try:
+        meta_payload = json.loads(row["meta_payload"] or "{}")
+    except json.JSONDecodeError:
+        meta_payload = {}
+
     return Item(
         id=row["id"],
         type=row["type"],
         title=row["title"],
         status=row["status"],
-        context_tags=json.loads(row["context_tags"] or "[]"),
+        context_tags=context_tags,
         parent_id=row["parent_id"],
         created_at=_parse_dt(row["created_at"]),
         due_date=_parse_dt(row["due_date"]),
-        meta_payload=json.loads(row["meta_payload"] or "{}"),
+        meta_payload=meta_payload,
         original_ek_id=row["original_ek_id"],
+        estimated_duration=row["estimated_duration"],
     )
