@@ -5,6 +5,9 @@ from typing import Literal, Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Default data directory: ~/.flow/data/
+_data_dir = Path.home() / ".flow" / "data"
+
 
 class Settings(BaseSettings):
     """Flow application settings loaded from environment and .env.
@@ -20,9 +23,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Paths (local-first data)
-    db_path: Path = Path("data/flow.db")
-    chroma_path: Path = Path("data/knowledge_base")
+    # Paths (local-first data stored in ~/.flow/data/)
+    db_path: Path = _data_dir / "flow.db"
+    chroma_path: Path = _data_dir / "knowledge_base"
 
     # LLM Provider Settings
     # Primary config is in ~/.flow/config.toml, env vars provide override
@@ -47,7 +50,7 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
-    log_file: Path = Path("data/flow.log")
+    log_file: Path = _data_dir / "flow.log"
 
 
 def get_settings() -> Settings:

@@ -45,7 +45,7 @@ class FlowGtd < Formula
         flow
       
       Data is stored locally in:
-        ~/Library/Application Support/flow-gtd/
+        ~/.flow/data/
     EOS
   end
 
