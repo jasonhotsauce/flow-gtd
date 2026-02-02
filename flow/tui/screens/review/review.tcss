@@ -1,0 +1,221 @@
+/* Review Screen Styles
+ * Weekly review wizard: Stale, Someday, Report
+ */
+
+/* Import theme variables (Textual requires vars in each CSS file) */
+$primary: #7c3aed;
+$success: #10b981;
+$warning: #f59e0b;
+$info: #3b82f6;
+$surface: #1e1e2e;
+$surface-light: #313244;
+$surface-lighter: #45475a;
+$text: #cdd6f4;
+$text-muted: #a6adc8;
+$text-dim: #6c7086;
+$border: #45475a;
+
+ReviewScreen {
+    layout: vertical;
+    background: $surface;
+}
+
+/* Header with title */
+#review-header {
+    dock: top;
+    height: auto;
+    padding: 1 2;
+    background: $surface-light;
+    border-bottom: solid $border;
+}
+
+#review-main-title {
+    text-style: bold;
+    color: $warning;
+}
+
+/* Mode tabs/indicators */
+#review-tabs {
+    dock: top;
+    height: 3;
+    padding: 0 2;
+    background: $surface;
+    layout: horizontal;
+}
+
+.mode-tab {
+    width: auto;
+    padding: 0 3;
+    height: 3;
+    content-align: center middle;
+    background: $surface-light;
+    color: $text-muted;
+    margin-right: 1;
+}
+
+.mode-tab:hover {
+    background: $surface-lighter;
+    color: $text;
+}
+
+.mode-tab.-active {
+    background: $primary;
+    color: white;
+    text-style: bold;
+}
+
+#tab-stale {
+    border-left: outer $warning;
+}
+
+#tab-someday {
+    border-left: outer $info;
+}
+
+#tab-report {
+    border-left: outer $success;
+}
+
+/* Section title with context */
+#review-section {
+    padding: 1 2;
+    background: $surface;
+}
+
+#review-title {
+    color: $text;
+    text-style: bold;
+}
+
+#review-subtitle {
+    color: $text-dim;
+    text-style: italic;
+    padding-top: 1;
+}
+
+/* Main content area */
+#review-content {
+    height: 1fr;
+    padding: 1 2;
+}
+
+#review-list {
+    height: 1fr;
+    background: $surface-light;
+    border: round $border;
+}
+
+#review-list:focus {
+    border: round $primary;
+}
+
+#review-list > .option-list--option-highlighted {
+    background: $primary;
+    color: white;
+}
+
+/* Detail panel for report */
+#review-detail {
+    padding: 2;
+    background: $surface-light;
+    border: round $border;
+    height: 1fr;
+    overflow-y: auto;
+}
+
+/* Report statistics */
+.report-section {
+    padding: 1;
+    margin-bottom: 1;
+}
+
+.report-stat {
+    padding: 0 1;
+}
+
+.report-stat-label {
+    color: $text-muted;
+}
+
+.report-stat-value {
+    color: $text;
+    text-style: bold;
+}
+
+/* Stale item styling */
+.stale-item {
+    border-left: outer $warning;
+    padding-left: 1;
+}
+
+.stale-days {
+    color: $warning;
+    text-style: italic;
+}
+
+/* Someday item styling */
+.someday-item {
+    border-left: outer $info;
+    padding-left: 1;
+}
+
+/* Empty states */
+#review-empty {
+    width: 100%;
+    height: 100%;
+    content-align: center middle;
+    background: $surface-light;
+    border: round $border;
+}
+
+#review-empty-icon {
+    text-align: center;
+    color: $success;
+    padding: 1;
+}
+
+#review-empty-text {
+    color: $text-dim;
+    text-align: center;
+}
+
+/* Help bar */
+#review-help {
+    dock: bottom;
+    height: 3;
+    padding: 0 2;
+    background: $surface-light;
+    border-top: solid $border;
+    content-align: center middle;
+}
+
+#review-help-text {
+    color: $text-dim;
+    text-align: center;
+}
+
+/* Progress indicator */
+#review-progress {
+    dock: top;
+    height: 1;
+    padding: 0 2;
+    background: $surface;
+}
+
+.progress-step {
+    width: auto;
+    padding: 0 1;
+}
+
+.progress-step.-complete {
+    color: $success;
+}
+
+.progress-step.-current {
+    color: $primary;
+    text-style: bold;
+}
+
+.progress-step.-pending {
+    color: $text-dim;
+}

@@ -1,0 +1,314 @@
+/* Flow GTD - Global Theme
+ * Design System: Modern, focused, calming colors for productivity
+ */
+
+/* ============================================
+   COLOR PALETTE (CSS Variables)
+   ============================================ */
+$primary: #7c3aed;         /* Purple - brand/accent */
+$primary-light: #a78bfa;   /* Light purple */
+$primary-dark: #5b21b6;    /* Dark purple */
+
+$success: #10b981;         /* Green - completed/done */
+$success-light: #34d399;
+$warning: #f59e0b;         /* Amber - attention/stale */
+$warning-light: #fbbf24;
+$danger: #ef4444;          /* Red - urgent/delete */
+$info: #3b82f6;            /* Blue - info/link */
+
+$surface: #1e1e2e;         /* Dark surface */
+$surface-light: #313244;   /* Elevated surface */
+$surface-lighter: #45475a; /* Card/panel bg */
+
+$text: #cdd6f4;            /* Primary text */
+$text-muted: #a6adc8;      /* Secondary text */
+$text-dim: #6c7086;        /* Disabled/hint text */
+
+$border: #45475a;          /* Default border */
+$border-focus: #7c3aed;    /* Focus border */
+
+/* ============================================
+   GLOBAL RESETS & BASE STYLES
+   ============================================ */
+Screen {
+    background: $surface;
+    color: $text;
+}
+
+Header {
+    background: $primary-dark;
+    color: white;
+    text-style: bold;
+    dock: top;
+    height: 3;
+    content-align: center middle;
+}
+
+Footer {
+    background: $surface-light;
+    color: $text-muted;
+}
+
+/* Footer key styling */
+FooterKey > .footer-key--key {
+    background: $primary;
+    color: white;
+}
+
+FooterKey > .footer-key--description {
+    color: $text-muted;
+}
+
+/* ============================================
+   COMMON WIDGET STYLES
+   ============================================ */
+
+/* Standard card/panel style */
+.card {
+    background: $surface-light;
+    border: round $border;
+    padding: 1 2;
+    margin: 1;
+}
+
+.card:focus {
+    border: round $primary;
+}
+
+/* Section titles */
+.section-title {
+    text-style: bold;
+    color: $primary-light;
+    padding: 1 2;
+    margin-bottom: 1;
+}
+
+/* Empty state message */
+.empty-state {
+    color: $text-dim;
+    text-align: center;
+    padding: 3;
+    text-style: italic;
+}
+
+/* Badge/tag styles */
+.badge {
+    padding: 0 1;
+    text-style: bold;
+}
+
+.badge-success {
+    background: $success;
+    color: white;
+}
+
+.badge-warning {
+    background: $warning;
+    color: $surface;
+}
+
+.badge-danger {
+    background: $danger;
+    color: white;
+}
+
+.badge-info {
+    background: $info;
+    color: white;
+}
+
+/* ============================================
+   OPTION LIST / LIST VIEW STYLES
+   ============================================ */
+OptionList {
+    background: $surface-light;
+    border: round $border;
+    padding: 1;
+    scrollbar-background: $surface;
+    scrollbar-color: $border;
+    scrollbar-color-hover: $primary-light;
+    scrollbar-color-active: $primary;
+}
+
+OptionList:focus {
+    border: round $primary;
+}
+
+OptionList > .option-list--option-highlighted {
+    background: $primary;
+    color: white;
+    text-style: bold;
+}
+
+OptionList > .option-list--option-hover {
+    background: $surface-lighter;
+}
+
+ListView {
+    background: $surface-light;
+    border: round $border;
+    padding: 1;
+}
+
+ListView:focus {
+    border: round $primary;
+}
+
+ListView > ListItem.--highlight {
+    background: $primary;
+    color: white;
+}
+
+/* ============================================
+   INPUT STYLES
+   ============================================ */
+Input {
+    background: $surface-light;
+    border: tall $border;
+    padding: 0 1;
+}
+
+Input:focus {
+    border: tall $primary;
+}
+
+Input.-invalid {
+    border: tall $danger;
+}
+
+/* ============================================
+   BUTTON STYLES
+   ============================================ */
+Button {
+    background: $surface-lighter;
+    color: $text;
+    border: none;
+    padding: 0 2;
+    min-width: 10;
+}
+
+Button:hover {
+    background: $primary;
+    color: white;
+}
+
+Button:focus {
+    background: $primary;
+    color: white;
+    text-style: bold;
+}
+
+Button.-primary {
+    background: $primary;
+    color: white;
+}
+
+Button.-primary:hover {
+    background: $primary-light;
+}
+
+Button.-success {
+    background: $success;
+    color: white;
+}
+
+Button.-danger {
+    background: $danger;
+    color: white;
+}
+
+/* ============================================
+   MARKDOWN STYLES (for AI responses)
+   ============================================ */
+Markdown {
+    background: transparent;
+    padding: 1;
+}
+
+MarkdownH1 {
+    color: $primary-light;
+    text-style: bold;
+    border-bottom: solid $border;
+    padding-bottom: 1;
+}
+
+MarkdownH2 {
+    color: $primary-light;
+    text-style: bold;
+}
+
+MarkdownBlockQuote {
+    background: $surface-lighter;
+    border-left: outer $primary;
+    padding-left: 2;
+    color: $text-muted;
+}
+
+/* ============================================
+   LOADING & STATUS INDICATORS
+   ============================================ */
+LoadingIndicator {
+    color: $primary-light;
+}
+
+Toast {
+    background: $surface-light;
+    border: round $border;
+    padding: 1 2;
+}
+
+/* ============================================
+   PROGRESS BAR
+   ============================================ */
+ProgressBar Bar > .bar--bar {
+    background: $primary;
+}
+
+ProgressBar Bar > .bar--complete {
+    background: $success;
+}
+
+/* ============================================
+   TAB STYLES
+   ============================================ */
+Tabs {
+    background: $surface;
+    dock: top;
+}
+
+Tab {
+    background: $surface-light;
+    color: $text-muted;
+    padding: 1 3;
+}
+
+Tab:hover {
+    background: $surface-lighter;
+    color: $text;
+}
+
+Tab.-active {
+    background: $primary;
+    color: white;
+    text-style: bold;
+}
+
+Underline > .underline--bar {
+    background: $primary;
+}
+
+/* ============================================
+   RAG CONTEXT PANEL (Shared Widget)
+   ============================================ */
+RAGContextPanel {
+    width: 100%;
+    height: 100%;
+    padding: 1;
+    background: $surface-light;
+    border: round $border;
+    overflow-y: auto;
+}
+
+RAGContextPanel:focus {
+    border: round $info;
+}

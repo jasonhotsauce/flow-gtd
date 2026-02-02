@@ -1,0 +1,299 @@
+/* Process Funnel Styles
+ * 4-stage wizard: Dedup, Cluster, 2-Min, Coach
+ */
+
+/* Import theme variables (Textual requires vars in each CSS file) */
+$primary: #7c3aed;
+$primary-light: #a78bfa;
+$success: #10b981;
+$warning: #f59e0b;
+$info: #3b82f6;
+$surface: #1e1e2e;
+$surface-light: #313244;
+$surface-lighter: #45475a;
+$text: #cdd6f4;
+$text-muted: #a6adc8;
+$text-dim: #6c7086;
+$border: #45475a;
+
+ProcessScreen {
+    layout: vertical;
+    background: $surface;
+}
+
+/* Header */
+#process-header {
+    dock: top;
+    height: auto;
+    padding: 1 2;
+    background: $surface-light;
+    border-bottom: solid $border;
+}
+
+#process-main-title {
+    text-style: bold;
+    color: $primary-light;
+}
+
+/* Progress bar with steps */
+#process-progress {
+    dock: top;
+    height: 5;
+    padding: 1 2;
+    background: $surface;
+    layout: horizontal;
+}
+
+.step {
+    width: 1fr;
+    height: 3;
+    padding: 0 1;
+    content-align: center middle;
+    background: $surface-light;
+    color: $text-dim;
+    margin: 0 1;
+    border: round $border;
+}
+
+.step.-active {
+    background: $primary;
+    color: white;
+    text-style: bold;
+    border: round $primary;
+}
+
+.step.-complete {
+    background: $success;
+    color: white;
+    border: round $success;
+}
+
+.step:hover {
+    background: $surface-lighter;
+}
+
+#step-1 {
+    border-left: outer $warning;
+}
+
+#step-2 {
+    border-left: outer $info;
+}
+
+#step-3 {
+    border-left: outer $success;
+}
+
+#step-4 {
+    border-left: outer $primary;
+}
+
+/* Stage title and description */
+#process-stage {
+    padding: 1 2;
+    background: $surface;
+}
+
+#process-stage-title {
+    text-style: bold;
+    color: $text;
+}
+
+#process-stage-desc {
+    color: $text-muted;
+    text-style: italic;
+    padding-top: 1;
+}
+
+/* Main content area */
+#process-content {
+    height: 1fr;
+    padding: 1 2;
+}
+
+/* Card style for content */
+.content-card {
+    background: $surface-light;
+    border: round $border;
+    padding: 2;
+    height: 1fr;
+}
+
+.content-card:focus {
+    border: round $primary;
+}
+
+/* Dedup comparison view */
+#dedup-container {
+    height: 1fr;
+    layout: horizontal;
+}
+
+#dedup-left, #dedup-right {
+    width: 1fr;
+    padding: 1 2;
+    margin: 1;
+    background: $surface-light;
+    border: round $border;
+}
+
+#dedup-left {
+    border-left: outer $info;
+}
+
+#dedup-right {
+    border-left: outer $warning;
+}
+
+.dedup-label {
+    color: $text-muted;
+    text-style: bold;
+    padding-bottom: 1;
+}
+
+.dedup-title {
+    color: $text;
+    padding: 1 0;
+}
+
+/* Cluster view */
+#cluster-list {
+    height: 1fr;
+    background: $surface-light;
+    border: round $border;
+}
+
+#cluster-list:focus {
+    border: round $primary;
+}
+
+.cluster-item {
+    padding: 1;
+    border-left: outer $info;
+    margin-bottom: 1;
+}
+
+.cluster-name {
+    color: $info;
+    text-style: bold;
+}
+
+.cluster-count {
+    color: $text-dim;
+}
+
+/* 2-Min Drill view */
+#twomin-card {
+    background: $surface-light;
+    border: round $success;
+    padding: 2;
+    content-align: center middle;
+}
+
+#twomin-icon {
+    text-align: center;
+    padding: 1;
+}
+
+#twomin-title {
+    text-align: center;
+    color: $text;
+    text-style: bold;
+    padding: 1;
+}
+
+#twomin-hint {
+    text-align: center;
+    color: $text-muted;
+    padding: 1;
+}
+
+/* Coach view */
+#coach-panel {
+    background: $surface-light;
+    border: round $primary;
+    padding: 2;
+}
+
+#coach-task {
+    padding: 1;
+    border-bottom: solid $border;
+}
+
+#coach-task-label {
+    color: $text-muted;
+}
+
+#coach-task-title {
+    color: $text;
+    text-style: bold;
+    padding-top: 1;
+}
+
+#coach-suggestion {
+    padding: 1;
+    margin-top: 1;
+    background: $surface-lighter;
+    border-left: outer $success;
+}
+
+#coach-suggestion-label {
+    color: $success;
+    text-style: bold;
+}
+
+#coach-suggestion-text {
+    color: $text;
+    padding-top: 1;
+}
+
+/* Help bar */
+#process-help {
+    dock: bottom;
+    height: 3;
+    padding: 0 2;
+    background: $surface-light;
+    border-top: solid $border;
+    content-align: center middle;
+}
+
+#process-help-text {
+    color: $text-dim;
+    text-align: center;
+}
+
+/* Empty/complete states */
+.empty-state {
+    width: 100%;
+    height: auto;
+    content-align: center middle;
+    padding: 3;
+}
+
+.empty-icon {
+    text-align: center;
+    padding: 1;
+}
+
+.empty-text {
+    color: $text-dim;
+    text-align: center;
+}
+
+.complete-state {
+    background: $surface-light;
+    border: round $success;
+    padding: 3;
+    content-align: center middle;
+}
+
+.complete-icon {
+    color: $success;
+    text-align: center;
+}
+
+.complete-text {
+    color: $success;
+    text-align: center;
+    text-style: bold;
+}

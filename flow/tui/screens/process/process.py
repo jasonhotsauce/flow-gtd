@@ -1,0 +1,331 @@
+"""Process Funnel: 4-stage wizard (Dedup, Cluster, 2-Min, Coach)."""
+
+from textual.app import ComposeResult
+from textual.containers import Container, Horizontal, Vertical
+from textual.screen import Screen
+from textual.widgets import Footer, Header, OptionList, Static
+from textual.widgets.option_list import Option
+
+from flow.core.engine import Engine
+from flow.core.coach import coach_task
+
+
+class ProcessScreen(Screen):
+    """TUI Wizard for Process Funnel: Dedup -> Cluster -> 2-Min -> Coach."""
+
+    CSS_PATH = "process.tcss"
+
+    BINDINGS = [
+        ("q", "app.quit", "Quit"),
+        ("escape", "app.pop_screen", "Back"),
+        ("1", "stage1", "Dedup"),
+        ("2", "stage2", "Cluster"),
+        ("3", "stage3", "2-Min"),
+        ("4", "stage4", "Coach"),
+        ("j", "cursor_down", "Down"),
+        ("k", "cursor_up", "Up"),
+        ("m", "merge", "Merge"),
+        ("b", "keep_both", "Keep Both"),
+        ("d", "do_now", "Do Now"),
+        ("f", "defer", "Defer"),
+        ("c", "create_project", "Create"),
+        ("a", "accept", "Accept"),
+        ("n", "skip", "Skip"),
+        ("?", "show_help", "Help"),
+    ]
+
+    STAGE_INFO = {
+        1: ("🔀 Deduplication", "Find and merge duplicate items"),
+        2: ("📁 Clustering", "Group related items into projects"),
+        3: ("⚡ 2-Minute Drill", "Quick wins: do now or defer"),
+        4: ("🧠 Coach", "AI helps clarify vague tasks"),
+    }
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._engine = Engine()
+        self._stage = 1
+        self._dedup_pair: tuple | None = None
+        self._cluster_suggestions: list = []
+        self._cluster_selected = 0
+        self._coach_suggestion: str | None = None
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Container(id="process-header"):
+            yield Static("🔄 Process Funnel", id="process-main-title")
+        with Horizontal(id="process-progress"):
+            yield Static("1️⃣ Dedup", id="step-1", classes="step -active")
+            yield Static("2️⃣ Cluster", id="step-2", classes="step")
+            yield Static("3️⃣ 2-Min", id="step-3", classes="step")
+            yield Static("4️⃣ Coach", id="step-4", classes="step")
+        with Container(id="process-stage"):
+            yield Static("", id="process-stage-title")
+            yield Static("", id="process-stage-desc")
+        with Container(id="process-content"):
+            # Dedup view
+            with Horizontal(id="dedup-container"):
+                with Vertical(id="dedup-left"):
+                    yield Static("Item A", classes="dedup-label")
+                    yield Static("", id="dedup-a-title", classes="dedup-title")
+                with Vertical(id="dedup-right"):
+                    yield Static("Item B", classes="dedup-label")
+                    yield Static("", id="dedup-b-title", classes="dedup-title")
+            # Cluster view
+            yield OptionList(id="cluster-list")
+            # 2-Min view
+            with Vertical(id="twomin-card"):
+                yield Static("⏱️", id="twomin-icon")
+                yield Static("", id="twomin-title")
+                yield Static("", id="twomin-hint")
+            # Coach view
+            with Vertical(id="coach-panel"):
+                with Container(id="coach-task"):
+                    yield Static("Current Task:", id="coach-task-label")
+                    yield Static("", id="coach-task-title")
+                with Container(id="coach-suggestion"):
+                    yield Static("💡 AI Suggestion:", id="coach-suggestion-label")
+                    yield Static("", id="coach-suggestion-text")
+            # Empty/Complete state
+            with Vertical(id="complete-state", classes="complete-state"):
+                yield Static("✅", id="complete-icon", classes="complete-icon")
+                yield Static("", id="complete-text", classes="complete-text")
+        with Container(id="process-help"):
+            yield Static("", id="process-help-text")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        """Initialize process screen."""
+        self._engine.process_start()
+        self._go_stage(1)
+
+    def _update_progress(self) -> None:
+        """Update progress bar visual state."""
+        for i in range(1, 5):
+            step = self.query_one(f"#step-{i}", Static)
+            step.remove_class("-active", "-complete")
+            if i < self._stage:
+                step.add_class("-complete")
+            elif i == self._stage:
+                step.add_class("-active")
+
+    def _hide_all_views(self) -> None:
+        """Hide all content views."""
+        self.query_one("#dedup-container", Horizontal).display = False
+        self.query_one("#cluster-list", OptionList).display = False
+        self.query_one("#twomin-card", Vertical).display = False
+        self.query_one("#coach-panel", Vertical).display = False
+        self.query_one("#complete-state", Vertical).display = False
+
+    def _go_stage(self, stage: int) -> None:
+        """Navigate to a specific stage."""
+        self._stage = stage
+        self._update_progress()
+        self._hide_all_views()
+
+        title, desc = self.STAGE_INFO.get(stage, ("", ""))
+        self.query_one("#process-stage-title", Static).update(title)
+        self.query_one("#process-stage-desc", Static).update(desc)
+
+        if stage == 1:
+            self._render_dedup()
+        elif stage == 2:
+            self._render_cluster()
+        elif stage == 3:
+            self._render_twomin()
+        elif stage == 4:
+            self._render_coach()
+
+    def _render_dedup(self) -> None:
+        """Render deduplication stage."""
+        pair = self._engine.get_dedup_pair()
+        self._dedup_pair = pair
+
+        help_text = self.query_one("#process-help-text", Static)
+
+        if not pair:
+            self.query_one("#complete-state", Vertical).display = True
+            self.query_one("#complete-text", Static).update(
+                "No duplicates found! Press 2 for Clustering."
+            )
+            help_text.update("2: Next Stage │ 1-4: Jump to Stage │ Esc: Back")
+            return
+
+        self.query_one("#dedup-container", Horizontal).display = True
+        a, b = pair
+        self.query_one("#dedup-a-title", Static).update(a.title[:80])
+        self.query_one("#dedup-b-title", Static).update(b.title[:80])
+        help_text.update("m: Merge (keep A) │ b: Keep Both │ 2: Skip to Cluster")
+
+    def _render_cluster(self) -> None:
+        """Render clustering stage."""
+        self._cluster_suggestions = self._engine.get_cluster_suggestions()
+        help_text = self.query_one("#process-help-text", Static)
+
+        if not self._cluster_suggestions:
+            self.query_one("#complete-state", Vertical).display = True
+            self.query_one("#complete-text", Static).update(
+                "No clusters found. Press 3 for 2-Min Drill."
+            )
+            help_text.update("3: Next Stage │ 1-4: Jump to Stage │ Esc: Back")
+            return
+
+        self.query_one("#cluster-list", OptionList).display = True
+        opt_list = self.query_one("#cluster-list", OptionList)
+        opt_list.clear_options()
+
+        for i, (name, ids) in enumerate(self._cluster_suggestions):
+            opt_list.add_option(
+                Option(f"  📁  {name} ({len(ids)} items)", id=f"cluster-{i}")
+            )
+
+        help_text.update("j/k: Navigate │ c: Create Project │ n: Skip │ 3: Next Stage")
+
+    def _render_twomin(self) -> None:
+        """Render 2-minute drill stage."""
+        item = self._engine.get_2min_current()
+        help_text = self.query_one("#process-help-text", Static)
+
+        if not item:
+            self.query_one("#complete-state", Vertical).display = True
+            self.query_one("#complete-text", Static).update(
+                "2-Min Drill complete! Press 4 for Coach."
+            )
+            help_text.update("4: Next Stage │ 1-4: Jump to Stage │ Esc: Back")
+            return
+
+        self.query_one("#twomin-card", Vertical).display = True
+        self.query_one("#twomin-title", Static).update(item.title)
+        self.query_one("#twomin-hint", Static).update("Can you do this in 2 minutes?")
+        help_text.update("d: Do Now (mark done) │ f: Defer │ 4: Skip to Coach")
+
+    def _render_coach(self) -> None:
+        """Render coach stage."""
+        item = self._engine.get_coach_current()
+        help_text = self.query_one("#process-help-text", Static)
+
+        if not item:
+            self.query_one("#complete-state", Vertical).display = True
+            self.query_one("#complete-icon", Static).update("🎉")
+            self.query_one("#complete-text", Static).update(
+                "Process complete! You're all set."
+            )
+            help_text.update("Press Esc or q to exit │ 1-4: Review stages")
+            return
+
+        self.query_one("#coach-panel", Vertical).display = True
+        self.query_one("#coach-task-title", Static).update(item.title)
+
+        # Get AI suggestion
+        self._coach_suggestion = coach_task(item.title)
+        suggestion_text = self._coach_suggestion or "(Add API key for AI suggestions)"
+        self.query_one("#coach-suggestion-text", Static).update(suggestion_text)
+        help_text.update("a: Accept suggestion │ n: Skip │ Esc: Back")
+
+    # Action handlers
+    def action_stage1(self) -> None:
+        """Go to stage 1."""
+        self._go_stage(1)
+
+    def action_stage2(self) -> None:
+        """Go to stage 2."""
+        self._go_stage(2)
+
+    def action_stage3(self) -> None:
+        """Go to stage 3."""
+        self._go_stage(3)
+
+    def action_stage4(self) -> None:
+        """Go to stage 4."""
+        self._go_stage(4)
+
+    def action_cursor_down(self) -> None:
+        """Move cursor down in lists."""
+        if self._stage == 2:
+            opt_list = self.query_one("#cluster-list", OptionList)
+            opt_list.action_cursor_down()
+
+    def action_cursor_up(self) -> None:
+        """Move cursor up in lists."""
+        if self._stage == 2:
+            opt_list = self.query_one("#cluster-list", OptionList)
+            opt_list.action_cursor_up()
+
+    def action_merge(self) -> None:
+        """Merge duplicate items (Stage 1)."""
+        if self._stage == 1 and self._dedup_pair:
+            a, b = self._dedup_pair
+            self._engine.dedup_merge(a.id, b.id)
+            self.notify("🔀 Merged items", severity="information", timeout=2)
+            self._go_stage(1)
+
+    def action_keep_both(self) -> None:
+        """Keep both items (Stage 1)."""
+        if self._stage == 1 and self._dedup_pair:
+            self._engine.dedup_keep_both()
+            self.notify("✅ Kept both items", timeout=2)
+            self._go_stage(1)
+
+    def action_do_now(self) -> None:
+        """Do item now (Stage 3)."""
+        if self._stage == 3:
+            item = self._engine.get_2min_current()
+            if item:
+                self._engine.two_min_do_now(item.id)
+                self._engine.two_min_advance()
+                self.notify("⚡ Done!", severity="information", timeout=1)
+                self._go_stage(3)
+
+    def action_defer(self) -> None:
+        """Defer item (Stage 3)."""
+        if self._stage == 3:
+            self._engine.two_min_advance()
+            self.notify("⏳ Deferred", timeout=1)
+            self._go_stage(3)
+
+    def action_create_project(self) -> None:
+        """Create project from cluster (Stage 2)."""
+        if self._stage == 2 and self._cluster_suggestions:
+            opt_list = self.query_one("#cluster-list", OptionList)
+            idx = opt_list.highlighted
+            if idx is not None and 0 <= idx < len(self._cluster_suggestions):
+                name, ids = self._cluster_suggestions[idx]
+                self._engine.create_project(name, ids)
+                self.notify(
+                    f"📁 Created project: {name}", severity="information", timeout=2
+                )
+                self._cluster_suggestions = self._engine.get_cluster_suggestions()
+                self._go_stage(2)
+
+    def action_accept(self) -> None:
+        """Accept AI suggestion (Stage 4)."""
+        if self._stage == 4 and self._coach_suggestion:
+            item = self._engine.get_coach_current()
+            if item:
+                self._engine.coach_apply_suggestion(item.id, self._coach_suggestion)
+                self._engine.coach_advance()
+                self.notify("✨ Applied suggestion", severity="information", timeout=2)
+                self._go_stage(4)
+
+    def action_skip(self) -> None:
+        """Skip current item."""
+        if self._stage == 2:
+            self._cluster_selected += 1
+            self._go_stage(2)
+        elif self._stage == 4:
+            self._engine.coach_advance()
+            self._go_stage(4)
+
+    def action_show_help(self) -> None:
+        """Show help toast."""
+        help_messages = {
+            1: "Stage 1: Dedup\nm: Merge │ b: Keep Both\n1-4: Jump to stage",
+            2: "Stage 2: Cluster\nc: Create Project │ n: Skip\nj/k: Navigate",
+            3: "Stage 3: 2-Min\nd: Do Now │ f: Defer\nQuick wins!",
+            4: "Stage 4: Coach\na: Accept │ n: Skip\nAI helps clarify tasks",
+        }
+        self.notify(
+            help_messages.get(self._stage, ""),
+            title=f"Help - Stage {self._stage}",
+            timeout=5,
+        )

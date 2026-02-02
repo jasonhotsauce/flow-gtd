@@ -1,0 +1,180 @@
+/* Action Screen Styles
+ * Split view: 66% task list, 34% RAG sidecar
+ */
+
+/* Import theme variables (Textual requires vars in each CSS file) */
+$primary: #7c3aed;
+$primary-light: #a78bfa;
+$success: #10b981;
+$warning: #f59e0b;
+$danger: #ef4444;
+$info: #3b82f6;
+$surface: #1e1e2e;
+$surface-light: #313244;
+$surface-lighter: #45475a;
+$text: #cdd6f4;
+$text-muted: #a6adc8;
+$text-dim: #6c7086;
+$border: #45475a;
+
+ActionScreen {
+    layout: vertical;
+    background: $surface;
+}
+
+/* Header with title */
+#action-header {
+    dock: top;
+    height: auto;
+    padding: 1 2;
+    background: $surface-light;
+    border-bottom: solid $border;
+    layout: horizontal;
+}
+
+#action-title {
+    width: auto;
+    text-style: bold;
+    color: $success;
+}
+
+#action-count {
+    width: auto;
+    color: $text-muted;
+    padding-left: 2;
+}
+
+/* Main content split */
+#action-content {
+    height: 1fr;
+    layout: horizontal;
+    padding: 1;
+}
+
+/* Left panel: Task list */
+#action-left {
+    width: 65%;
+    height: 100%;
+    padding: 0 1 0 0;
+}
+
+#action-list-title {
+    padding: 0 1 1 1;
+    color: $primary-light;
+    text-style: bold;
+}
+
+#action-list {
+    height: 1fr;
+    background: $surface-light;
+    border: round $border;
+}
+
+#action-list:focus {
+    border: round $primary;
+    background: $surface-light;
+}
+
+#action-list > .option-list--option-highlighted {
+    background: $primary;
+    color: white;
+    text-style: bold;
+}
+
+/* Right panel: Sidecar */
+#action-right {
+    width: 35%;
+    height: 100%;
+    padding: 0 0 0 1;
+}
+
+#sidecar-title {
+    padding: 0 1 1 1;
+    color: $info;
+    text-style: bold;
+}
+
+#sidecar {
+    height: 1fr;
+    background: $surface-light;
+    border: round $border;
+    padding: 1;
+    overflow-y: auto;
+}
+
+#sidecar:focus {
+    border: round $info;
+}
+
+/* RAG result cards */
+.rag-result {
+    padding: 1;
+    margin-bottom: 1;
+    background: $surface-lighter;
+    border-left: outer $info;
+}
+
+.rag-filename {
+    color: $info;
+    text-style: bold;
+}
+
+.rag-score {
+    color: $text-dim;
+    text-style: italic;
+}
+
+.rag-snippet {
+    color: $text-muted;
+    padding-top: 1;
+}
+
+/* Empty states */
+#action-empty {
+    width: 100%;
+    height: 100%;
+    content-align: center middle;
+    background: $surface-light;
+    border: round $border;
+}
+
+#action-empty-text {
+    color: $text-dim;
+    text-align: center;
+}
+
+/* Help bar */
+#action-help {
+    dock: bottom;
+    height: 3;
+    padding: 0 2;
+    background: $surface-light;
+    border-top: solid $border;
+    content-align: center middle;
+}
+
+#action-help-text {
+    color: $text-dim;
+    text-align: center;
+}
+
+/* Loading indicator */
+#action-loading {
+    width: 100%;
+    content-align: center middle;
+    padding: 2;
+    color: $primary-light;
+}
+
+/* Priority indicators */
+.priority-high {
+    color: $danger;
+}
+
+.priority-medium {
+    color: $warning;
+}
+
+.priority-low {
+    color: $success;
+}

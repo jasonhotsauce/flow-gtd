@@ -1,0 +1,150 @@
+---
+description: High-level project requirements and architecture for Flow GTD CLI
+alwaysApply: true
+---
+
+# Flow: Project Overview
+
+**Product**: Local-First, AI-Augmented GTD CLI for Senior Engineering Managers (Apple Ecosystem).
+
+## Architecture Rules
+
+- **Local-First**: All data in SQLite (`flow.db`) + ChromaDB (`./knowledge_base`). No cloud DBs.
+- **Privacy**: LLM only sees sanitized task text. Reference materials stay local.
+- **Sync**: Bi-directional sync with Apple Reminders via `pyobjc`.
+
+## UI Stack
+
+| Layer | Tech | Purpose |
+|-------|------|---------|
+| CLI | `typer` | 50ms quick capture |
+| TUI | `textual` | Deep processing/review (Vim keybindings) |
+
+## Intelligence Layer
+
+- **Agent**: Gemini 3 Flash (`google-genai`)
+- **RAG**: Local embeddings (`all-MiniLM-L6-v2`) for task-to-document linking
+
+## Core Workflow ("Funnel")
+
+1. **Capture**: Raw text → SQLite Inbox (status: `inbox`)
+2. **Process (Daily)**:
+   - Auto-cluster similar items
+   - "2-Minute Drill": Rapid filter for small tasks
+   - "Coach Mode": AI Socratic questions for complex items
+3. **Action**: Filtered list + AI-suggested "Sidecar" materials
+
+## 4. Canonical File Structure
+The project follows a strict "Screaming Architecture" layout. 
+AI MUST place code in the correct module based on this map.
+```
+flow-gtd/
+├── .cursor/                    # Cursor Intelligence Config
+│   ├── rules/                  # .mdc Skill files (tui-expert, apple-bridge, etc.)
+│   └── ...
+│
+├── flow/                       # Source Code Root
+│   ├── __init__.py
+│   ├── main.py                 # Application Bootstrap (Entry Point)
+│   ├── config.py               # Environment & Settings (Pydantic Settings)
+│   │
+│   ├── cli.py                  # [Layer: Presentation] Typer CLI Commands
+│   │
+│   ├── tui/                    # [Layer: Presentation] Textual TUI
+│   │   ├── __init__.py
+│   │   ├── app.py              # Main TUI App Class (App Lifecycle)
+│   │   │
+│   │   ├── common/             # Shared UI Resources
+│   │   │   ├── theme.tcss      # Global CSS Variables & Reset
+│   │   │   └── widgets/        # Reusable Generic Widgets
+│   │   │       ├── card.py     # e.g., TaskCard
+│   │   │       └── sidecar.py  # e.g., RAGContextPanel
+│   │   │
+│   │   └── screens/            # Feature Components (Colocated Logic & Style)
+│   │       ├── __init__.py
+│   │       │
+│   │       ├── inbox/          # [Screen: Capture & Triage]
+│   │       │   ├── __init__.py
+│   │       │   ├── inbox.py    # logic: class InboxScreen(Screen)
+│   │       │   └── inbox.tcss  # style: CSS for Inbox
+│   │       │
+│   │       ├── action/         # [Screen: Execution & Focus]
+│   │       │   ├── __init__.py
+│   │       │   ├── action.py
+│   │       │   └── action.tcss
+│   │       │
+│   │       └── review/         # [Screen: Weekly Wizard]
+│   │           ├── __init__.py
+│   │           ├── review.py
+│   │           └── review.tcss
+│   │
+│   ├── core/                   # [Layer: Application Logic]
+│   │   ├── __init__.py
+│   │   ├── engine.py           # Main Workflow (The Funnel: Capture -> Process)
+│   │   ├── coach.py            # AI Socratic Logic (Prompts & Heuristics)
+│   │   └── rag.py              # Semantic Search Logic (Link Tasks to Docs)
+│   │
+│   ├── models/                 # [Layer: Domain] Data Contracts
+│   │   ├── __init__.py
+│   │   └── item.py             # Polymorphic Schema (Inbox/Action/Project/Ref)
+│   │
+│   ├── database/               # [Layer: Persistence]
+│   │   ├── __init__.py
+│   │   ├── sqlite.py           # Relational Wrapper (Tasks)
+│   │   └── vectors.py          # ChromaDB Wrapper (Embeddings)
+│   │
+│   ├── sync/                   # [Layer: Infrastructure]
+│   │   ├── __init__.py
+│   │   └── reminders.py        # MacOS EventKit Bridge (PyObjC)
+│   │
+│   └── utils/                  # [Layer: Shared Kernel]
+│       ├── __init__.py
+│       └── llm.py              # Gemini GenAI SDK Wrapper
+│
+├── tests/                      # Test Suite
+│   ├── conftest.py             # Global Fixtures (Mock LLM/DB/EventKit)
+│   ├── unit/                   # Isolated Logic Tests
+│   └── integration/            # End-to-End Flows
+│
+├── data/                       # Local Storage (GitIgnored)
+│   ├── flow.db                 # SQLite File
+│   └── knowledge_base/         # Chroma Vector Files
+│
+├── pyproject.toml              # Dependencies (Poetry)
+├── README.md
+```
+
+Dependency Graph
+```mermaid
+graph TD
+    subgraph Presentation ["Presentation Layer (UI)"]
+        CLI[cli.py]
+        TUI[tui/]
+    end
+
+    subgraph App ["Application Layer (Logic)"]
+        Engine[core/engine.py]
+        Coach[core/coach.py]
+    end
+
+    subgraph Domain ["Domain Layer (Schema)"]
+        Models[models/]
+    end
+
+    subgraph Data ["Data & Infra Layer"]
+        DB[database/]
+        Sync[sync/]
+    end
+
+    %% Rules
+    CLI --> Engine
+    TUI --> Engine
+    Engine --> Models
+    Engine --> DB
+    Engine --> Coach
+    Engine --> Sync
+    
+    %% Forbidden Reverse Flows
+    DB -.->|FORBIDDEN| Engine
+    Models -.->|FORBIDDEN| TUI
+```
