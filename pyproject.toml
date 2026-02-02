@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "flow-gtd"
-version = "0.1.1"
+version = "0.1.2"
 description = "Local-First, AI-Augmented GTD CLI for Senior Engineering Managers"
 authors = ["Flow Team"]
 readme = "README.md"
