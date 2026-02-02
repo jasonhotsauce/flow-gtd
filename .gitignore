@@ -2,6 +2,7 @@
 .venv/
 venv/
 env/
+.python-version
 
 # Data (SQLite + ChromaDB)
 data/
@@ -14,6 +15,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.pyo
+*.pyd
 
 # Documentation
 docs/
@@ -24,27 +26,68 @@ docs/
 *.swp
 *.swo
 *~
+*.bak
 
 # pytest
 .pytest_cache/
 .coverage
 htmlcov/
+coverage.xml
+*.cover
 
 # mypy
 .mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Ruff
+.ruff_cache/
 
 # Distribution / Packaging
 dist/
 build/
 *.egg-info/
 *.egg
+*.whl
+*.tar.gz
+MANIFEST
 
 # Environment variables
 .env
 .env.local
+.env.*.local
 
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
 
 # Logs
 *.log
+logs/
+
+# Sentence Transformers / ML Model Cache
+.cache/
+models/
+
+# ChromaDB
+chroma/
+knowledge_base/
+
+# Textual
+.textual/
+
+# Jupyter (if any)
+.ipynb_checkpoints/
+
+# Secrets / Credentials
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# Temporary files
+tmp/
+temp/
+*.tmp

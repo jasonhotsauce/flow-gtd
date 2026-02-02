@@ -2,16 +2,23 @@
 
 Local-First, AI-Augmented GTD CLI for Senior Engineering Managers (Apple ecosystem).
 
-## Install
+## Installation
+
+### Homebrew (Recommended)
 
 ```bash
-poetry install
-# or: pip install -e .
+brew tap YOUR_GITHUB_USERNAME/flow
+brew install flow-gtd
 ```
 
-Activate the virtual environment:
+### From Source
+
+For development or contributing:
 
 ```bash
+git clone https://github.com/YOUR_GITHUB_USERNAME/flow-gtd.git
+cd flow-gtd
+poetry install
 source .venv/bin/activate
 ```
 
@@ -56,6 +63,20 @@ source .venv/bin/activate
 pytest tests/unit -v
 ```
 
+## Development
+
+### Make Targets
+
+```bash
+make help          # Show all available targets
+make test          # Run tests
+make build         # Build wheel and sdist
+make bump-patch    # Bump version (0.1.0 → 0.1.1)
+make release       # Create GitHub release
+make brew-formula  # Generate Homebrew formula
+make publish       # Full release workflow
+```
+
 ## License
 
-See project license.
+MIT License - see [LICENSE](LICENSE) for details.
