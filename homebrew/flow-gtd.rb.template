@@ -20,11 +20,15 @@ class FlowGtd < Formula
   depends_on "python@3.11"
 
   def install
-    # Create virtualenv with pip included
-    venv = virtualenv_create(libexec, "python3.11", system_site_packages: false)
+    # Manual virtualenv creation instead of virtualenv_create() helper
+    # Reason: Homebrew Python may not have pip module available (especially on Apple Silicon)
+    # The ensurepip bootstrap ensures pip is available before installing dependencies
+    system "python3.11", "-m", "venv", libexec
+    system libexec/"bin/python", "-m", "ensurepip", "--upgrade"
+    system libexec/"bin/pip", "install", "--upgrade", "pip"
     
-    # Install the package and all dependencies in one go
-    venv.pip_install buildpath
+    # Install the package (reads dependencies from pyproject.toml)
+    system libexec/"bin/pip", "install", buildpath
     
     # Symlink the flow command to bin
     bin.install_symlink libexec/"bin/flow"
@@ -46,6 +50,6 @@ class FlowGtd < Formula
   end
 
   test do
-    assert_match "flow-gtd", shell_output("#{bin}/flow --version")
+    assert_match "flow-gtd {{VERSION}}", shell_output("#{bin}/flow --version")
   end
 end

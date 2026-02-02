@@ -1,5 +1,6 @@
 """[Layer: Presentation] Typer CLI Commands."""
 
+from importlib.metadata import PackageNotFoundError, version as get_package_version
 from typing import TYPE_CHECKING, Optional, Type
 
 import typer
@@ -15,6 +16,22 @@ from flow.sync.reminders import sync_reminders_to_flow
 
 if TYPE_CHECKING:
     from textual.screen import Screen
+
+
+def _get_version() -> str:
+    """Get version from package metadata (single source of truth: pyproject.toml)."""
+    try:
+        return get_package_version("flow-gtd")
+    except PackageNotFoundError:
+        return "0.0.0-dev"
+
+
+def _version_callback(value: bool) -> None:
+    """Print version and exit."""
+    if value:
+        typer.echo(f"flow-gtd {_get_version()}")
+        raise typer.Exit()
+
 
 app = typer.Typer(
     name="flow",
@@ -64,7 +81,17 @@ def _launch_tui(initial_screen: "Optional[Type[Screen]]" = None) -> None:
 
 
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context) -> None:
+def main(
+    ctx: typer.Context,
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show version and exit.",
+    ),
+) -> None:
     """Launch TUI by default when no command is provided."""
     if ctx.invoked_subcommand is None:
         _launch_tui()
@@ -161,4 +188,4 @@ def report() -> None:
 @app.command()
 def version() -> None:
     """Show Flow version."""
-    typer.echo("Flow GTD v0.1.0")
+    typer.echo(f"flow-gtd {_get_version()}")
