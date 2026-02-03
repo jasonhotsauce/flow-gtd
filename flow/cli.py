@@ -12,7 +12,7 @@ from flow.tui.screens.action.action import ActionScreen
 from flow.tui.screens.review.review import ReviewScreen
 from flow.tui.screens.focus.focus import FocusScreen
 from flow.config import get_settings
-from flow.sync.reminders import sync_reminders_to_flow
+from flow.sync.reminders import sync_reminders_to_flow, get_reminder_auth_status
 
 if TYPE_CHECKING:
     from textual.screen import Screen
@@ -157,6 +157,20 @@ def sync() -> None:
     settings = get_settings()
     _, msg = sync_reminders_to_flow(settings.db_path)
     typer.echo(msg)
+
+
+@app.command(name="sync-status")
+def sync_status() -> None:
+    """Check Reminders authorization status (macOS only)."""
+    status_code, status_desc = get_reminder_auth_status()
+    typer.echo(f"Reminders Authorization: {status_desc}")
+    if status_code == 0:  # Not Determined
+        typer.echo("\nTo grant access, run 'flow sync' from Terminal.app")
+    elif status_code == 2:  # Denied
+        typer.echo("\nTo fix: System Settings → Privacy & Security → Reminders")
+        typer.echo(
+            "Enable access for your terminal app, or run: tccutil reset Reminders"
+        )
 
 
 @app.command()
