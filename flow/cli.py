@@ -1,21 +1,36 @@
 """[Layer: Presentation] Typer CLI Commands."""
 
+import re
+import uuid
 from importlib.metadata import PackageNotFoundError, version as get_package_version
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Type
 
 import typer
 
-from flow.core.engine import Engine
-from flow.tui.app import FlowApp
-from flow.tui.screens.process import ProcessScreen
-from flow.tui.screens.action.action import ActionScreen
-from flow.tui.screens.review.review import ReviewScreen
-from flow.tui.screens.focus.focus import FocusScreen
 from flow.config import get_settings
-from flow.sync.reminders import sync_reminders_to_flow, get_reminder_auth_status
+from flow.core.engine import Engine
+from flow.core.tagging import (
+    extract_tags_from_file,
+    extract_tags_from_url,
+    extract_tags,
+    normalize_tag,
+    parse_user_tags,
+)
+from flow.database.resources import ResourceDB
+from flow.models import ContentType, Resource
+from flow.sync.reminders import get_reminder_auth_status, sync_reminders_to_flow
+from flow.tui.app import FlowApp
+from flow.tui.screens.action.action import ActionScreen
+from flow.tui.screens.focus.focus import FocusScreen
+from flow.tui.screens.process import ProcessScreen
+from flow.tui.screens.review.review import ReviewScreen
 
 if TYPE_CHECKING:
     from textual.screen import Screen
+
+# URL pattern for content type detection
+_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 
 
 def _get_version() -> str:
@@ -97,7 +112,12 @@ def main(
         _launch_tui()
 
 
-def _do_capture(text: str, use_context: bool = True) -> None:
+def _do_capture(
+    text: str,
+    use_context: bool = True,
+    tags: Optional[list[str]] = None,
+    skip_auto_tag: bool = False,
+) -> None:
     import sys
 
     meta = None
@@ -106,25 +126,47 @@ def _do_capture(text: str, use_context: bool = True) -> None:
             from flow.sync.context_hook import capture_context
 
             meta = capture_context()
-        except Exception:
+        except (ImportError, OSError):
             pass
     engine = Engine()
-    item = engine.capture(text, meta_payload=meta)
+    item = engine.capture(text, meta_payload=meta, tags=tags, skip_auto_tag=skip_auto_tag)
     typer.echo(f"Captured: {item.title[:60]}{'...' if len(item.title) > 60 else ''}")
+    if tags:
+        typer.echo(f"Tags: {', '.join(tags)}")
 
 
 @app.command()
 def capture(
-    text: str = typer.Argument(..., help="Quick capture text to inbox")
+    text: str = typer.Argument(..., help="Quick capture text to inbox"),
+    private: bool = typer.Option(
+        False,
+        "--private",
+        "-p",
+        help="Skip auto-tagging (for sensitive content)",
+    ),
+    tags_opt: Optional[str] = typer.Option(
+        None,
+        "--tags",
+        "-t",
+        help="Comma-separated tags (skips auto-tagging)",
+    ),
 ) -> None:
-    """Capture a thought or task to the inbox."""
-    _do_capture(text)
+    """Capture a thought or task to the inbox.
+
+    Tasks are automatically tagged for resource matching unless
+    --private or --tags is specified.
+    """
+    tags = [normalize_tag(t) for t in tags_opt.split(",") if t.strip()] if tags_opt else None
+    _do_capture(text, tags=tags, skip_auto_tag=private)
 
 
 @app.command(name="c")
-def c(text: str = typer.Argument(..., help="Quick capture (short alias)")) -> None:
+def c(
+    text: str = typer.Argument(..., help="Quick capture (short alias)"),
+    private: bool = typer.Option(False, "--private", "-p", help="Skip auto-tagging"),
+) -> None:
     """Quick capture to inbox (alias for capture)."""
-    _do_capture(text)
+    _do_capture(text, skip_auto_tag=private)
 
 
 @app.command()
@@ -203,3 +245,243 @@ def report() -> None:
 def version() -> None:
     """Show Flow version."""
     typer.echo(f"flow-gtd {_get_version()}")
+
+
+def _detect_content_type(content: str) -> ContentType:
+    """Detect if content is a URL, file path, or plain text."""
+    if _URL_RE.match(content):
+        return "url"
+    # Check if it looks like a file path
+    path = Path(content.strip())
+    if path.exists() or (
+        len(content) < 500
+        and ("/" in content or "\\" in content)
+        and not content.startswith("http")
+    ):
+        return "file"
+    return "text"
+
+
+def _fetch_url_metadata(url: str) -> tuple[Optional[str], Optional[str]]:
+    """Fetch title and content preview from URL.
+
+    Returns:
+        Tuple of (title, content_preview) or (None, None) on failure.
+    """
+    try:
+        import trafilatura
+
+        downloaded = trafilatura.fetch_url(url)
+        if not downloaded:
+            return None, None
+
+        # Extract metadata for title
+        metadata = trafilatura.extract_metadata(downloaded)
+        title = metadata.title if metadata else None
+
+        # Extract content preview
+        content = trafilatura.extract(
+            downloaded,
+            include_comments=False,
+            include_tables=False,
+            favor_precision=True,
+        )
+        preview = content[:500] if content else None
+
+        return title, preview
+    except (ImportError, IOError, ValueError, RuntimeError):
+        return None, None
+
+
+def _interactive_tag_selection(existing_tags: list[str]) -> list[str]:
+    """Interactive tag selection for private mode.
+
+    Args:
+        existing_tags: List of existing tags to choose from.
+
+    Returns:
+        List of selected/created tags.
+    """
+    if existing_tags:
+        typer.echo("\nExisting tags:")
+        for i, tag in enumerate(existing_tags[:20], 1):
+            typer.echo(f"  {i}. {tag}")
+        if len(existing_tags) > 20:
+            typer.echo(f"  ... and {len(existing_tags) - 20} more")
+    else:
+        typer.echo("\nNo existing tags yet.")
+
+    typer.echo("\nEnter tags (comma-separated numbers, names, or NEW:tag-name):")
+    user_input = typer.prompt("Tags", default="")
+
+    return parse_user_tags(user_input, existing_tags)
+
+
+@app.command()
+def save(
+    content: str = typer.Argument(..., help="URL, file path, or text to save"),
+    private: bool = typer.Option(
+        False,
+        "--private",
+        "-p",
+        help="Manual tag selection (no LLM, content stays local)",
+    ),
+    tags: Optional[str] = typer.Option(
+        None,
+        "--tags",
+        "-t",
+        help="Comma-separated tags (skips LLM auto-tagging)",
+    ),
+) -> None:
+    """Save a resource (URL, file, or text) with automatic tagging.
+
+    Examples:
+        flow save https://docs.example.com/guide
+        flow save ~/Documents/spec.pdf
+        flow save "OAuth2 best practices: use PKCE for mobile"
+        flow save https://internal.com/doc --private
+        flow save https://example.com --tags "api,backend"
+    """
+    settings = get_settings()
+    resource_db = ResourceDB(settings.db_path)
+    resource_db.init_db()
+
+    # Detect content type
+    content_type = _detect_content_type(content)
+
+    # Check for duplicate
+    existing = resource_db.get_resource_by_source(content)
+    if existing:
+        typer.echo(f"Resource already saved (updating tags): {content[:60]}...")
+        resource = existing
+    else:
+        resource = Resource(
+            id=str(uuid.uuid4()),
+            content_type=content_type,
+            source=content,
+            tags=[],
+        )
+
+    # Get title and preview for URLs
+    title: Optional[str] = None
+    preview: Optional[str] = None
+    if content_type == "url" and not private:
+        typer.echo("Fetching URL metadata...")
+        title, preview = _fetch_url_metadata(content)
+        if title:
+            resource.title = title
+        if preview:
+            resource.summary = preview[:200]
+
+    # Get file content preview
+    if content_type == "file":
+        try:
+            path = Path(content)
+            if path.exists() and path.is_file():
+                resource.title = path.name
+                # Read first 500 chars for preview (text files only)
+                if path.suffix.lower() in (".txt", ".md", ".py", ".js", ".ts", ".json"):
+                    text = path.read_text(encoding="utf-8", errors="ignore")[:500]
+                    preview = text
+                    resource.summary = text[:200] if text else None
+        except (OSError, UnicodeDecodeError):
+            pass
+
+    # For text content, use first 200 chars as summary
+    if content_type == "text":
+        resource.summary = content[:200]
+        preview = content
+
+    # Determine tags
+    existing_tags = resource_db.get_tag_names()
+    final_tags: list[str] = []
+
+    if tags:
+        # User specified tags directly
+        final_tags = [normalize_tag(t) for t in tags.split(",") if t.strip()]
+        typer.echo(f"Using specified tags: {', '.join(final_tags)}")
+    elif private:
+        # Interactive tag selection
+        final_tags = _interactive_tag_selection(existing_tags)
+        if not final_tags:
+            typer.echo("No tags selected. Resource saved without tags.")
+    else:
+        # Auto-tag with LLM
+        typer.echo("Extracting tags...")
+        if content_type == "url":
+            final_tags = extract_tags_from_url(content, title, preview, existing_tags)
+        elif content_type == "file":
+            final_tags = extract_tags_from_file(content, preview, existing_tags)
+        else:
+            final_tags = extract_tags(content, "text", existing_tags)
+
+        if final_tags:
+            typer.echo(f"Auto-tagged: {', '.join(final_tags)}")
+        else:
+            typer.echo("Could not extract tags automatically.")
+
+    # Update resource tags (merge with existing if updating)
+    if existing:
+        merged_tags = list(dict.fromkeys(resource.tags + final_tags))
+        resource.tags = merged_tags
+    else:
+        resource.tags = final_tags
+
+    # Save/update resource
+    if existing:
+        resource_db.update_resource(resource)
+    else:
+        resource_db.insert_resource(resource)
+
+    # Update tag usage counts
+    for tag in final_tags:
+        resource_db.increment_tag_usage(tag)
+
+    typer.echo(f"Saved: {resource.title or content[:50]}...")
+    if resource.tags:
+        typer.echo(f"Tags: {', '.join(resource.tags)}")
+
+
+@app.command()
+def resources(
+    tag: Optional[str] = typer.Option(None, "--tag", "-t", help="Filter by tag"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Maximum results"),
+) -> None:
+    """List saved resources."""
+    settings = get_settings()
+    resource_db = ResourceDB(settings.db_path)
+    resource_db.init_db()
+
+    if tag:
+        items = resource_db.find_resources_by_tags([tag])[:limit]
+    else:
+        items = resource_db.list_resources(limit=limit)
+
+    if not items:
+        typer.echo("No resources saved yet. Use 'flow save <url>' to add some.")
+        return
+
+    typer.echo(f"\nResources ({len(items)}):\n")
+    for r in items:
+        type_icon = {"url": "🔗", "file": "📄", "text": "📝"}.get(r.content_type, "📎")
+        title = r.title or r.source[:50]
+        tags_str = f" [{', '.join(r.tags)}]" if r.tags else ""
+        typer.echo(f"  {type_icon} {title}{tags_str}")
+
+
+@app.command(name="tags")
+def list_tags() -> None:
+    """List all tags with usage counts."""
+    settings = get_settings()
+    resource_db = ResourceDB(settings.db_path)
+    resource_db.init_db()
+
+    all_tags = resource_db.list_tags()
+
+    if not all_tags:
+        typer.echo("No tags yet. Save some resources to create tags.")
+        return
+
+    typer.echo(f"\nTags ({len(all_tags)}):\n")
+    for t in all_tags:
+        typer.echo(f"  {t.name} ({t.usage_count} uses)")

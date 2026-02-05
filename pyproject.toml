@@ -24,9 +24,8 @@ openai = {version = "^1.0.0", optional = true}  # OpenAI provider
 httpx = {version = "^0.27.0", optional = true}  # Ollama provider
 tomli = {version = "^2.0.0", python = "<3.11"}  # TOML config (required for Python <3.11, stdlib in 3.11+)
 
-# RAG / Embeddings
-sentence-transformers = "^3.0.0"
-chromadb = "^0.6.0"
+# Web content extraction for resource capture (optional)
+trafilatura = {version = "^2.0.0", optional = true}
 
 # Configuration
 pydantic-settings = "^2.7.0"
@@ -38,6 +37,8 @@ pyobjc-framework-EventKit = {version = "^11.0", markers = "sys_platform == 'darw
 openai = ["openai"]
 ollama = ["httpx"]
 all-llm = ["openai", "httpx"]
+web = ["trafilatura"]  # For URL content fetching
+all = ["openai", "httpx", "trafilatura"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

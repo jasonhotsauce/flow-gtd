@@ -25,7 +25,6 @@ class Settings(BaseSettings):
 
     # Paths (local-first data stored in ~/.flow/data/)
     db_path: Path = _data_dir / "flow.db"
-    chroma_path: Path = _data_dir / "knowledge_base"
 
     # LLM Provider Settings
     # Primary config is in ~/.flow/config.toml, env vars provide override
