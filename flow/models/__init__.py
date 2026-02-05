@@ -1,5 +1,5 @@
 """Domain models."""
 
-from .item import Item, ItemStatus, ItemType
+from .item import ContentType, Item, ItemStatus, ItemType, Resource, Tag
 
-__all__ = ["Item", "ItemStatus", "ItemType"]
+__all__ = ["ContentType", "Item", "ItemStatus", "ItemType", "Resource", "Tag"]

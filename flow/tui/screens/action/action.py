@@ -1,4 +1,4 @@
-"""Action screen: next actions list (65%) + RAG Sidecar (35%)."""
+"""Action screen: next actions list (65%) + Resource Sidecar (35%)."""
 
 import asyncio
 from typing import Optional
@@ -10,12 +10,11 @@ from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
 from flow.core.engine import Engine
-from flow.core.rag import query as rag_query
-from flow.tui.common.widgets.sidecar import RAGContextPanel
+from flow.tui.common.widgets.sidecar import ResourceContextPanel
 
 
 class ActionScreen(Screen):
-    """Split: 65% next-actions list, 35% Sidecar (RAG on highlight)."""
+    """Split: 65% next-actions list, 35% Sidecar (resources by tags)."""
 
     CSS_PATH = "action.tcss"
 
@@ -35,7 +34,6 @@ class ActionScreen(Screen):
         super().__init__()
         self._engine = Engine()
         self._items: list = []
-        self._rag_task: Optional[asyncio.Task] = None
         self._debounce_task: Optional[asyncio.Task] = None
 
     def compose(self) -> ComposeResult:
@@ -48,8 +46,8 @@ class ActionScreen(Screen):
                 yield Static("📋 Tasks", id="action-list-title")
                 yield OptionList(id="action-list")
             with Vertical(id="action-right"):
-                yield Static("🔗 Related Context", id="sidecar-title")
-                yield RAGContextPanel(id="sidecar")
+                yield Static("🔗 Related Resources", id="sidecar-title")
+                yield ResourceContextPanel(id="sidecar")
         with Container(id="action-help"):
             yield Static(
                 "j/k: Navigate │ Enter: Details │ c: Complete │ Tab: Focus Sidecar │ Esc: Back",
@@ -60,8 +58,12 @@ class ActionScreen(Screen):
     def on_mount(self) -> None:
         """Initialize action list on mount."""
         self._refresh_list()
-        sidecar = self.query_one("#sidecar", RAGContextPanel)
-        sidecar.clear_results()
+        sidecar = self.query_one("#sidecar", ResourceContextPanel)
+        sidecar.clear_resources()
+        try:
+            self.query_one("#action-list", OptionList).focus()
+        except (ValueError, KeyError):
+            pass
 
     def _refresh_list(self) -> None:
         """Refresh the action list from database."""
@@ -89,37 +91,28 @@ class ActionScreen(Screen):
             opt_list.add_option(Option(f"  {indicator}  {title}", id=str(i)))
 
     def _on_highlight(self, idx: int) -> None:
-        """Handle item highlight - trigger debounced RAG query."""
+        """Handle item highlight - show matching resources."""
         if idx < 0 or idx >= len(self._items):
             return
         item = self._items[idx]
         if self._debounce_task and not self._debounce_task.done():
             self._debounce_task.cancel()
-        self._debounce_task = asyncio.create_task(self._debounced_rag(item.title))
+        self._debounce_task = asyncio.create_task(self._show_resources(item))
 
-    async def _debounced_rag(self, task_title: str) -> None:
-        """Wait briefly before triggering RAG to avoid excessive queries."""
-        await asyncio.sleep(0.3)
-        await self._run_rag(task_title)
+    async def _show_resources(self, item) -> None:
+        """Show resources matching the task's tags.
 
-    async def _run_rag(self, task_title: str) -> None:
-        """Run RAG query and update sidecar."""
-        if self._rag_task and not self._rag_task.done():
-            self._rag_task.cancel()
+        Uses a small debounce to avoid flickering on rapid navigation.
+        """
+        await asyncio.sleep(0.1)  # Small debounce
+        sidecar = self.query_one("#sidecar", ResourceContextPanel)
 
-        sidecar = self.query_one("#sidecar", RAGContextPanel)
-        sidecar.show_loading()
-
-        self._rag_task = asyncio.create_task(
-            asyncio.to_thread(rag_query, task_title, 3)
-        )
         try:
-            results = await self._rag_task
-            sidecar.show_results(results)
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            sidecar.show_error("Failed to load context")
+            # Get resources matching the task's tags
+            resources = self._engine.get_resources_by_tags(item.context_tags)
+            sidecar.show_resources(resources, task_tags=item.context_tags)
+        except (IOError, ValueError, RuntimeError):
+            sidecar.show_error("Failed to load resources")
 
     def on_option_list_option_highlighted(
         self, event: OptionList.OptionHighlighted
@@ -170,7 +163,7 @@ class ActionScreen(Screen):
 
     def action_focus_sidecar(self) -> None:
         """Focus the sidecar panel."""
-        sidecar = self.query_one("#sidecar", RAGContextPanel)
+        sidecar = self.query_one("#sidecar", ResourceContextPanel)
         sidecar.focus()
 
     def action_go_inbox(self) -> None:

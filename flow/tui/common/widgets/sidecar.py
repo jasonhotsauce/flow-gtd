@@ -1,65 +1,89 @@
-"""Sidecar panel: RAG context (filename, score, snippet)."""
+"""Sidecar panel: Tag-based resource display."""
+
+from typing import Optional
 
 from textual.widgets import Static
 
+from flow.models import Resource
 
-class RAGContextPanel(Static):
-    """Displays top RAG results (filename, score, snippet) for the selected task.
 
-    Provides contextual information from the knowledge base to help users
-    with the current task.
+class ResourceContextPanel(Static):
+    """Displays resources matching the selected task's tags.
+
+    Provides instant contextual information based on tag matching
+    between tasks and saved resources.
     """
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self._is_loading = False
+        self._current_tags: list[str] = []
 
-    def show_results(self, results: list[dict]) -> None:
-        """Update content with list of {filename, score, snippet}.
+    def show_resources(
+        self,
+        resources: list[Resource],
+        task_tags: Optional[list[str]] = None,
+    ) -> None:
+        """Update content with matching resources.
 
         Args:
-            results: List of RAG results with filename, score, and snippet.
+            resources: List of Resource objects to display.
+            task_tags: Tags from the current task (for display).
         """
-        self._is_loading = False
+        self._current_tags = task_tags or []
 
-        if not results:
+        if not resources:
+            tags_line = ""
+            if self._current_tags:
+                tags_line = f"\nTask tags: {', '.join(self._current_tags)}\n"
             self.update(
-                "📭 No Related Documents\n"
-                "────────────────────────────\n\n"
-                "No matching context found.\n\n"
-                "💡 Tip: Capture URLs or PDFs to\n"
-                "   build your knowledge base."
+                "📭 No Related Resources\n"
+                "────────────────────────────\n"
+                f"{tags_line}\n"
+                "No matching resources found.\n\n"
+                "💡 Tip: Use 'flow save <url>'\n"
+                "   to add resources."
             )
             return
 
-        lines = ["🔗 Related Context", "────────────────────────────", ""]
+        lines = ["🔗 Related Resources", "────────────────────────────"]
 
-        for i, r in enumerate(results, 1):
-            fn = r.get("filename", "document")
-            score = r.get("score")
-            snippet = (r.get("snippet") or "")[:180]
-            if len((r.get("snippet") or "")) > 180:
-                snippet += "..."
+        # Show task tags if available
+        if self._current_tags:
+            lines.append(f"Tags: {', '.join(self._current_tags)}")
+        lines.append("")
 
-            # Format score as percentage if available
-            score_str = f" ({score:.0%})" if score is not None else ""
+        for r in resources[:5]:  # Limit to 5 resources
+            # Icon based on content type
+            icon = {"url": "🔗", "file": "📄", "text": "📝"}.get(r.content_type, "📎")
 
-            # Build result card
-            lines.append(f"📄 {fn}{score_str}")
-            lines.append("┄" * 28)
-            lines.append(snippet)
+            # Title or source
+            title = r.title or r.source[:40]
+            if len(title) > 35:
+                title = title[:32] + "..."
+
+            lines.append(f"{icon} {title}")
+
+            # Show resource tags
+            if r.tags:
+                tags_display = ", ".join(r.tags[:4])
+                if len(r.tags) > 4:
+                    tags_display += f" +{len(r.tags) - 4}"
+                lines.append(f"   [{tags_display}]")
+
+            # Summary/preview
+            if r.summary:
+                summary = r.summary[:100]
+                if len(r.summary) > 100:
+                    summary += "..."
+                lines.append(f"   {summary}")
+
             lines.append("")
 
-        self.update("\n".join(lines))
+        # Footer with count
+        if len(resources) > 5:
+            lines.append(f"   ... and {len(resources) - 5} more")
 
-    def show_loading(self) -> None:
-        """Show loading state."""
-        self._is_loading = True
-        self.update(
-            "🔗 Related Context\n"
-            "────────────────────────────\n\n"
-            "⏳ Searching knowledge base..."
-        )
+        self.update("\n".join(lines))
 
     def show_error(self, message: str = "Failed to load") -> None:
         """Show error state.
@@ -67,24 +91,26 @@ class RAGContextPanel(Static):
         Args:
             message: Error message to display.
         """
-        self._is_loading = False
         self.update(
-            "🔗 Related Context\n"
+            "🔗 Related Resources\n"
             "────────────────────────────\n\n"
             f"⚠️ {message}\n\n"
             "Please try again."
         )
 
-    def clear_results(self) -> None:
+    def clear_resources(self) -> None:
         """Clear and show default state."""
-        self._is_loading = False
+        self._current_tags = []
         self.update(
-            "🔗 Related Context\n"
+            "🔗 Related Resources\n"
             "────────────────────────────\n\n"
             "👆 Select a task to see\n"
-            "   related documents.\n\n"
+            "   related resources.\n\n"
             "────────────────────────────\n"
-            "📚 Knowledge base helps you\n"
-            "   find relevant context for\n"
-            "   your current work."
+            "📚 Resources are matched to\n"
+            "   tasks via shared tags."
         )
+
+
+# Alias for backward compatibility
+RAGContextPanel = ResourceContextPanel

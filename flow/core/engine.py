@@ -1,18 +1,23 @@
 """Main workflow: Capture -> Process -> Execute."""
 
+import logging
+import threading
 import uuid
 from pathlib import Path
 from typing import Optional
 
 from flow.config import get_settings
-from flow.database.sqlite import SqliteDB
-from flow.database.vectors import schedule_auto_index
-from flow.models import Item
 from flow.core.coach import (
-    suggest_clusters,
     estimate_duration,
     estimate_duration_heuristic,
+    suggest_clusters,
 )
+from flow.core.tagging import extract_tags
+from flow.database.resources import ResourceDB
+from flow.database.sqlite import SqliteDB
+from flow.models import Item, Resource
+
+logger = logging.getLogger(__name__)
 
 
 class Engine:
@@ -23,28 +28,108 @@ class Engine:
         self._db_path = db_path or settings.db_path
         self._db = SqliteDB(self._db_path)
         self._db.init_db()
+        self._resource_db = ResourceDB(self._db_path)
+        self._resource_db.init_db()
         self._process_inbox: list[Item] = []
         self._dedup_index = 0
         self._two_min_index = 0
         self._coach_index = 0
 
-    def capture(self, text: str, meta_payload: Optional[dict] = None) -> Item:
-        """Quick capture: create inbox item and persist. Returns the created Item."""
+    def capture(
+        self,
+        text: str,
+        meta_payload: Optional[dict] = None,
+        tags: Optional[list[str]] = None,
+        skip_auto_tag: bool = False,
+    ) -> Item:
+        """Quick capture: create inbox item and persist.
+
+        Tasks are automatically tagged in the background using LLM for
+        matching with saved resources.
+
+        Args:
+            text: The capture text (task description, note, etc.).
+            meta_payload: Optional metadata dict to attach.
+            tags: Optional explicit tags (skips auto-tagging).
+            skip_auto_tag: If True, skip LLM auto-tagging entirely.
+
+        Returns:
+            The created Item.
+        """
         item = Item(
             id=str(uuid.uuid4()),
             type="inbox",
             title=text.strip(),
             status="active",
+            context_tags=tags or [],
             meta_payload=meta_payload or {},
         )
         self._db.insert_inbox(item)
-        settings = get_settings()
-        schedule_auto_index(text, settings.chroma_path)
+
+        # Auto-tag in background if no explicit tags provided
+        if not tags and not skip_auto_tag:
+            self._schedule_auto_tagging(item.id, text)
+
         return item
+
+    def _schedule_auto_tagging(self, item_id: str, text: str) -> None:
+        """Schedule auto-tagging in a background thread.
+
+        Args:
+            item_id: ID of the item to tag.
+            text: Text content to extract tags from.
+        """
+
+        def _run_tagging() -> None:
+            try:
+                existing_tags = self._resource_db.get_tag_names()
+                tags = extract_tags(text, "text", existing_tags)
+                if tags:
+                    item = self._db.get_item(item_id)
+                    if item:
+                        # Merge with any existing tags
+                        merged = list(dict.fromkeys(item.context_tags + tags))
+                        updated = item.model_copy(update={"context_tags": merged})
+                        self._db.update_item(updated)
+                        # Update tag usage counts
+                        for tag in tags:
+                            self._resource_db.increment_tag_usage(tag)
+            except (IOError, ValueError, RuntimeError) as e:
+                logger.debug("Auto-tagging failed for item %s: %s", item_id, e)
+
+        thread = threading.Thread(target=_run_tagging, daemon=True)
+        thread.start()
 
     def list_inbox(self) -> list[Item]:
         """Return all inbox items."""
         return self._db.list_inbox()
+
+    def get_resources_for_task(self, task_id: str) -> list[Resource]:
+        """Get resources matching a task's tags.
+
+        Args:
+            task_id: ID of the task.
+
+        Returns:
+            List of Resource objects with matching tags.
+        """
+        item = self._db.get_item(task_id)
+        if not item or not item.context_tags:
+            return []
+        return self._resource_db.find_resources_by_tags(item.context_tags)
+
+    def get_resources_by_tags(self, tags: list[str]) -> list[Resource]:
+        """Get resources matching the given tags.
+
+        Args:
+            tags: List of tag names to match.
+
+        Returns:
+            List of Resource objects with matching tags.
+        """
+        if not tags:
+            return []
+        return self._resource_db.find_resources_by_tags(tags)
 
     def get_item(self, item_id: str) -> Optional[Item]:
         """Return one item by id."""
