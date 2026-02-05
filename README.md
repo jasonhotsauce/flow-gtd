@@ -34,10 +34,13 @@ source .venv/bin/activate
 
 | Command | Description |
 |---------|-------------|
-| `flow c <text>` / `flow capture <text>` | Quick capture to inbox |
+| `flow c <text>` / `flow capture <text>` | Quick capture to inbox (auto-tagged for resource matching; use `-p` or `--tags` to override) |
+| `flow save <url\|file\|text>` | Save a resource (URL, file path, or text) with automatic LLM tagging; use `--private` for manual tags |
+| `flow resources` | List saved resources (optional `--tag`, `--limit`) |
+| `flow tags` | List all tags with usage counts |
 | `flow tui` | Launch TUI (Inbox) |
 | `flow process` | Launch Process Funnel (Dedup → Cluster → 2-Min → Coach) |
-| `flow next` | Launch Action screen (next actions + RAG Sidecar) |
+| `flow next` | Launch Action screen (next actions + Sidecar: resources matched by task tags) |
 | `flow sync` | Sync Apple Reminders into Flow (macOS only) |
 | `flow review` | Launch Weekly Review (Stale, Someday, Report) |
 | `flow report` | Print weekly report to stdout |
@@ -46,8 +49,9 @@ source .venv/bin/activate
 ## Workflow
 
 1. **Capture**: `flow c "task"` or Siri → Apple Reminders → `flow sync`
-2. **Process**: `flow process` — deduplicate, cluster, 2-min drill, coach vague tasks
-3. **Execute**: `flow next` — next actions list + RAG Sidecar (related docs)
+2. **Save resources**: `flow save <url>`, `flow save <file>`, or `flow save "text"` — URLs, files, or text with automatic tagging for task matching
+3. **Process**: `flow process` — deduplicate, cluster, 2-min drill, coach vague tasks
+4. **Execute**: `flow next` — next actions list + Sidecar (resources matched by task tags)
 
 ## Tech
 
