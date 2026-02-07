@@ -3,7 +3,7 @@
 from typing import Optional
 
 from flow.core.engine import Engine
-from flow.models import Item
+from flow.models import Item, Resource
 from flow.sync.calendar import CalendarEvent, get_next_event
 
 # Time window thresholds (in minutes)
@@ -122,6 +122,19 @@ class FocusDispatcher:
             item_id: ID of the task to complete.
         """
         self._engine.complete_item(item_id)
+
+    def get_resources_for_task(self, item: Item) -> list[Resource]:
+        """Get resources matching the task's tags.
+
+        Args:
+            item: The task (Item) whose context_tags are used for matching.
+
+        Returns:
+            List of Resource objects with matching tags, or [] if no tags.
+        """
+        if not item.context_tags:
+            return []
+        return self._engine.get_resources_by_tags(item.context_tags)
 
     def get_task_count(self) -> int:
         """Get total count of available active tasks.

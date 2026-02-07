@@ -68,6 +68,7 @@ ActionScreen {
     height: 1fr;
     background: $surface-light;
     border: round $border;
+    text-overflow: fold;
 }
 
 #action-list:focus {

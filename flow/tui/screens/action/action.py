@@ -20,7 +20,7 @@ class ActionScreen(Screen):
 
     BINDINGS = [
         ("q", "app.quit", "Quit"),
-        ("escape", "app.pop_screen", "Back"),
+        ("escape", "pop_screen", "Back"),
         ("j", "cursor_down", "Down"),
         ("k", "cursor_up", "Up"),
         ("enter", "select_action", "Select"),
@@ -79,7 +79,7 @@ class ActionScreen(Screen):
             return
 
         for i, item in enumerate(self._items):
-            title = item.title[:60] + "..." if len(item.title) > 60 else item.title
+            title = item.title
             # Priority indicator
             priority = getattr(item, "priority", "medium")
             if priority == "high":
@@ -182,3 +182,10 @@ class ActionScreen(Screen):
             title="Help",
             timeout=5,
         )
+
+    def action_pop_screen(self) -> None:
+        """Pop current screen; if it's the only screen (e.g. launched via `flow next`), quit instead."""
+        if len(self.app.screen_stack) <= 2:
+            self.app.exit()
+        else:
+            self.app.pop_screen()
