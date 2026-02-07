@@ -1,7 +1,5 @@
 """Unit tests for SQLite layer."""
 
-import pytest
-
 from flow.database.sqlite import SqliteDB
 from flow.models import Item
 
@@ -54,3 +52,21 @@ def test_list_actions(db: SqliteDB) -> None:
     assert len(active) >= 1
     done = db.list_actions(status="done")
     assert len(done) >= 1
+
+
+def test_list_inbox_excludes_done_and_archived(db: SqliteDB) -> None:
+    """list_inbox returns only open inbox items (excludes done and archived)."""
+    db.insert_inbox(Item(id="open", type="inbox", title="Open", status="active"))
+    db.insert_inbox(Item(id="completed", type="inbox", title="Done", status="active"))
+    db.insert_inbox(Item(id="archived", type="inbox", title="Archived", status="active"))
+
+    items = db.list_inbox()
+    assert len(items) == 3
+
+    db.update_item(Item(id="completed", type="inbox", title="Done", status="done"))
+    db.update_item(Item(id="archived", type="inbox", title="Archived", status="archived"))
+
+    items = db.list_inbox()
+    assert len(items) == 1
+    assert items[0].id == "open"
+    assert items[0].title == "Open"

@@ -102,7 +102,7 @@ class Engine:
         thread.start()
 
     def list_inbox(self) -> list[Item]:
-        """Return all inbox items."""
+        """Return open inbox items (type='inbox', not archived, not done)."""
         return self._db.list_inbox()
 
     def get_resources_for_task(self, task_id: str) -> list[Resource]:
