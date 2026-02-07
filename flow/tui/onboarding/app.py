@@ -22,13 +22,11 @@ class OnboardingApp(App):
     SUB_TITLE = "Welcome to Flow"
 
     BINDINGS = [
-        ("ctrl+q", "quit", "Quit"),
-        ("ctrl+c", "quit", "Quit"),
+        ("q", "app.quit", "Quit"),
     ]
 
     def __init__(self) -> None:
         super().__init__()
-        self.dark: bool = True
         # Shared state across screens
         self.selected_provider: str = "gemini"
         self.credentials: dict = {}

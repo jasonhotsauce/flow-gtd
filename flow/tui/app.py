@@ -19,17 +19,13 @@ class FlowApp(App):
     TITLE = "Flow GTD"
     SUB_TITLE = "Get Things Done"
 
-    BINDINGS = [
-        ("ctrl+q", "quit", "Quit"),
-        ("ctrl+d", "toggle_dark", "Toggle Dark"),
-    ]
+    BINDINGS = []
 
     def __init__(
         self, initial_screen: Optional[Type[Screen]] = None, **kwargs
     ):  # type: ignore[no-untyped-def]
         super().__init__(**kwargs)
         self._initial_screen = initial_screen
-        self.dark: bool = True
 
     def on_mount(self) -> None:
         """Push initial screen on mount."""
@@ -37,7 +33,3 @@ class FlowApp(App):
             self.push_screen(self._initial_screen())
         else:
             self.push_screen(InboxScreen())
-
-    def action_toggle_dark(self) -> None:
-        """Toggle dark mode."""
-        self.dark = not self.dark
