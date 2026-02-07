@@ -149,7 +149,7 @@ class ReviewScreen(Screen):
         title = self.query_one("#review-title", Static)
         subtitle = self.query_one("#review-subtitle", Static)
         title.update("📊  Weekly Report")
-        subtitle.update("Summary of your productivity this week.")
+        subtitle.update("Completed this week.")
 
         help_text = self.query_one("#review-help-text", Static)
         help_text.update("Tab: Next section │ 1: Stale │ 2: Someday │ Esc: Back")

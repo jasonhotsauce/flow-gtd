@@ -7,6 +7,7 @@ from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
 from flow.core.engine import Engine
+from flow.models import Item
 
 
 class InboxScreen(Screen):
@@ -29,7 +30,7 @@ class InboxScreen(Screen):
     def __init__(self) -> None:
         super().__init__()
         self._engine = Engine()
-        self._items: list = []
+        self._items: list[Item] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -91,7 +92,7 @@ class InboxScreen(Screen):
                 bullet = "●" if self._is_today(item) else "○"
                 opt_list.add_option(Option(f" {bullet}  {title}", id=str(i)))
 
-    def _is_today(self, item) -> bool:
+    def _is_today(self, item: Item) -> bool:
         """Check if item was created today."""
         from datetime import date
 

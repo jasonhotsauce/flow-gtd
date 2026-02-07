@@ -63,3 +63,4 @@ class Item(BaseModel):
     meta_payload: dict[str, Any] = Field(default_factory=dict)
     original_ek_id: Optional[str] = None
     estimated_duration: Optional[int] = None  # Duration in minutes for Focus Mode
+    updated_at: Optional[datetime] = None  # Set on update; used for "completed this week"

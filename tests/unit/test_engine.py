@@ -32,7 +32,25 @@ def test_next_actions(engine: Engine) -> None:
 
 
 def test_weekly_report(engine: Engine) -> None:
-    """weekly_report returns markdown string."""
+    """weekly_report returns markdown string (completed this week)."""
     report = engine.weekly_report()
     assert "# Flow Weekly Report" in report
-    assert "**Completed:**" in report
+    assert "**Completed this week:**" in report
+
+
+def test_list_inbox_excludes_done_and_archived(engine: Engine) -> None:
+    """list_inbox returns only open inbox items (excludes done and archived)."""
+    engine.capture("Open task")
+    engine.capture("To be completed")
+    engine.capture("To be archived")
+
+    items = engine.list_inbox()
+    assert len(items) == 3
+
+    ids = [it.id for it in items]
+    engine.complete_item(ids[1])
+    engine.archive_item(ids[2])
+
+    items = engine.list_inbox()
+    assert len(items) == 1
+    assert items[0].title == "Open task"
