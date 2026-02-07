@@ -10,6 +10,7 @@ from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
 from flow.core.engine import Engine
+from flow.models import Item
 from flow.tui.common.widgets.sidecar import ResourceContextPanel
 
 
@@ -33,7 +34,7 @@ class ActionScreen(Screen):
     def __init__(self) -> None:
         super().__init__()
         self._engine = Engine()
-        self._items: list = []
+        self._items: list[Item] = []
         self._debounce_task: Optional[asyncio.Task] = None
 
     def compose(self) -> ComposeResult:
@@ -56,18 +57,33 @@ class ActionScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
-        """Initialize action list on mount."""
-        self._refresh_list()
+        """Initialize action list on mount (load in background to avoid blocking)."""
         sidecar = self.query_one("#sidecar", ResourceContextPanel)
         sidecar.clear_resources()
+        count_widget = self.query_one("#action-count", Static)
+        count_widget.update("(loading…)")
+        asyncio.create_task(self._refresh_list_async())
         try:
             self.query_one("#action-list", OptionList).focus()
         except (ValueError, KeyError):
             pass
 
-    def _refresh_list(self) -> None:
-        """Refresh the action list from database."""
-        self._items = self._engine.next_actions()
+    async def _refresh_list_async(self) -> None:
+        """Load next actions in a background thread and update UI when ready."""
+        try:
+            items = await asyncio.to_thread(self._engine.next_actions)
+            if not self.is_mounted:
+                return
+            self._items = items
+            self._apply_items_to_ui()
+        except Exception:
+            if self.is_mounted:
+                self._items = []
+                self._apply_items_to_ui()
+                self.notify("Failed to load actions", severity="error", timeout=3)
+
+    def _apply_items_to_ui(self) -> None:
+        """Update OptionList and count from current self._items (no DB call)."""
         opt_list = self.query_one("#action-list", OptionList)
         opt_list.clear_options()
 
@@ -80,8 +96,14 @@ class ActionScreen(Screen):
 
         for i, item in enumerate(self._items):
             title = item.title
-            # Priority indicator
-            priority = getattr(item, "priority", "medium")
+            # Priority from meta_payload: 1 or "high" -> high, 3 or "low" -> low
+            raw = item.meta_payload.get("priority")
+            if raw == 1 or raw == "high":
+                priority = "high"
+            elif raw == 3 or raw == "low":
+                priority = "low"
+            else:
+                priority = "medium"
             if priority == "high":
                 indicator = "🔴"
             elif priority == "low":
@@ -99,7 +121,7 @@ class ActionScreen(Screen):
             self._debounce_task.cancel()
         self._debounce_task = asyncio.create_task(self._show_resources(item))
 
-    async def _show_resources(self, item) -> None:
+    async def _show_resources(self, item: Item) -> None:
         """Show resources matching the task's tags.
 
         Uses a small debounce to avoid flickering on rapid navigation.
@@ -159,7 +181,7 @@ class ActionScreen(Screen):
                 severity="information",
                 timeout=2,
             )
-            self._refresh_list()
+            asyncio.create_task(self._refresh_list_async())
 
     def action_focus_sidecar(self) -> None:
         """Focus the sidecar panel."""
