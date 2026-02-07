@@ -70,6 +70,7 @@ FocusScreen {
 #focus-main {
     height: 1fr;
     width: 100%;
+    align: center top;
     content-align: center middle;
     padding: 2;
 }
@@ -77,10 +78,12 @@ FocusScreen {
 #focus-task-container {
     width: 80%;
     height: auto;
+    max-height: 40vh;
     padding: 3 4;
     background: $surface-light;
     border: round $primary;
     content-align: center middle;
+    overflow-y: auto;
 }
 
 #focus-task-title {
@@ -110,6 +113,17 @@ FocusScreen {
     width: auto;
     padding: 0 2;
     text-align: center;
+}
+
+/* Related resources panel - compact, scrollable */
+#focus-resources {
+    width: 80%;
+    height: auto;
+    max-height: 25vh;
+    background: $surface-light;
+    border: round $border;
+    padding: 1;
+    overflow-y: auto;
 }
 
 /* Empty state - when no tasks */

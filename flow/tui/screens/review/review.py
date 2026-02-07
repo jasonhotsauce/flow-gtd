@@ -41,17 +41,15 @@ class ReviewScreen(Screen):
         with Container(id="review-header"):
             yield Static("📅 Weekly Review", id="review-main-title")
         with Horizontal(id="review-tabs"):
-            yield Static("1️⃣  Stale", id="tab-stale", classes="mode-tab -active")
-            yield Static("2️⃣  Someday", id="tab-someday", classes="mode-tab")
-            yield Static("3️⃣  Report", id="tab-report", classes="mode-tab")
+            yield Static("1️⃣ Stale", id="tab-stale", classes="mode-tab -active")
+            yield Static("2️⃣ Someday", id="tab-someday", classes="mode-tab")
+            yield Static("3️⃣ Report", id="tab-report", classes="mode-tab")
         with Container(id="review-section"):
             yield Static("", id="review-title")
             yield Static("", id="review-subtitle")
         with Container(id="review-content"):
             yield OptionList(id="review-list")
             yield Static("", id="review-detail")
-        with Container(id="review-help"):
-            yield Static("", id="review-help-text")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -88,9 +86,6 @@ class ReviewScreen(Screen):
         title.update(f"⚠️  Stale Items ({len(self._stale)})")
         subtitle.update("Items untouched for 14+ days. Archive or refresh them.")
 
-        help_text = self.query_one("#review-help-text", Static)
-        help_text.update("j/k: Navigate │ a: Archive │ Tab: Next section │ Esc: Back")
-
         opt_list = self.query_one("#review-list", OptionList)
         detail = self.query_one("#review-detail", Static)
         opt_list.display = True
@@ -122,9 +117,6 @@ class ReviewScreen(Screen):
         title.update(f"💭  Someday/Maybe ({len(self._someday)})")
         subtitle.update("Items parked for later. Resurface ones that are now relevant.")
 
-        help_text = self.query_one("#review-help-text", Static)
-        help_text.update("j/k: Navigate │ r: Resurface │ Tab: Next section │ Esc: Back")
-
         opt_list = self.query_one("#review-list", OptionList)
         detail = self.query_one("#review-detail", Static)
         opt_list.display = True
@@ -150,9 +142,6 @@ class ReviewScreen(Screen):
         subtitle = self.query_one("#review-subtitle", Static)
         title.update("📊  Weekly Report")
         subtitle.update("Completed this week.")
-
-        help_text = self.query_one("#review-help-text", Static)
-        help_text.update("Tab: Next section │ 1: Stale │ 2: Someday │ Esc: Back")
 
         opt_list = self.query_one("#review-list", OptionList)
         detail = self.query_one("#review-detail", Static)

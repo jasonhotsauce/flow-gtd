@@ -10,6 +10,7 @@ from textual.widgets import Footer, Header, Static
 
 from flow.core.focus import FocusDispatcher
 from flow.models import Item
+from flow.tui.common.widgets.sidecar import ResourceContextPanel
 
 
 class FocusScreen(Screen):
@@ -61,6 +62,8 @@ class FocusScreen(Screen):
                 yield Static("", id="focus-duration-badge")
                 yield Static("", id="focus-tags")
 
+            yield ResourceContextPanel(id="focus-resources")
+
         # Empty state
         with Vertical(id="focus-empty"):
             yield Static("", id="focus-empty-icon")
@@ -68,13 +71,6 @@ class FocusScreen(Screen):
             yield Static(
                 "No tasks available for your current time window",
                 id="focus-empty-hint",
-            )
-
-        # Help bar
-        with Container(id="focus-help"):
-            yield Static(
-                "[Space] Complete  |  [S] Skip  |  [R] Refresh  |  [Esc] Exit",
-                id="focus-help-text",
             )
 
         yield Footer()
@@ -100,6 +96,23 @@ class FocusScreen(Screen):
 
             # Update UI on main thread
             self._update_ui(mode, time_info)
+
+            # Load resources for current task off main thread
+            if self._current_task is not None and self.is_mounted:
+                try:
+                    resources = await asyncio.to_thread(
+                        self._dispatcher.get_resources_for_task, self._current_task
+                    )
+                    if self.is_mounted:
+                        sidecar = self.query_one("#focus-resources", ResourceContextPanel)
+                        sidecar.show_resources(
+                            resources, task_tags=self._current_task.context_tags
+                        )
+                except (IOError, ValueError, RuntimeError):
+                    if self.is_mounted:
+                        self.query_one(
+                            "#focus-resources", ResourceContextPanel
+                        ).show_error("Failed to load resources")
 
         except Exception as e:
             # Handle EventKit or other failures gracefully
@@ -155,6 +168,8 @@ class FocusScreen(Screen):
             main_container.display = False
             empty_container.display = True
             empty_icon.update("[dim]v[/]")
+            resources_panel = self.query_one("#focus-resources", ResourceContextPanel)
+            resources_panel.clear_resources()
             return
 
         # Show task

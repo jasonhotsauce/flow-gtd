@@ -34,7 +34,7 @@ ReviewScreen {
     color: $warning;
 }
 
-/* Mode tabs/indicators */
+/* Mode tabs: three equal-width tabs; borders for clean aligned edges (no margin to avoid jagged right edge) */
 #review-tabs {
     dock: top;
     height: 3;
@@ -44,7 +44,7 @@ ReviewScreen {
 }
 
 .mode-tab {
-    width: auto;
+    width: 1fr;
     padding: 0 3;
     height: 3;
     content-align: center middle;
@@ -62,18 +62,6 @@ ReviewScreen {
     background: $primary;
     color: white;
     text-style: bold;
-}
-
-#tab-stale {
-    border-left: outer $warning;
-}
-
-#tab-someday {
-    border-left: outer $info;
-}
-
-#tab-report {
-    border-left: outer $success;
 }
 
 /* Section title with context */
