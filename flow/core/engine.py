@@ -3,6 +3,7 @@
 import logging
 import threading
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -240,7 +241,14 @@ class Engine:
         """Mark item done."""
         item = self._db.get_item(item_id)
         if item:
-            self._db.update_item(item.model_copy(update={"status": "done"}))
+            self._db.update_item(
+                item.model_copy(
+                    update={
+                        "status": "done",
+                        "updated_at": datetime.now(timezone.utc),
+                    }
+                )
+            )
         self._process_inbox = self.list_inbox()
 
     def two_min_defer(self, _item_id: str) -> None:
@@ -373,15 +381,22 @@ class Engine:
         """Set item status to done (mark as completed)."""
         item = self._db.get_item(item_id)
         if item:
-            self._db.update_item(item.model_copy(update={"status": "done"}))
+            self._db.update_item(
+                item.model_copy(
+                    update={
+                        "status": "done",
+                        "updated_at": datetime.now(timezone.utc),
+                    }
+                )
+            )
 
-    def weekly_report(self, limit: int = 50) -> str:
-        """Markdown/ASCII weekly report: velocity (completed count), completed items."""
-        done = self._db.list_done(limit=limit)
+    def weekly_report(self, days: int = 7) -> str:
+        """Markdown/ASCII weekly report: completed items in the last days."""
+        done = self._db.list_done_since(days=days)
         lines = [
             "# Flow Weekly Report",
             "",
-            f"**Completed:** {len(done)} items",
+            f"**Completed this week:** {len(done)} items",
             "",
             "## Done",
             "",

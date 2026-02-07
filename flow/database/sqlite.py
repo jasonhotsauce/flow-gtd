@@ -56,6 +56,8 @@ class SqliteDB:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_parent ON items(parent_id)")
             # Migration: add estimated_duration column if missing
             self._migrate_add_estimated_duration(conn)
+            # Migration: add updated_at column if missing
+            self._migrate_add_updated_at(conn)
             conn.commit()
 
     def _migrate_add_estimated_duration(self, conn: sqlite3.Connection) -> None:
@@ -64,6 +66,16 @@ class SqliteDB:
         columns = [row[1] for row in cursor.fetchall()]
         if "estimated_duration" not in columns:
             conn.execute("ALTER TABLE items ADD COLUMN estimated_duration INTEGER")
+
+    def _migrate_add_updated_at(self, conn: sqlite3.Connection) -> None:
+        """Add updated_at column if it doesn't exist (migration)."""
+        cursor = conn.execute("PRAGMA table_info(items)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "updated_at" not in columns:
+            conn.execute("ALTER TABLE items ADD COLUMN updated_at DATETIME")
+            conn.execute(
+                "UPDATE items SET updated_at = created_at WHERE updated_at IS NULL"
+            )
 
     def insert_inbox(self, item: Item) -> None:
         """Insert a single inbox item (type=inbox, status=active)."""
@@ -92,12 +104,12 @@ class SqliteDB:
             conn.commit()
 
     def list_inbox(self) -> list[Item]:
-        """Return all items with type='inbox'."""
+        """Return open inbox items (type='inbox', not archived, not done)."""
         with sqlite3.connect(self._path) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
-                "SELECT * FROM items WHERE type = 'inbox' and status != 'archived' "
-                "ORDER BY created_at ASC"
+                "SELECT * FROM items WHERE type = 'inbox' AND status != 'archived' "
+                "AND status != 'done' ORDER BY created_at ASC"
             ).fetchall()
         return [_row_to_item(r) for r in rows]
 
@@ -126,7 +138,8 @@ class SqliteDB:
                 """
                 UPDATE items SET type=?, title=?, status=?, context_tags=?,
                                 parent_id=?, created_at=?, due_date=?,
-                                meta_payload=?, original_ek_id=?, estimated_duration=?
+                                meta_payload=?, original_ek_id=?, estimated_duration=?,
+                                updated_at=?
                 WHERE id = ?
                 """,
                 (
@@ -140,6 +153,7 @@ class SqliteDB:
                     json.dumps(item.meta_payload),
                     item.original_ek_id,
                     item.estimated_duration,
+                    _iso(item.updated_at),
                     item.id,
                 ),
             )
@@ -192,6 +206,17 @@ class SqliteDB:
             ).fetchall()
         return [_row_to_item(r) for r in rows]
 
+    def list_done_since(self, days: int = 7) -> list[Item]:
+        """Return items completed (status='done') within the last days (by updated_at)."""
+        with sqlite3.connect(self._path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT * FROM items WHERE status = 'done' AND updated_at >= "
+                "datetime('now', ?) ORDER BY updated_at DESC",
+                (f"-{days} days",),
+            ).fetchall()
+        return [_row_to_item(r) for r in rows]
+
     def list_actions_by_duration(
         self,
         max_duration: Optional[int] = None,
@@ -241,4 +266,5 @@ def _row_to_item(row: sqlite3.Row) -> Item:
         meta_payload=meta_payload,
         original_ek_id=row["original_ek_id"],
         estimated_duration=row["estimated_duration"],
+        updated_at=_parse_dt(row["updated_at"]) if "updated_at" in row.keys() else None,
     )

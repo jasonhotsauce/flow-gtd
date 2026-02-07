@@ -32,7 +32,7 @@ def test_next_actions(engine: Engine) -> None:
 
 
 def test_weekly_report(engine: Engine) -> None:
-    """weekly_report returns markdown string."""
+    """weekly_report returns markdown string (completed this week)."""
     report = engine.weekly_report()
     assert "# Flow Weekly Report" in report
-    assert "**Completed:**" in report
+    assert "**Completed this week:**" in report
