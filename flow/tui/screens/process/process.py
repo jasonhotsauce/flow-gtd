@@ -1,5 +1,7 @@
 """Process Funnel: 4-stage wizard (Dedup, Cluster, 2-Min, Coach)."""
 
+from datetime import datetime
+
 from textual.binding import Binding
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
@@ -9,6 +11,7 @@ from textual.widgets.option_list import Option
 
 from flow.core.engine import Engine
 from flow.core.coach import coach_task
+from flow.tui.common.widgets.defer_dialog import DeferDialog
 
 
 class ProcessScreen(Screen):
@@ -279,10 +282,62 @@ class ProcessScreen(Screen):
 
     def action_defer(self) -> None:
         """Defer item (Stage 3)."""
-        if self._stage == 3:
-            self._engine.two_min_advance()
-            self.notify("⏳ Deferred", timeout=1)
+        if self._stage != 3:
+            return
+
+        item = self._engine.get_2min_current()
+        if not item:
+            self.notify("No current item to defer", severity="warning", timeout=2)
             self._go_stage(3)
+            return
+
+        self.app.push_screen(
+            DeferDialog(),
+            callback=lambda result: self._apply_stage3_defer_result(item.id, result),
+        )
+
+    def _apply_stage3_defer_result(
+        self, item_id: str, result: dict[str, str] | None
+    ) -> None:
+        """Apply selected defer behavior for Stage 3."""
+        if not result:
+            return
+
+        item = self._engine.get_item(item_id)
+        if not item:
+            self.notify(
+                "Item no longer exists. Refreshing…", severity="warning", timeout=2
+            )
+            self._go_stage(3)
+            return
+
+        mode = result.get("mode")
+        if mode == "waiting":
+            self._engine.defer_item(item.id, mode="waiting")
+            self.notify("⏳ Deferred to Waiting For", timeout=2)
+        elif mode == "someday":
+            self._engine.defer_item(item.id, mode="someday")
+            self.notify("🌱 Moved to Someday/Maybe", timeout=2)
+        elif mode == "until":
+            raw = result.get("defer_until", "")
+            parsed = None
+            if raw:
+                try:
+                    parsed = datetime.fromisoformat(raw)
+                except ValueError:
+                    parsed = None
+            if parsed is None:
+                self.notify("Unable to parse defer date", severity="error", timeout=3)
+                return
+            self._engine.defer_item(item.id, mode="until", defer_until=parsed)
+            self.notify(
+                f"📅 Deferred until {parsed.strftime('%Y-%m-%d %H:%M')}", timeout=2
+            )
+        else:
+            return
+
+        self._engine.two_min_advance()
+        self._go_stage(3)
 
     def action_create_project(self) -> None:
         """Create project from cluster (Stage 2)."""

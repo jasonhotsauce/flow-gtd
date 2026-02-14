@@ -37,3 +37,6 @@ Use this skill when writing or modifying tests in `tests/` or behavior validated
 
 - Run focused tests first, then broader suites if needed:
   - `pytest tests/unit -v`
+- For datetime-based filtering/parsing behavior:
+  - Add coverage for both naive and timezone-aware datetimes.
+  - Add at least one regression test for mixed-datetime comparison paths.

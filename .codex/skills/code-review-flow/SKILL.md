@@ -27,6 +27,9 @@ Use this skill after any change to `flow/` or `tests/`.
 - Async safety in Textual paths (no blocking calls on main loop).
 - Graceful error handling in TUI flows.
 - Correct file placement within existing module boundaries.
+- Date/time safety:
+  - Validate mixed naive/aware datetime handling before any comparison.
+  - For defer/tickler behavior, verify timezone normalization does not raise runtime `TypeError`.
 
 ## Test Checks
 

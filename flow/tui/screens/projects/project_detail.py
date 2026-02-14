@@ -1,6 +1,7 @@
 """Project detail screen: list and work next actions for one project (GTD proceed)."""
 
 import asyncio
+from datetime import datetime
 
 from rich.text import Text
 
@@ -13,6 +14,7 @@ from textual.widgets.option_list import Option
 
 from flow.core.engine import Engine
 from flow.models import Item
+from flow.tui.common.widgets.defer_dialog import DeferDialog
 
 
 class ProjectDetailScreen(Screen):
@@ -203,20 +205,68 @@ class ProjectDetailScreen(Screen):
             asyncio.create_task(self._refresh_list_async())
 
     def action_defer_action(self) -> None:
-        """Defer selected action (set to waiting)."""
+        """Defer selected action using defer chooser."""
         if not self._actions:
             return
         opt_list = self.query_one("#detail-list", OptionList)
         idx = opt_list.highlighted
         if idx is not None and 0 <= idx < len(self._actions):
             item = self._actions[idx]
-            self._engine.defer_item(item.id)
+            self.app.push_screen(
+                DeferDialog(),
+                callback=lambda result: self._apply_defer_result(item.id, result),
+            )
+
+    def _apply_defer_result(self, item_id: str, result: dict[str, str] | None) -> None:
+        """Apply defer selection and refresh list."""
+        if not result:
+            return
+
+        item = self._engine.get_item(item_id)
+        if not item:
             self.notify(
-                f"⏸ Deferred: {item.title[:30]}…",
+                "Item no longer exists. Refreshing…", severity="warning", timeout=2
+            )
+            asyncio.create_task(self._refresh_list_async())
+            return
+
+        mode = result.get("mode")
+        if mode == "waiting":
+            self._engine.defer_item(item.id, mode="waiting")
+            self.notify(
+                f"⏸ Waiting For: {item.title[:30]}…",
                 severity="information",
                 timeout=2,
             )
-            asyncio.create_task(self._refresh_list_async())
+        elif mode == "someday":
+            self._engine.defer_item(item.id, mode="someday")
+            self.notify(
+                f"🌱 Someday/Maybe: {item.title[:30]}…",
+                severity="information",
+                timeout=2,
+            )
+        elif mode == "until":
+            raw = result.get("defer_until", "")
+            parsed = None
+            if raw:
+                try:
+                    parsed = datetime.fromisoformat(raw)
+                except ValueError:
+                    parsed = None
+            if parsed is None:
+                self.notify("Unable to parse defer date", severity="error", timeout=3)
+                return
+
+            self._engine.defer_item(item.id, mode="until", defer_until=parsed)
+            self.notify(
+                f"📅 Deferred until {parsed.strftime('%Y-%m-%d %H:%M')}",
+                severity="information",
+                timeout=2,
+            )
+        else:
+            return
+
+        asyncio.create_task(self._refresh_list_async())
 
     def action_show_help(self) -> None:
         """Show help toast."""
