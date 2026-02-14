@@ -165,3 +165,46 @@ def test_defer_until_aware_past_datetime_is_visible(engine: Engine) -> None:
 
     visible_ids = {it.id for it in engine.next_actions()}
     assert item.id in visible_ids
+
+
+def test_project_has_active_or_deferred_tasks_when_waiting_exists(engine: Engine) -> None:
+    """Project should be considered active when child tasks are deferred (waiting/someday)."""
+    task = engine.capture("Waiting task")
+    project = engine.create_project("Website refresh", [task.id])
+    engine.defer_item(task.id, mode="waiting")
+
+    assert engine.project_has_active_or_deferred_tasks(project.id) is True
+
+
+def test_project_has_active_or_deferred_tasks_false_when_only_done(engine: Engine) -> None:
+    """Project with only completed tasks should not be considered active/deferred."""
+    task = engine.capture("Ship update")
+    project = engine.create_project("Release v1", [task.id])
+    engine.complete_item(task.id)
+
+    assert engine.project_has_active_or_deferred_tasks(project.id) is False
+
+
+def test_project_open_tasks_includes_waiting_someday_and_future_deferred(
+    engine: Engine,
+) -> None:
+    """Project open-task list should include deferred states, not just next actions."""
+    active = engine.capture("Do now")
+    waiting = engine.capture("Waiting on vendor")
+    someday = engine.capture("Maybe later")
+    deferred_until = engine.capture("Blocked until next week")
+    project = engine.create_project(
+        "Project X", [active.id, waiting.id, someday.id, deferred_until.id]
+    )
+
+    engine.defer_item(waiting.id, mode="waiting")
+    engine.defer_item(someday.id, mode="someday")
+    engine.defer_item(
+        deferred_until.id, mode="until", defer_until=datetime.now() + timedelta(days=3)
+    )
+
+    open_ids = {item.id for item in engine.project_open_tasks(project.id)}
+    assert active.id in open_ids
+    assert waiting.id in open_ids
+    assert someday.id in open_ids
+    assert deferred_until.id in open_ids

@@ -84,7 +84,7 @@ class ProjectDetailScreen(Screen):
         """Load project actions off the main thread, then apply to UI."""
         try:
             actions = await asyncio.to_thread(
-                self._engine.next_actions, self._project.id
+                self._engine.project_open_tasks, self._project.id
             )
             if not self.is_mounted:
                 return
@@ -111,10 +111,13 @@ class ProjectDetailScreen(Screen):
             empty.display = True
             content.display = False
             count_widget.update("")
+            self.query_one("#detail-empty-text", Static).update(
+                self._empty_guidance_message()
+            )
             self._update_detail_panel(None)
             if had_actions:
                 self.notify(
-                    "Project has no next actions. Define one or put project on hold.",
+                    self._empty_guidance_message(),
                     title="GTD",
                     timeout=4,
                 )
@@ -127,7 +130,8 @@ class ProjectDetailScreen(Screen):
                 preview = item.title.split("\n")[0].strip()
                 if len(preview) > 48:
                     preview = preview[:48] + "…"
-                opt_list.add_option(Option(f"  •  {preview}", id=str(i)))
+                state = self._state_label(item)
+                opt_list.add_option(Option(f"  •  {preview}  [{state}]", id=str(i)))
 
             try:
                 opt_list.action_first()
@@ -141,6 +145,51 @@ class ProjectDetailScreen(Screen):
             except (ValueError, KeyError):
                 pass
 
+    def _empty_guidance_message(self) -> str:
+        """Return empty-state guidance when project has no open tasks."""
+        return "No active or deferred tasks left. Complete this project or add more tasks."
+
+    def _state_label(self, item: Item) -> str:
+        """Return display label for task state in project detail list."""
+        if item.status == "waiting":
+            return "waiting for"
+        if item.status == "someday":
+            return "someday/maybe"
+        if item.status == "active":
+            now = datetime.now()
+            if not self._engine.is_deferred_until_active(item, now):
+                defer_until = self._parse_defer_until(item)
+                if defer_until is not None:
+                    return f"deferred until {defer_until.strftime('%Y-%m-%d %H:%M')}"
+                return "deferred"
+        return "next action"
+
+    def _status_summary(self, item: Item, now: datetime | None = None) -> str:
+        """Return explicit status text for selected item detail panel."""
+        current = now or datetime.now()
+        if item.status == "waiting":
+            return "Waiting For"
+        if item.status == "someday":
+            return "Someday/Maybe"
+        if item.status == "active":
+            if self._engine.is_deferred_until_active(item, current):
+                return "Next Action"
+            defer_until = self._parse_defer_until(item)
+            if defer_until is not None:
+                return f"Deferred until {defer_until.strftime('%Y-%m-%d %H:%M')}"
+            return "Deferred"
+        return item.status.replace("_", " ").title()
+
+    def _parse_defer_until(self, item: Item) -> datetime | None:
+        """Parse defer_until metadata for rendering, if present and valid."""
+        raw = item.meta_payload.get("defer_until")
+        if not raw:
+            return None
+        try:
+            return datetime.fromisoformat(str(raw))
+        except ValueError:
+            return None
+
     def _update_detail_panel(self, item: Item | None) -> None:
         """Update right panel with full task text and tags."""
         body = self.query_one("#detail-body", Static)
@@ -150,13 +199,13 @@ class ProjectDetailScreen(Screen):
             tags_widget.update("")
         else:
             body.update(item.title)
+            info_text = Text()
+            info_text.append("Status: ", style="dim")
+            info_text.append(self._status_summary(item), style="bold")
             if item.context_tags:
-                tag_text = Text()
-                tag_text.append("Tags: ", style="dim")
-                tag_text.append(", ".join(item.context_tags), style="bold #a78bfa")
-                tags_widget.update(tag_text)
-            else:
-                tags_widget.update("")
+                info_text.append("   Tags: ", style="dim")
+                info_text.append(", ".join(item.context_tags), style="bold #a78bfa")
+            tags_widget.update(info_text)
 
     def on_option_list_option_highlighted(
         self, event: OptionList.OptionHighlighted

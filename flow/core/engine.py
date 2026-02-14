@@ -302,6 +302,24 @@ class Engine:
         actions = self.next_actions(parent_id=project_id)
         return actions[0] if actions else None
 
+    def project_has_active_or_deferred_tasks(self, project_id: str) -> bool:
+        """Return True when a project has any child tasks in active/deferred states."""
+        active_statuses: tuple[str, ...] = ("active", "waiting", "someday")
+        for status in active_statuses:
+            children = self._db.list_actions(status=status, parent_id=project_id)
+            if any(item.type != "project" for item in children):
+                return True
+        return False
+
+    def project_open_tasks(self, project_id: str) -> list[Item]:
+        """Return project tasks that are open now or deferred (active/waiting/someday)."""
+        open_statuses: tuple[str, ...] = ("active", "waiting", "someday")
+        tasks: list[Item] = []
+        for status in open_statuses:
+            children = self._db.list_actions(status=status, parent_id=project_id)
+            tasks.extend(item for item in children if item.type != "project")
+        return tasks
+
     # ---- Process Funnel ----
     def process_start(self) -> list[Item]:
         """Load inbox into working set for process funnel. Returns current inbox list."""
