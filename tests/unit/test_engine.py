@@ -48,6 +48,26 @@ def test_next_actions_with_project_titles(engine: Engine) -> None:
     assert by_id[standalone.id] is None
 
 
+def test_assign_item_to_project_sets_parent_and_action_type(engine: Engine) -> None:
+    """assign_item_to_project should link item to project and normalize type."""
+    item = engine.capture("Draft migration note")
+    project = engine.create_project("Infra cleanup", [])
+
+    updated = engine.assign_item_to_project(item.id, project.id)
+
+    assert updated.parent_id == project.id
+    assert updated.type == "action"
+
+
+def test_assign_item_to_project_rejects_non_project_target(engine: Engine) -> None:
+    """assign_item_to_project should reject non-project targets."""
+    item = engine.capture("Call accountant")
+    not_project = engine.capture("Just a task")
+
+    with pytest.raises(ValueError):
+        engine.assign_item_to_project(item.id, not_project.id)
+
+
 def test_weekly_report(engine: Engine) -> None:
     """weekly_report returns markdown string (completed this week)."""
     report = engine.weekly_report()
