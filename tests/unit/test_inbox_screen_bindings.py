@@ -19,3 +19,13 @@ def test_inbox_screen_has_defer_key_binding() -> None:
         (binding[0] == "f" if isinstance(binding, tuple) else binding.key == "f")
         for binding in InboxScreen.BINDINGS
     )
+
+
+def test_inbox_screen_enter_binding_is_process_menu() -> None:
+    """Inbox Enter should open process menu."""
+    assert any(
+        (binding[0] == "enter" and binding[1] == "open_process_menu")
+        if isinstance(binding, tuple)
+        else (binding.key == "enter" and binding.action == "open_process_menu")
+        for binding in InboxScreen.BINDINGS
+    )
