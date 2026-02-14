@@ -14,6 +14,8 @@ from textual.widgets.option_list import Option
 from flow.core.engine import Engine
 from flow.models import Item
 from flow.tui.common.widgets.defer_dialog import DeferDialog
+from flow.tui.common.widgets.process_task_dialog import ProcessTaskDialog
+from flow.tui.common.widgets.project_picker_dialog import ProjectPickerDialog
 
 
 class InboxScreen(Screen):
@@ -25,7 +27,7 @@ class InboxScreen(Screen):
         ("q", "app.quit", "Quit"),
         ("j", "cursor_down", "Down"),
         ("k", "cursor_up", "Up"),
-        ("enter", "process_item", "Process"),
+        ("enter", "open_process_menu", "Process"),
         ("d", "delete_item", "Delete"),
         ("f", "defer_item", "Defer"),
         ("p", "go_process", "Process"),
@@ -65,7 +67,7 @@ class InboxScreen(Screen):
             )
         with Container(id="inbox-help"):
             yield Static(
-                "j/k: Navigate │ Enter: Process │ d: Delete │ f: Defer │ p: Process │ g: Projects │ ?: Help",
+                "j/k: Navigate │ Enter: Process Menu │ d: Delete │ f: Defer │ p: Process │ g: Projects │ ?: Help",
                 id="inbox-help-text",
             )
         yield Footer()
@@ -172,14 +174,117 @@ class InboxScreen(Screen):
         opt_list = self.query_one("#inbox-list", OptionList)
         opt_list.action_cursor_up()
 
-    def action_process_item(self) -> None:
-        """Process the selected item."""
+    def _selected_item(self) -> Item | None:
+        """Return currently highlighted inbox item."""
         if not self._items:
-            return
+            return None
         opt_list = self.query_one("#inbox-list", OptionList)
         idx = opt_list.highlighted
         if idx is not None and 0 <= idx < len(self._items):
-            self.notify(f"Processing: {self._items[idx].title[:40]}...", timeout=2)
+            return self._items[idx]
+        return None
+
+    def action_process_item(self) -> None:
+        """Back-compat action alias for process menu."""
+        self.action_open_process_menu()
+
+    def action_open_process_menu(self) -> None:
+        """Open process menu for selected inbox item."""
+        item = self._selected_item()
+        if item is None:
+            return
+        self.app.push_screen(
+            ProcessTaskDialog(),
+            callback=lambda result: self._apply_process_result(item.id, result),
+        )
+
+    def _apply_process_result(
+        self, item_id: str, result: dict[str, str] | None
+    ) -> None:
+        """Apply selected process action for an inbox item."""
+        if not result:
+            return
+        action = result.get("action")
+        if action == "do_now":
+            item = self._engine.get_item(item_id)
+            if item:
+                self.notify(f"Processing: {item.title[:40]}...", timeout=2)
+            return
+        if action == "defer":
+            self.app.push_screen(
+                DeferDialog(),
+                callback=lambda defer_result: self._apply_defer_result(
+                    item_id, defer_result
+                ),
+            )
+            return
+        if action == "delete":
+            item = self._engine.get_item(item_id)
+            if item is None:
+                self.notify(
+                    "Item no longer exists. Refreshing…",
+                    severity="warning",
+                    timeout=2,
+                )
+                self._refresh_list()
+                return
+            self._engine.archive_item(item.id)
+            self.notify(
+                f"🗑️ Archived: {item.title[:30]}...", severity="warning", timeout=2
+            )
+            self._refresh_list()
+            return
+        if action == "add_to_project":
+            self._open_project_picker(item_id)
+
+    def _open_project_picker(self, item_id: str) -> None:
+        """Open project picker for assigning the selected item."""
+        item = self._engine.get_item(item_id)
+        if item is None:
+            self.notify(
+                "Item no longer exists. Refreshing…", severity="warning", timeout=2
+            )
+            self._refresh_list()
+            return
+
+        projects = self._engine.list_projects()
+        if not projects:
+            self.notify(
+                "No active projects yet. Create one in Process Stage 2.",
+                severity="warning",
+                timeout=3,
+            )
+            return
+
+        self.app.push_screen(
+            ProjectPickerDialog(projects),
+            callback=lambda picker_result: self._apply_project_assignment(
+                item_id, picker_result
+            ),
+        )
+
+    def _apply_project_assignment(
+        self, item_id: str, result: dict[str, str] | None
+    ) -> None:
+        """Assign selected item to selected project."""
+        if not result:
+            return
+        project_id = result.get("project_id")
+        if not project_id:
+            self.notify("No project selected", severity="warning", timeout=2)
+            return
+
+        try:
+            self._engine.assign_item_to_project(item_id, project_id)
+        except ValueError as exc:
+            self.notify(str(exc), severity="error", timeout=3)
+            self._refresh_list()
+            return
+
+        project = self._engine.get_item(project_id)
+        project_name = project.title if project else "project"
+        self.notify(f"📁 Added to project: {project_name}", timeout=2)
+        self._refresh_list()
 
     def action_delete_item(self) -> None:
         """Delete the selected item."""
@@ -278,7 +383,7 @@ class InboxScreen(Screen):
     def action_show_help(self) -> None:
         """Show help toast."""
         self.notify(
-            "j/k: Navigate │ Enter: Process │ d: Delete │ f: Defer │ p: Process │ g: Projects\n"
+            "j/k: Navigate │ Enter: Process Menu │ d: Delete │ f: Defer │ p: Process │ g: Projects\n"
             "a: Actions │ r: Review │ q: Quit",
             title="Help",
             timeout=5,
