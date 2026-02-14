@@ -26,6 +26,7 @@ The system operates on a unidirectional data pipeline: **Ingest (Input) -> Refin
   2. **Semantic Clustering**: AI identifies topics (e.g., "HLS Bug") and suggests grouping into Projects.
   3. **Rapid Fire**: 2-Minute Rule filter (Do Now / Defer / Delete).
   4. **Socratic Coaching**: Challenges remaining vague tasks (e.g., "Fix Bug") to force conversion into Actionable Verbs.
+* **Inbox Triage Shortcut**: From Inbox, `Enter` opens a process menu that includes **Add to project**, allowing direct assignment of a task to an existing active project.
 
 ### 2.3 Phase 3: Execute
 * **State**: Highly Focused.

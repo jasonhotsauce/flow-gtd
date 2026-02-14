@@ -30,6 +30,7 @@ Projects are created in the **Process** funnel (Stage 2: Cluster), where the AI 
 
 - **CLI**: `flow projects` — opens the TUI on the Projects screen.  
 - **TUI**: From Inbox, Action, or Review, press **P** (or use **?** Help to see shortcuts) to open the Projects screen.
+- **Inbox triage**: In Inbox, press **Enter** to open the Process menu, then choose **Add to project** to attach the selected task to an existing active project.
 
 ## GTD alignment
 
