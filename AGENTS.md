@@ -25,11 +25,21 @@ This repository is configured for Codex-first collaboration.
 
 - Use strict type hints on new/changed Python APIs.
 - Prefer `pathlib` over `os.path`.
-- Always activate the repository virtual environment before running Python scripts:
+- Always bootstrap and activate the repository virtual environment before running Python scripts:
+  - If `.venv` is missing, create it with Python 3.11+:
+    - `python3.11 -m venv .venv` (preferred)
+    - fallback only if `python3` is already 3.11+
   - Run `source .venv/bin/activate` first in the shell session.
+  - Ensure dependency tooling exists in venv:
+    - `pip3 install poetry`
+  - Install project dependencies:
+    - `make install`
   - After activation, use `python` / `pytest` from that active environment.
   - This project uses Poetry for dependency management; use `poetry` commands
     (for example `poetry install`, `poetry add`, `poetry update`) when changing dependencies.
+- For datetime comparisons in defer/tickler logic:
+  - Treat mixed naive/aware datetimes as a first-class risk.
+  - Normalize timezone context before comparison.
 - Keep Textual UI responsive:
   - No blocking work in handlers/composition.
   - Use workers or `asyncio.to_thread` for blocking operations.

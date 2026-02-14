@@ -5,7 +5,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Literal, Optional
 
 from flow.config import get_settings
 from flow.core.coach import (
@@ -19,6 +19,7 @@ from flow.database.sqlite import SqliteDB
 from flow.models import Item, Resource
 
 logger = logging.getLogger(__name__)
+DeferMode = Literal["waiting", "until", "someday"]
 
 
 class Engine:
@@ -225,7 +226,31 @@ class Engine:
     def next_actions(self, parent_id: Optional[str] = None) -> list[Item]:
         """Return active actionable items for execution view (excludes projects)."""
         items = self._db.list_actions(status="active", parent_id=parent_id)
-        return [item for item in items if item.type != "project"]
+        now = datetime.now()
+        return [
+            item
+            for item in items
+            if item.type != "project" and self.is_deferred_until_active(item, now)
+        ]
+
+    def is_deferred_until_active(self, item: Item, now: datetime) -> bool:
+        """Return True if item is actionable now based on defer_until metadata."""
+        raw = item.meta_payload.get("defer_until")
+        if not raw:
+            return True
+        try:
+            defer_until = datetime.fromisoformat(str(raw))
+        except ValueError:
+            return True
+        if defer_until.tzinfo is None:
+            compare_now = now if now.tzinfo is None else now.replace(tzinfo=None)
+            return defer_until <= compare_now
+
+        try:
+            compare_now = now.astimezone(defer_until.tzinfo)
+        except (TypeError, ValueError):
+            return True
+        return defer_until <= compare_now
 
     def next_actions_with_project_titles(self) -> list[tuple[Item, Optional[str]]]:
         """Return active tasks with their parent project title (if available)."""
@@ -254,7 +279,7 @@ class Engine:
         projects = self._db.list_projects(status="active")
         result: list[tuple[Item, Optional[Item]]] = []
         for proj in projects:
-            actions = self._db.list_actions(status="active", parent_id=proj.id)
+            actions = self.next_actions(parent_id=proj.id)
             next_action = actions[0] if actions else None
             result.append((proj, next_action))
         return result
@@ -266,7 +291,7 @@ class Engine:
         projects = self._db.list_projects(status="active")
         result: list[tuple[Item, list[Item]]] = []
         for proj in projects:
-            actions = self._db.list_actions(status="active", parent_id=proj.id)
+            actions = self.next_actions(parent_id=proj.id)
             result.append((proj, actions))
         return result
 
@@ -382,8 +407,9 @@ class Engine:
             )
         self._process_inbox = self.list_inbox()
 
-    def two_min_defer(self, _item_id: str) -> None:
-        """Keep as active (no change) or set waiting."""
+    def two_min_defer(self, item_id: str) -> None:
+        """Defer an item from the 2-minute stage using waiting mode."""
+        self.defer_item(item_id, mode="waiting")
         self._process_inbox = self.list_inbox()
 
     def get_coach_current(self) -> Optional[Item]:
@@ -521,11 +547,40 @@ class Engine:
                 )
             )
 
-    def defer_item(self, item_id: str) -> None:
-        """Set item status to waiting (defer)."""
+    def defer_item(
+        self,
+        item_id: str,
+        mode: DeferMode = "waiting",
+        defer_until: Optional[datetime] = None,
+        note: Optional[str] = None,
+    ) -> None:
+        """Apply a defer mode to an item."""
         item = self._db.get_item(item_id)
-        if item:
-            self._db.update_item(item.model_copy(update={"status": "waiting"}))
+        if not item:
+            return
+
+        payload = dict(item.meta_payload)
+        payload.pop("defer_until", None)
+
+        if mode == "waiting":
+            if note:
+                payload["defer_note"] = note
+            self._db.update_item(
+                item.model_copy(update={"status": "waiting", "meta_payload": payload})
+            )
+            return
+
+        if mode == "someday":
+            self._db.update_item(
+                item.model_copy(update={"status": "someday", "meta_payload": payload})
+            )
+            return
+
+        if mode == "until" and defer_until is not None:
+            payload["defer_until"] = defer_until.isoformat()
+            self._db.update_item(
+                item.model_copy(update={"status": "active", "meta_payload": payload})
+            )
 
     def weekly_report(self, days: int = 7) -> str:
         """Markdown/ASCII weekly report: completed items in the last days."""

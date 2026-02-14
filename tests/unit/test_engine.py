@@ -1,5 +1,6 @@
 """Unit tests for Engine (capture, list_inbox, next_actions)."""
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -70,3 +71,68 @@ def test_list_inbox_excludes_done_and_archived(engine: Engine) -> None:
     items = engine.list_inbox()
     assert len(items) == 1
     assert items[0].title == "Open task"
+
+
+def test_defer_waiting_sets_waiting_status(engine: Engine) -> None:
+    """defer_item waiting mode sets status to waiting."""
+    item = engine.capture("Call vendor")
+    engine.defer_item(item.id, mode="waiting")
+    updated = engine.get_item(item.id)
+    assert updated is not None
+    assert updated.status == "waiting"
+
+
+def test_defer_someday_sets_someday_status(engine: Engine) -> None:
+    """defer_item someday mode sets status to someday."""
+    item = engine.capture("Maybe learn SwiftUI")
+    engine.defer_item(item.id, mode="someday")
+    updated = engine.get_item(item.id)
+    assert updated is not None
+    assert updated.status == "someday"
+
+
+def test_defer_until_stores_timestamp_and_hides_from_next_actions(
+    engine: Engine,
+) -> None:
+    """defer_item until mode stores defer_until and excludes from next actions."""
+    item = engine.capture("Write proposal")
+    future = datetime.now() + timedelta(days=2)
+    engine.defer_item(item.id, mode="until", defer_until=future)
+
+    updated = engine.get_item(item.id)
+    assert updated is not None
+    assert updated.status == "active"
+    assert "defer_until" in updated.meta_payload
+
+    visible_ids = {it.id for it in engine.next_actions()}
+    assert item.id not in visible_ids
+
+
+def test_defer_until_due_item_is_visible_in_next_actions(engine: Engine) -> None:
+    """Active item deferred until the past stays visible in next actions."""
+    item = engine.capture("Prepare meeting notes")
+    past = datetime.now() - timedelta(hours=1)
+    engine.defer_item(item.id, mode="until", defer_until=past)
+
+    visible_ids = {it.id for it in engine.next_actions()}
+    assert item.id in visible_ids
+
+
+def test_defer_until_aware_future_datetime_is_hidden(engine: Engine) -> None:
+    """Aware defer_until in the future should not crash and should hide item."""
+    item = engine.capture("Submit expense report")
+    future = datetime.now(timezone.utc) + timedelta(days=1)
+    engine.defer_item(item.id, mode="until", defer_until=future)
+
+    visible_ids = {it.id for it in engine.next_actions()}
+    assert item.id not in visible_ids
+
+
+def test_defer_until_aware_past_datetime_is_visible(engine: Engine) -> None:
+    """Aware defer_until in the past should not crash and should show item."""
+    item = engine.capture("Follow up with recruiter")
+    past = datetime.now(timezone.utc) - timedelta(hours=1)
+    engine.defer_item(item.id, mode="until", defer_until=past)
+
+    visible_ids = {it.id for it in engine.next_actions()}
+    assert item.id in visible_ids

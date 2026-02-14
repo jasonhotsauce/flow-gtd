@@ -15,7 +15,10 @@ Projects are created in the **Process** funnel (Stage 2: Cluster), where the AI 
 
 - **Project detail (proceed)**  
   - List of active actions for one project with full task text and tags in a side panel.  
-  - **Complete (c)** marks the selected action done; **Defer (f)** sets it to waiting.  
+  - **Complete (c)** marks the selected action done; **Defer (f)** opens a chooser:
+    - `Waiting For` for external blockers
+    - `Defer Until` for tickler-style resurface at a date/time
+    - `Someday/Maybe` for low-commitment ideas
   - List refreshes after each action; if no actions remain, a GTD-style reminder is shown.  
   - Esc returns to the project list.
 
@@ -35,11 +38,12 @@ Projects are created in the **Process** funnel (Stage 2: Cluster), where the AI 
 | Project list for review | Projects screen lists all active projects with next-action preview. |
 | One next action per project | Shown in list and in detail; first task in the list is the suggested next action. |
 | Proceed = do the next action | Project detail: complete or defer the selected action; list updates; next task becomes the new “next” or you add one. |
+| Different defer intents | `Waiting For` maps to `status=waiting`; `Someday/Maybe` maps to `status=someday`; `Defer Until` keeps `status=active` and stores `meta_payload.defer_until`. |
 | Weekly review | Review screen can be used with Projects (e.g. “Review projects” then open Projects). |
 
 ## Implementation notes
 
-- **Engine**: `list_projects()`, `list_projects_with_actions()`, `get_project_next_action()`, `defer_item()`.  
+- **Engine**: `list_projects()`, `list_projects_with_actions()`, `get_project_next_action()`, `defer_item(mode=...)`, `is_deferred_until_active()`.  
 - **DB**: `list_projects(status)` in `flow/database/sqlite.py`.  
 - **TUI**: `flow/tui/screens/projects/` — `ProjectsScreen` (list + detail panel), `ProjectDetailScreen` (proceed).  
 - **Footer**: Cross-screen nav (a, i, r, P) is hidden from the footer but still works; **?** Help lists all shortcuts.

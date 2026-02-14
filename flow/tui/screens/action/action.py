@@ -1,6 +1,7 @@
 """Action screen: next actions list (65%) + Resource Sidecar (35%)."""
 
 import asyncio
+from datetime import datetime
 from typing import Optional
 
 from textual.binding import Binding
@@ -12,6 +13,7 @@ from textual.widgets.option_list import Option
 
 from flow.core.engine import Engine
 from flow.models import Item
+from flow.tui.common.widgets.defer_dialog import DeferDialog
 from flow.tui.common.widgets.sidecar import ResourceContextPanel
 
 
@@ -27,6 +29,7 @@ class ActionScreen(Screen):
         ("k", "cursor_up", "Up"),
         ("enter", "select_action", "Select"),
         ("c", "complete_action", "Complete"),
+        ("f", "defer_action", "Defer"),
         ("tab", "focus_sidecar", "Sidecar"),
         Binding("i", "go_inbox", "Inbox", show=False),
         Binding("P", "go_projects", "Projects", show=False),
@@ -54,7 +57,7 @@ class ActionScreen(Screen):
                 yield ResourceContextPanel(id="sidecar")
         with Container(id="action-help"):
             yield Static(
-                "j/k: Navigate │ Enter: Select │ c: Complete │ Tab: Sidecar │ Esc: Back │ ?: Help",
+                "j/k: Navigate │ Enter: Select │ c: Complete │ f: Defer │ Tab: Sidecar │ Esc: Back │ ?: Help",
                 id="action-help-text",
             )
         yield Footer()
@@ -199,6 +202,62 @@ class ActionScreen(Screen):
         sidecar = self.query_one("#sidecar", ResourceContextPanel)
         sidecar.focus()
 
+    def action_defer_action(self) -> None:
+        """Defer the current action using the shared defer chooser."""
+        if not self._items:
+            return
+
+        opt_list = self.query_one("#action-list", OptionList)
+        idx = opt_list.highlighted
+        if idx is None or idx < 0 or idx >= len(self._items):
+            return
+
+        item = self._items[idx]
+        self.app.push_screen(
+            DeferDialog(),
+            callback=lambda result: self._apply_defer_result(item.id, result),
+        )
+
+    def _apply_defer_result(self, item_id: str, result: dict[str, str] | None) -> None:
+        """Apply defer selection and refresh next actions."""
+        if not result:
+            return
+
+        item = self._engine.get_item(item_id)
+        if not item:
+            self.notify(
+                "Item no longer exists. Refreshing…", severity="warning", timeout=2
+            )
+            asyncio.create_task(self._refresh_list_async())
+            return
+
+        mode = result.get("mode")
+        if mode == "waiting":
+            self._engine.defer_item(item.id, mode="waiting")
+            self.notify("⏳ Deferred to Waiting For", timeout=2)
+        elif mode == "someday":
+            self._engine.defer_item(item.id, mode="someday")
+            self.notify("🌱 Moved to Someday/Maybe", timeout=2)
+        elif mode == "until":
+            raw = result.get("defer_until", "")
+            parsed: datetime | None = None
+            if raw:
+                try:
+                    parsed = datetime.fromisoformat(raw)
+                except ValueError:
+                    parsed = None
+            if parsed is None:
+                self.notify("Unable to parse defer date", severity="error", timeout=3)
+                return
+            self._engine.defer_item(item.id, mode="until", defer_until=parsed)
+            self.notify(
+                f"📅 Deferred until {parsed.strftime('%Y-%m-%d %H:%M')}", timeout=2
+            )
+        else:
+            return
+
+        asyncio.create_task(self._refresh_list_async())
+
     def action_go_inbox(self) -> None:
         """Navigate to inbox."""
         from flow.tui.screens.inbox.inbox import InboxScreen
@@ -214,7 +273,7 @@ class ActionScreen(Screen):
     def action_show_help(self) -> None:
         """Show help toast."""
         self.notify(
-            "j/k: Navigate │ Enter: Select │ c: Complete │ Tab: Sidecar\n"
+            "j/k: Navigate │ Enter: Select │ c: Complete │ f: Defer │ Tab: Sidecar\n"
             "i: Inbox │ P: Projects │ Esc: Back │ q: Quit",
             title="Help",
             timeout=5,

@@ -18,8 +18,10 @@ For development or contributing:
 ```bash
 git clone https://github.com/YOUR_GITHUB_USERNAME/flow-gtd.git
 cd flow-gtd
-poetry install
+python3.11 -m venv .venv
 source .venv/bin/activate
+pip3 install poetry
+make install
 ```
 
 ## Environment
