@@ -71,10 +71,6 @@ logs/
 .cache/
 models/
 
-# ChromaDB
-chroma/
-knowledge_base/
-
 # Textual
 .textual/
 
@@ -91,10 +87,3 @@ secrets.json
 tmp/
 temp/
 *.tmp
-
-# Codex local agent config
-.codex/
-AGENTS.md
-
-# Local git worktrees
-.worktrees/
