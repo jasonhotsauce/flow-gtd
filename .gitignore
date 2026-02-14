@@ -17,9 +17,6 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Documentation
-docs/
-
 # IDE / Editor
 .idea/
 .vscode/
