@@ -104,12 +104,12 @@ class SqliteDB:
             conn.commit()
 
     def list_inbox(self) -> list[Item]:
-        """Return open inbox items (type='inbox', not archived, not done)."""
+        """Return active inbox items that are not assigned to a project."""
         with sqlite3.connect(self._path) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
-                "SELECT * FROM items WHERE type = 'inbox' AND status != 'archived' "
-                "AND status != 'done' ORDER BY created_at ASC"
+                "SELECT * FROM items WHERE type = 'inbox' AND status = 'active' "
+                "AND parent_id IS NULL ORDER BY created_at ASC"
             ).fetchall()
         return [_row_to_item(r) for r in rows]
 

@@ -185,8 +185,10 @@ class Engine:
         thread.start()
 
     def list_inbox(self) -> list[Item]:
-        """Return open inbox items (type='inbox', not archived, not done)."""
-        return self._db.list_inbox()
+        """Return active, ungrouped inbox items that are actionable now."""
+        items = self._db.list_inbox()
+        now = datetime.now()
+        return [item for item in items if self.is_deferred_until_active(item, now)]
 
     def get_resources_for_task(self, task_id: str) -> list[Resource]:
         """Get resources matching a task's tags.

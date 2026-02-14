@@ -91,6 +91,35 @@ def test_defer_someday_sets_someday_status(engine: Engine) -> None:
     assert updated.status == "someday"
 
 
+def test_list_inbox_excludes_deferred_and_project_items(engine: Engine) -> None:
+    """list_inbox hides deferred items and items that belong to projects."""
+    visible = engine.capture("Visible")
+    waiting = engine.capture("Waiting")
+    someday = engine.capture("Someday")
+    grouped = engine.capture("Grouped")
+
+    engine.defer_item(waiting.id, mode="waiting")
+    engine.defer_item(someday.id, mode="someday")
+    engine.create_project("Plan launch", [grouped.id])
+
+    items = engine.list_inbox()
+    assert len(items) == 1
+    assert items[0].id == visible.id
+
+
+def test_list_inbox_excludes_future_defer_until(engine: Engine) -> None:
+    """list_inbox hides items deferred until a future datetime."""
+    visible = engine.capture("Visible now")
+    deferred = engine.capture("Deferred until later")
+    future = datetime.now() + timedelta(days=1)
+    engine.defer_item(deferred.id, mode="until", defer_until=future)
+
+    items = engine.list_inbox()
+    item_ids = {item.id for item in items}
+    assert visible.id in item_ids
+    assert deferred.id not in item_ids
+
+
 def test_defer_until_stores_timestamp_and_hides_from_next_actions(
     engine: Engine,
 ) -> None:

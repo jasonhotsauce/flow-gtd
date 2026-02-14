@@ -70,3 +70,27 @@ def test_list_inbox_excludes_done_and_archived(db: SqliteDB) -> None:
     assert len(items) == 1
     assert items[0].id == "open"
     assert items[0].title == "Open"
+
+
+def test_list_inbox_excludes_deferred_and_project_assigned_items(db: SqliteDB) -> None:
+    """list_inbox returns only active, ungrouped inbox tasks."""
+    db.insert_inbox(Item(id="visible", type="inbox", title="Visible", status="active"))
+    db.insert_inbox(
+        Item(id="waiting", type="inbox", title="Waiting", status="waiting")
+    )
+    db.insert_inbox(
+        Item(id="someday", type="inbox", title="Someday", status="someday")
+    )
+    db.insert_inbox(
+        Item(
+            id="in_project",
+            type="inbox",
+            title="In project",
+            status="active",
+            parent_id="project-1",
+        )
+    )
+
+    items = db.list_inbox()
+    assert len(items) == 1
+    assert items[0].id == "visible"
