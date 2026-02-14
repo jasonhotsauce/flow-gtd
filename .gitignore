@@ -91,3 +91,10 @@ secrets.json
 tmp/
 temp/
 *.tmp
+
+# Codex local agent config
+.codex/
+AGENTS.md
+
+# Local git worktrees
+.worktrees/

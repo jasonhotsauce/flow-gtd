@@ -1,0 +1,304 @@
+/* Projects Screen Styles
+ * Project list (GTD review) and project detail (proceed)
+ */
+
+$primary: #7c3aed;
+$primary-light: #a78bfa;
+$success: #10b981;
+$warning: #f59e0b;
+$surface: #1e1e2e;
+$surface-light: #313244;
+$surface-lighter: #45475a;
+$text: #cdd6f4;
+$text-muted: #a6adc8;
+$text-dim: #6c7086;
+$border: #45475a;
+
+ProjectsScreen {
+    layout: vertical;
+    background: $surface;
+}
+
+#projects-header {
+    dock: top;
+    height: auto;
+    padding: 1 2;
+    background: $surface-light;
+    border-bottom: solid $border;
+    layout: horizontal;
+}
+
+#projects-title {
+    width: auto;
+    text-style: bold;
+    color: $primary-light;
+}
+
+#projects-count {
+    width: auto;
+    color: $text-muted;
+    padding-left: 2;
+}
+
+/* Two-panel layout: list | detail */
+#projects-content {
+    height: 1fr;
+    layout: horizontal;
+    padding: 1 2;
+}
+
+#projects-left {
+    width: 42%;
+    height: 100%;
+    padding: 0 1 0 0;
+}
+
+#projects-list-title {
+    padding: 0 0 1 0;
+    text-style: bold;
+    color: $primary-light;
+}
+
+#projects-list-container {
+    height: 1fr;
+}
+
+#projects-list {
+    height: 1fr;
+    background: $surface-light;
+    border: round $border;
+    padding: 1;
+}
+
+#projects-list:focus {
+    border: round $primary;
+}
+
+#projects-list > .option-list--option-highlighted {
+    background: $primary;
+    color: white;
+}
+
+/* Right panel: project name + full next-action text */
+#projects-right {
+    width: 58%;
+    height: 100%;
+    padding: 0 0 0 1;
+    border-left: solid $border;
+    min-width: 20;
+}
+
+#projects-detail-section-project {
+    padding: 0 0 1 0;
+    text-style: bold;
+    color: $text-muted;
+}
+
+#projects-detail-project-name {
+    padding: 0 0 1 0;
+    color: $primary-light;
+    text-style: bold;
+}
+
+#projects-detail-section-next {
+    padding: 1 0 1 0;
+    text-style: bold;
+    color: $text-muted;
+}
+
+#projects-detail-next-scroll {
+    height: 10;
+    min-height: 5;
+    background: $surface-light;
+    border: round $border;
+    padding: 1 2;
+    overflow-y: auto;
+    scrollbar-size: 1 1;
+}
+
+#projects-detail-next-body {
+    width: 100%;
+    padding: 0 1;
+}
+
+#projects-detail-tags {
+    padding-top: 1;
+    color: $text-muted;
+}
+
+#projects-detail-section-tasks {
+    padding: 1 0 1 0;
+    text-style: bold;
+    color: $text-muted;
+}
+
+#projects-detail-tasks-scroll {
+    height: 1fr;
+    min-height: 5;
+    background: $surface-light;
+    border: round $border;
+    padding: 1 2;
+    overflow-y: auto;
+    scrollbar-size: 1 1;
+}
+
+#projects-detail-tasks-list {
+    width: 100%;
+    padding: 0 1;
+}
+
+#projects-empty {
+    width: 100%;
+    height: auto;
+    content-align: center middle;
+    padding: 4 2;
+}
+
+#projects-empty-text {
+    text-align: center;
+    color: $text-dim;
+}
+
+#projects-help {
+    dock: bottom;
+    height: 3;
+    padding: 0 2;
+    background: $surface-light;
+    border-top: solid $border;
+    content-align: center middle;
+}
+
+#projects-help-text {
+    color: $text-dim;
+    text-align: center;
+}
+
+/* Project detail screen (proceed) */
+ProjectDetailScreen {
+    layout: vertical;
+    background: $surface;
+}
+
+#detail-header {
+    dock: top;
+    height: auto;
+    padding: 1 2;
+    background: $surface-light;
+    border-bottom: solid $border;
+    layout: horizontal;
+}
+
+#detail-title {
+    width: auto;
+    text-style: bold;
+    color: $primary-light;
+}
+
+#detail-count {
+    width: auto;
+    color: $text-muted;
+    padding-left: 2;
+}
+
+#detail-content {
+    height: 1fr;
+    layout: horizontal;
+    padding: 1 2;
+}
+
+#detail-left {
+    width: 42%;
+    height: 100%;
+    padding: 0 1 0 0;
+}
+
+#detail-list-container {
+    height: 1fr;
+}
+
+#detail-list {
+    height: 1fr;
+    background: $surface-light;
+    border: round $border;
+    padding: 1;
+}
+
+#detail-list:focus {
+    border: round $primary;
+}
+
+#detail-list > .option-list--option-highlighted {
+    background: $primary;
+    color: white;
+}
+
+#detail-right {
+    width: 58%;
+    height: 100%;
+    padding: 0 0 0 1;
+    border-left: solid $border;
+    min-width: 20;
+}
+
+#detail-body-title {
+    padding: 0 0 1 0;
+    text-style: bold;
+    color: $primary-light;
+}
+
+#detail-body-scroll {
+    height: 1fr;
+    background: $surface-light;
+    border: round $border;
+    padding: 1 2;
+    overflow-y: auto;
+    scrollbar-size: 1 1;
+}
+
+#detail-body {
+    width: 100%;
+    padding: 0 1;
+}
+
+#detail-tags {
+    padding-top: 1;
+    color: $text-muted;
+}
+
+#detail-loading {
+    width: 100%;
+    height: auto;
+    content-align: center middle;
+    padding: 4 2;
+}
+
+#detail-loading-text {
+    text-align: center;
+    color: $text-muted;
+}
+
+#detail-empty {
+    width: 100%;
+    height: auto;
+    content-align: center middle;
+    padding: 4 2;
+}
+
+#detail-empty-text {
+    text-align: center;
+    color: $text-dim;
+}
+
+#detail-help {
+    dock: bottom;
+    height: 3;
+    padding: 0 2;
+    background: $surface-light;
+    border-top: solid $border;
+    content-align: center middle;
+}
+
+#detail-help-text {
+    color: $text-dim;
+    text-align: center;
+}

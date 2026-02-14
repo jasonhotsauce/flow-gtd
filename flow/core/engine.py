@@ -5,7 +5,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from flow.config import get_settings
 from flow.core.coach import (
@@ -13,7 +13,7 @@ from flow.core.coach import (
     estimate_duration_heuristic,
     suggest_clusters,
 )
-from flow.core.tagging import extract_tags
+from flow.core.tagging import extract_tags, extract_tags_async
 from flow.database.resources import ResourceDB
 from flow.database.sqlite import SqliteDB
 from flow.models import Item, Resource
@@ -42,17 +42,25 @@ class Engine:
         meta_payload: Optional[dict] = None,
         tags: Optional[list[str]] = None,
         skip_auto_tag: bool = False,
+        block_auto_tag: bool = False,
+        on_tagging_start: Optional[Callable[[], None]] = None,
     ) -> Item:
         """Quick capture: create inbox item and persist.
 
-        Tasks are automatically tagged in the background using LLM for
-        matching with saved resources.
+        Tasks are automatically tagged using LLM for matching with saved
+        resources. By default tagging runs in a background thread; use
+        block_auto_tag=True (e.g. from CLI) so tags are written before exit.
 
         Args:
             text: The capture text (task description, note, etc.).
             meta_payload: Optional metadata dict to attach.
             tags: Optional explicit tags (skips auto-tagging).
             skip_auto_tag: If True, skip LLM auto-tagging entirely.
+            block_auto_tag: If True, run tagging in the same thread so it
+                completes before return (use from CLI to avoid process exit
+                killing the background thread).
+            on_tagging_start: Optional callback invoked when blocking auto-tag
+                is about to run (e.g. to display "Tagging..." progress).
 
         Returns:
             The created Item.
@@ -67,38 +75,112 @@ class Engine:
         )
         self._db.insert_inbox(item)
 
-        # Auto-tag in background if no explicit tags provided
+        # Auto-tag if no explicit tags provided
         if not tags and not skip_auto_tag:
-            self._schedule_auto_tagging(item.id, text)
+            self._schedule_auto_tagging(
+                item.id, text, block=block_auto_tag, on_start=on_tagging_start
+            )
 
         return item
 
-    def _schedule_auto_tagging(self, item_id: str, text: str) -> None:
-        """Schedule auto-tagging in a background thread.
+    def _run_auto_tagging(self, item_id: str, text: str) -> None:
+        """Run LLM tag extraction and update item + tag usage. Swallows errors."""
+        try:
+            existing_tags = self._resource_db.get_tag_names()
+            tags = extract_tags(text, "text", existing_tags)
+            if tags:
+                item = self._db.get_item(item_id)
+                if item:
+                    merged = list(dict.fromkeys(item.context_tags + tags))
+                    updated = item.model_copy(update={"context_tags": merged})
+                    self._db.update_item(updated)
+                    for tag in tags:
+                        self._resource_db.increment_tag_usage(tag)
+        except (IOError, ValueError, RuntimeError) as e:
+            logger.debug("Auto-tagging failed for item %s: %s", item_id, e)
+
+    async def _run_auto_tagging_async(self, item_id: str, text: str) -> None:
+        """Run LLM tag extraction (async) and update item + tag usage. Swallows errors."""
+        try:
+            existing_tags = self._resource_db.get_tag_names()
+            tags = await extract_tags_async(text, "text", existing_tags)
+            if tags:
+                item = self._db.get_item(item_id)
+                if item:
+                    merged = list(dict.fromkeys(item.context_tags + tags))
+                    updated = item.model_copy(update={"context_tags": merged})
+                    self._db.update_item(updated)
+                    for tag in tags:
+                        self._resource_db.increment_tag_usage(tag)
+        except (IOError, ValueError, RuntimeError) as e:
+            logger.debug("Auto-tagging failed for item %s: %s", item_id, e)
+
+    async def capture_async(
+        self,
+        text: str,
+        meta_payload: Optional[dict] = None,
+        tags: Optional[list[str]] = None,
+        skip_auto_tag: bool = False,
+    ) -> Item:
+        """Quick capture with async auto-tagging (non-blocking for event loop).
+
+        Use from TUI or any async context so the LLM tagging does not block the
+        main thread. Item is persisted immediately; tags are applied when the
+        async call completes.
+
+        Args:
+            text: The capture text (task description, note, etc.).
+            meta_payload: Optional metadata dict to attach.
+            tags: Optional explicit tags (skips auto-tagging).
+            skip_auto_tag: If True, skip LLM auto-tagging entirely.
+
+        Returns:
+            The created Item (with context_tags updated if auto-tag ran).
+        """
+        item = Item(
+            id=str(uuid.uuid4()),
+            type="inbox",
+            title=text.strip(),
+            status="active",
+            context_tags=tags or [],
+            meta_payload=meta_payload or {},
+        )
+        self._db.insert_inbox(item)
+
+        if not tags and not skip_auto_tag:
+            await self._run_auto_tagging_async(item.id, text)
+            # Refetch so returned item has applied tags
+            updated = self.get_item(item.id)
+            if updated:
+                return updated
+
+        return item
+
+    def _schedule_auto_tagging(
+        self,
+        item_id: str,
+        text: str,
+        *,
+        block: bool = False,
+        on_start: Optional[Callable[[], None]] = None,
+    ) -> None:
+        """Run auto-tagging in background thread or in-place.
 
         Args:
             item_id: ID of the item to tag.
             text: Text content to extract tags from.
+            block: If True, run in the same thread (for CLI so process exit
+                does not kill the tagging work). If False, run in a daemon thread.
+            on_start: If block is True, called once before running tagging (e.g. progress).
         """
-
-        def _run_tagging() -> None:
-            try:
-                existing_tags = self._resource_db.get_tag_names()
-                tags = extract_tags(text, "text", existing_tags)
-                if tags:
-                    item = self._db.get_item(item_id)
-                    if item:
-                        # Merge with any existing tags
-                        merged = list(dict.fromkeys(item.context_tags + tags))
-                        updated = item.model_copy(update={"context_tags": merged})
-                        self._db.update_item(updated)
-                        # Update tag usage counts
-                        for tag in tags:
-                            self._resource_db.increment_tag_usage(tag)
-            except (IOError, ValueError, RuntimeError) as e:
-                logger.debug("Auto-tagging failed for item %s: %s", item_id, e)
-
-        thread = threading.Thread(target=_run_tagging, daemon=True)
+        if block:
+            if on_start:
+                on_start()
+            self._run_auto_tagging(item_id, text)
+            return
+        thread = threading.Thread(
+            target=self._run_auto_tagging, args=(item_id, text), daemon=True
+        )
         thread.start()
 
     def list_inbox(self) -> list[Item]:
@@ -141,8 +223,57 @@ class Engine:
         self._db.update_item(item)
 
     def next_actions(self, parent_id: Optional[str] = None) -> list[Item]:
-        """Return active items for execution view (status=active). Project logic later."""
-        return self._db.list_actions(status="active", parent_id=parent_id)
+        """Return active actionable items for execution view (excludes projects)."""
+        items = self._db.list_actions(status="active", parent_id=parent_id)
+        return [item for item in items if item.type != "project"]
+
+    def next_actions_with_project_titles(self) -> list[tuple[Item, Optional[str]]]:
+        """Return active tasks with their parent project title (if available)."""
+        actions = self.next_actions()
+        project_ids = {item.parent_id for item in actions if item.parent_id}
+        project_titles: dict[str, str] = {}
+
+        for project_id in project_ids:
+            project = self._db.get_item(project_id)
+            if project and project.type == "project":
+                project_titles[project_id] = project.title
+
+        return [
+            (item, project_titles.get(item.parent_id) if item.parent_id else None)
+            for item in actions
+        ]
+
+    def list_projects(self) -> list[Item]:
+        """Return active projects for project list screen."""
+        return self._db.list_projects(status="active")
+
+    def list_projects_with_next_actions(
+        self,
+    ) -> list[tuple[Item, Optional[Item]]]:
+        """Return (project, next_action) for each active project. All DB work in one call for async use."""
+        projects = self._db.list_projects(status="active")
+        result: list[tuple[Item, Optional[Item]]] = []
+        for proj in projects:
+            actions = self._db.list_actions(status="active", parent_id=proj.id)
+            next_action = actions[0] if actions else None
+            result.append((proj, next_action))
+        return result
+
+    def list_projects_with_actions(
+        self,
+    ) -> list[tuple[Item, list[Item]]]:
+        """Return (project, actions) for each active project. All DB work in one call for async use."""
+        projects = self._db.list_projects(status="active")
+        result: list[tuple[Item, list[Item]]] = []
+        for proj in projects:
+            actions = self._db.list_actions(status="active", parent_id=proj.id)
+            result.append((proj, actions))
+        return result
+
+    def get_project_next_action(self, project_id: str) -> Optional[Item]:
+        """Return the first active next action for a project (for GTD list preview)."""
+        actions = self.next_actions(parent_id=project_id)
+        return actions[0] if actions else None
 
     # ---- Process Funnel ----
     def process_start(self) -> list[Item]:
@@ -389,6 +520,12 @@ class Engine:
                     }
                 )
             )
+
+    def defer_item(self, item_id: str) -> None:
+        """Set item status to waiting (defer)."""
+        item = self._db.get_item(item_id)
+        if item:
+            self._db.update_item(item.model_copy(update={"status": "waiting"}))
 
     def weekly_report(self, days: int = 7) -> str:
         """Markdown/ASCII weekly report: completed items in the last days."""

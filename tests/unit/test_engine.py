@@ -24,11 +24,27 @@ def test_capture(engine: Engine) -> None:
 
 
 def test_next_actions(engine: Engine) -> None:
-    """next_actions returns active items."""
-    engine.capture("Task one")
-    engine.capture("Task two")
+    """next_actions returns active actionable items (not projects)."""
+    grouped = engine.capture("Grouped task")
+    engine.capture("Standalone task")
+    engine.create_project("Website refresh", [grouped.id])
+
     actions = engine.next_actions()
     assert len(actions) >= 2
+    assert all(item.type != "project" for item in actions)
+
+
+def test_next_actions_with_project_titles(engine: Engine) -> None:
+    """next_actions_with_project_titles includes project title for grouped tasks."""
+    grouped = engine.capture("Write launch draft")
+    standalone = engine.capture("Book dentist")
+    project = engine.create_project("Product launch", [grouped.id])
+
+    rows = engine.next_actions_with_project_titles()
+    by_id = {item.id: project_title for item, project_title in rows}
+
+    assert by_id[grouped.id] == project.title
+    assert by_id[standalone.id] is None
 
 
 def test_weekly_report(engine: Engine) -> None:

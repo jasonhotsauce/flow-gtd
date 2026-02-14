@@ -1,5 +1,6 @@
 """Process Funnel: 4-stage wizard (Dedup, Cluster, 2-Min, Coach)."""
 
+from textual.binding import Binding
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
@@ -18,19 +19,19 @@ class ProcessScreen(Screen):
     BINDINGS = [
         ("q", "app.quit", "Quit"),
         ("escape", "app.pop_screen", "Back"),
-        ("1", "stage1", "Dedup"),
-        ("2", "stage2", "Cluster"),
-        ("3", "stage3", "2-Min"),
-        ("4", "stage4", "Coach"),
+        Binding("1", "stage1", "Dedup", show=False),
+        Binding("2", "stage2", "Cluster", show=False),
+        Binding("3", "stage3", "2-Min", show=False),
+        Binding("4", "stage4", "Coach", show=False),
         ("j", "cursor_down", "Down"),
         ("k", "cursor_up", "Up"),
-        ("m", "merge", "Merge"),
-        ("b", "keep_both", "Keep Both"),
-        ("d", "do_now", "Do Now"),
-        ("f", "defer", "Defer"),
-        ("c", "create_project", "Create"),
-        ("a", "accept", "Accept"),
-        ("n", "skip", "Skip"),
+        Binding("m", "merge", "Merge", show=False),
+        Binding("b", "keep_both", "Keep Both", show=False),
+        Binding("d", "do_now", "Do Now", show=False),
+        Binding("f", "defer", "Defer", show=False),
+        Binding("c", "create_project", "Create", show=False),
+        Binding("a", "accept", "Accept", show=False),
+        Binding("n", "skip", "Skip", show=False),
         ("?", "show_help", "Help"),
     ]
 

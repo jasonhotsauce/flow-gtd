@@ -24,6 +24,7 @@ from flow.tui.app import FlowApp
 from flow.tui.screens.action.action import ActionScreen
 from flow.tui.screens.focus.focus import FocusScreen
 from flow.tui.screens.process import ProcessScreen
+from flow.tui.screens.projects.projects import ProjectsScreen
 from flow.tui.screens.review.review import ReviewScreen
 
 if TYPE_CHECKING:
@@ -129,9 +130,27 @@ def _do_capture(
         except (ImportError, OSError):
             pass
     engine = Engine()
-    item = engine.capture(text, meta_payload=meta, tags=tags, skip_auto_tag=skip_auto_tag)
+    # Block on auto-tagging so tags are written before CLI exits (daemon thread would be killed)
+    def on_tagging_start() -> None:
+        typer.echo("Tagging...")
+
+    item = engine.capture(
+        text,
+        meta_payload=meta,
+        tags=tags,
+        skip_auto_tag=skip_auto_tag,
+        block_auto_tag=True,
+        on_tagging_start=on_tagging_start if (not tags and not skip_auto_tag) else None,
+    )
+    # Refetch so we show auto-applied tags (capture() returns before tagging updates the item)
+    if not tags and not skip_auto_tag:
+        updated = engine.get_item(item.id)
+        if updated:
+            item = updated
     typer.echo(f"Captured: {item.title[:60]}{'...' if len(item.title) > 60 else ''}")
-    if tags:
+    if item.context_tags:
+        typer.echo(f"Tags: {', '.join(item.context_tags)}")
+    elif tags:
         typer.echo(f"Tags: {', '.join(tags)}")
 
 
@@ -185,6 +204,12 @@ def process() -> None:
 def next_cmd() -> None:
     """Show next actions (TUI Action screen)."""
     _launch_tui(ActionScreen)
+
+
+@app.command()
+def projects() -> None:
+    """Show project list (GTD review and proceed)."""
+    _launch_tui(ProjectsScreen)
 
 
 @app.command(name="next")

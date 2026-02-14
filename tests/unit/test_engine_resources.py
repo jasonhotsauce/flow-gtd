@@ -72,6 +72,38 @@ class TestEngineCaptureWithTags:
         # Note: We can't easily test the background thread completion
         # but we verify the function signature is correct
 
+    @patch("flow.core.engine.extract_tags")
+    def test_capture_block_auto_tag_invokes_progress_callback(self, mock_extract, engine):
+        """When block_auto_tag=True, on_tagging_start is called before tagging."""
+        mock_extract.return_value = ["blocked-tag"]
+        progress_calls: list[str] = []
+
+        def on_start() -> None:
+            progress_calls.append("started")
+
+        item = engine.capture(
+            "Blocking capture",
+            block_auto_tag=True,
+            on_tagging_start=on_start,
+        )
+
+        assert progress_calls == ["started"]
+        # Tags applied synchronously when blocking
+        updated = engine.get_item(item.id)
+        assert updated is not None
+        assert updated.context_tags == ["blocked-tag"]
+
+    @pytest.mark.asyncio
+    @patch("flow.core.engine.extract_tags_async")
+    async def test_capture_async_applies_tags(self, mock_extract_async, engine):
+        """capture_async runs auto-tagging in async path and returns item with tags."""
+        mock_extract_async.return_value = ["async-tag"]
+
+        item = await engine.capture_async("Async capture task")
+
+        assert item.context_tags == ["async-tag"]
+        mock_extract_async.assert_called_once()
+
 
 class TestEngineResourceMatching:
     """Tests for finding resources by task tags."""

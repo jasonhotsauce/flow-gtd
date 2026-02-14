@@ -1,4 +1,4 @@
-"""Global fixtures: temp DB, mock LLM/EventKit/Chroma."""
+"""Global fixtures: temp DB, mock LLM/EventKit."""
 
 import tempfile
 from pathlib import Path
