@@ -75,6 +75,10 @@ class ProjectsScreen(Screen):
         """Load projects on mount."""
         asyncio.create_task(self._refresh_list_async())
 
+    def on_screen_resume(self) -> None:
+        """Refresh project list when returning from child screens."""
+        asyncio.create_task(self._refresh_list_async())
+
     async def _refresh_list_async(self) -> None:
         """Load project list and actions per project in background (no main-thread DB)."""
         try:

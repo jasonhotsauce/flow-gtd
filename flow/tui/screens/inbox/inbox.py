@@ -1,5 +1,7 @@
 """Inbox screen: capture triage and list."""
 
+from datetime import datetime
+
 from rich.text import Text
 
 from textual.binding import Binding
@@ -11,6 +13,7 @@ from textual.widgets.option_list import Option
 
 from flow.core.engine import Engine
 from flow.models import Item
+from flow.tui.common.widgets.defer_dialog import DeferDialog
 
 
 class InboxScreen(Screen):
@@ -24,7 +27,9 @@ class InboxScreen(Screen):
         ("k", "cursor_up", "Up"),
         ("enter", "process_item", "Process"),
         ("d", "delete_item", "Delete"),
+        ("f", "defer_item", "Defer"),
         ("p", "go_process", "Process"),
+        ("g", "go_projects", "Projects"),
         Binding("a", "go_action", "Actions", show=False),
         Binding("r", "go_review", "Review", show=False),
         Binding("P", "go_projects", "Projects", show=False),
@@ -60,7 +65,7 @@ class InboxScreen(Screen):
             )
         with Container(id="inbox-help"):
             yield Static(
-                "j/k: Navigate │ Enter: Process │ d: Delete │ p: Process │ ?: Help",
+                "j/k: Navigate │ Enter: Process │ d: Delete │ f: Defer │ p: Process │ g: Projects │ ?: Help",
                 id="inbox-help-text",
             )
         yield Footer()
@@ -190,6 +195,62 @@ class InboxScreen(Screen):
             )
             self._refresh_list()
 
+    def action_defer_item(self) -> None:
+        """Defer the selected inbox item using the shared defer chooser."""
+        if not self._items:
+            return
+
+        opt_list = self.query_one("#inbox-list", OptionList)
+        idx = opt_list.highlighted
+        if idx is None or idx < 0 or idx >= len(self._items):
+            return
+
+        item = self._items[idx]
+        self.app.push_screen(
+            DeferDialog(),
+            callback=lambda result: self._apply_defer_result(item.id, result),
+        )
+
+    def _apply_defer_result(self, item_id: str, result: dict[str, str] | None) -> None:
+        """Apply defer selection and refresh inbox list."""
+        if not result:
+            return
+
+        item = self._engine.get_item(item_id)
+        if not item:
+            self.notify(
+                "Item no longer exists. Refreshing…", severity="warning", timeout=2
+            )
+            self._refresh_list()
+            return
+
+        mode = result.get("mode")
+        if mode == "waiting":
+            self._engine.defer_item(item.id, mode="waiting")
+            self.notify("⏳ Deferred to Waiting For", timeout=2)
+        elif mode == "someday":
+            self._engine.defer_item(item.id, mode="someday")
+            self.notify("🌱 Moved to Someday/Maybe", timeout=2)
+        elif mode == "until":
+            raw = result.get("defer_until", "")
+            parsed: datetime | None = None
+            if raw:
+                try:
+                    parsed = datetime.fromisoformat(raw)
+                except ValueError:
+                    parsed = None
+            if parsed is None:
+                self.notify("Unable to parse defer date", severity="error", timeout=3)
+                return
+            self._engine.defer_item(item.id, mode="until", defer_until=parsed)
+            self.notify(
+                f"📅 Deferred until {parsed.strftime('%Y-%m-%d %H:%M')}", timeout=2
+            )
+        else:
+            return
+
+        self._refresh_list()
+
     def action_go_process(self) -> None:
         """Navigate to process screen."""
         from flow.tui.screens.process.process import ProcessScreen
@@ -217,8 +278,8 @@ class InboxScreen(Screen):
     def action_show_help(self) -> None:
         """Show help toast."""
         self.notify(
-            "j/k: Navigate │ Enter: Process │ d: Delete │ p: Process\n"
-            "a: Actions │ r: Review │ P: Projects │ q: Quit",
+            "j/k: Navigate │ Enter: Process │ d: Delete │ f: Defer │ p: Process │ g: Projects\n"
+            "a: Actions │ r: Review │ q: Quit",
             title="Help",
             timeout=5,
         )
