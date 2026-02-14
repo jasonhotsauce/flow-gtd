@@ -1,5 +1,6 @@
 """Inbox screen: capture triage and list."""
 
+import asyncio
 from datetime import datetime
 
 from rich.text import Text
@@ -239,7 +240,11 @@ class InboxScreen(Screen):
 
     def _open_project_picker(self, item_id: str) -> None:
         """Open project picker for assigning the selected item."""
-        item = self._engine.get_item(item_id)
+        asyncio.create_task(self._open_project_picker_async(item_id))
+
+    async def _open_project_picker_async(self, item_id: str) -> None:
+        """Open project picker with DB reads off the UI thread."""
+        item = await asyncio.to_thread(self._engine.get_item, item_id)
         if item is None:
             self.notify(
                 "Item no longer exists. Refreshing…", severity="warning", timeout=2
@@ -247,7 +252,7 @@ class InboxScreen(Screen):
             self._refresh_list()
             return
 
-        projects = self._engine.list_projects()
+        projects = await asyncio.to_thread(self._engine.list_projects)
         if not projects:
             self.notify(
                 "No active projects yet. Create one in Process Stage 2.",
@@ -267,6 +272,12 @@ class InboxScreen(Screen):
         self, item_id: str, result: dict[str, str] | None
     ) -> None:
         """Assign selected item to selected project."""
+        asyncio.create_task(self._apply_project_assignment_async(item_id, result))
+
+    async def _apply_project_assignment_async(
+        self, item_id: str, result: dict[str, str] | None
+    ) -> None:
+        """Assign selected item to selected project off the UI thread."""
         if not result:
             return
         project_id = result.get("project_id")
@@ -275,13 +286,15 @@ class InboxScreen(Screen):
             return
 
         try:
-            self._engine.assign_item_to_project(item_id, project_id)
+            await asyncio.to_thread(
+                self._engine.assign_item_to_project, item_id, project_id
+            )
         except ValueError as exc:
             self.notify(str(exc), severity="error", timeout=3)
             self._refresh_list()
             return
 
-        project = self._engine.get_item(project_id)
+        project = await asyncio.to_thread(self._engine.get_item, project_id)
         project_name = project.title if project else "project"
         self.notify(f"📁 Added to project: {project_name}", timeout=2)
         self._refresh_list()

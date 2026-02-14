@@ -5,6 +5,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from flow.models import Item
 from flow.tui.common.widgets.process_task_dialog import ProcessTaskDialog
 from flow.tui.screens.inbox.inbox import InboxScreen
@@ -53,7 +55,8 @@ def test_apply_process_result_add_to_project_opens_picker(monkeypatch: Any) -> N
     assert opened == ["item-1"]
 
 
-def test_open_project_picker_warns_when_no_active_projects(monkeypatch: Any) -> None:
+@pytest.mark.asyncio
+async def test_open_project_picker_warns_when_no_active_projects(monkeypatch: Any) -> None:
     """Should warn and avoid opening picker when there are no projects."""
     screen = InboxScreen()
     notices: list[tuple[str, str]] = []
@@ -81,13 +84,14 @@ def test_open_project_picker_warns_when_no_active_projects(monkeypatch: Any) -> 
         ),
     )
 
-    screen._open_project_picker("item-1")
+    await screen._open_project_picker_async("item-1")
 
     assert pushes == []
     assert any("No active projects yet" in message for message, _ in notices)
 
 
-def test_open_project_picker_refreshes_when_item_missing(monkeypatch: Any) -> None:
+@pytest.mark.asyncio
+async def test_open_project_picker_refreshes_when_item_missing(monkeypatch: Any) -> None:
     """Missing item should notify and trigger refresh."""
     screen = InboxScreen()
     notices: list[tuple[str, str]] = []
@@ -102,13 +106,14 @@ def test_open_project_picker_refreshes_when_item_missing(monkeypatch: Any) -> No
     monkeypatch.setattr(screen, "_refresh_list", lambda: refreshed.append(True))
     monkeypatch.setattr(screen._engine, "get_item", lambda _item_id: None)
 
-    screen._open_project_picker("missing-id")
+    await screen._open_project_picker_async("missing-id")
 
     assert refreshed == [True]
     assert any("Item no longer exists" in message for message, _ in notices)
 
 
-def test_apply_project_assignment_handles_engine_error(monkeypatch: Any) -> None:
+@pytest.mark.asyncio
+async def test_apply_project_assignment_handles_engine_error(monkeypatch: Any) -> None:
     """Assignment errors should show toast and refresh list."""
     screen = InboxScreen()
     notices: list[tuple[str, str]] = []
@@ -127,7 +132,7 @@ def test_apply_project_assignment_handles_engine_error(monkeypatch: Any) -> None
 
     monkeypatch.setattr(screen._engine, "assign_item_to_project", _raise)
 
-    screen._apply_project_assignment("item-1", {"project_id": "project-1"})
+    await screen._apply_project_assignment_async("item-1", {"project_id": "project-1"})
 
     assert refreshed == [True]
     assert ("Project is not assignable", "error") in notices
