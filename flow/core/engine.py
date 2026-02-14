@@ -302,6 +302,26 @@ class Engine:
         actions = self.next_actions(parent_id=project_id)
         return actions[0] if actions else None
 
+    def assign_item_to_project(self, item_id: str, project_id: str) -> Item:
+        """Assign an existing item to an active project."""
+        item = self._db.get_item(item_id)
+        if not item or item.status in {"done", "archived"}:
+            raise ValueError("Item is not assignable")
+
+        project = self._db.get_item(project_id)
+        if not project or project.type != "project" or project.status != "active":
+            raise ValueError("Project is not assignable")
+
+        if item.id == project.id:
+            raise ValueError("Item cannot be assigned to itself")
+        if item.parent_id == project.id and item.type == "action":
+            raise ValueError("Item is already assigned to this project")
+
+        updated = item.model_copy(update={"parent_id": project.id, "type": "action"})
+        self._db.update_item(updated)
+        self._process_inbox = self.list_inbox()
+        return updated
+
     def project_has_active_or_deferred_tasks(self, project_id: str) -> bool:
         """Return True when a project has any child tasks in active/deferred states."""
         active_statuses: tuple[str, ...] = ("active", "waiting", "someday")
