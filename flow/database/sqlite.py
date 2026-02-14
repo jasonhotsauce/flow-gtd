@@ -180,6 +180,17 @@ class SqliteDB:
                 ).fetchall()
         return [_row_to_item(r) for r in rows]
 
+    def list_projects(self, status: str = "active") -> list[Item]:
+        """Return projects (type='project') by status for project list view."""
+        with sqlite3.connect(self._path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT * FROM items WHERE type = 'project' AND status = ? "
+                "ORDER BY created_at ASC",
+                (status,),
+            ).fetchall()
+        return [_row_to_item(r) for r in rows]
+
     def list_stale(self, days: int = 14) -> list[Item]:
         """Return items where created_at is older than days (for review)."""
         with sqlite3.connect(self._path) as conn:

@@ -1,5 +1,6 @@
 """Review screen: stale items, someday suggestions, weekly report."""
 
+from textual.binding import Binding
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
@@ -25,7 +26,8 @@ class ReviewScreen(Screen):
         ("2", "show_someday", "Someday"),
         ("3", "show_report", "Report"),
         ("tab", "next_section", "Next"),
-        ("i", "go_inbox", "Inbox"),
+        Binding("i", "go_inbox", "Inbox", show=False),
+        Binding("P", "go_projects", "Projects", show=False),
         ("?", "show_help", "Help"),
     ]
 
@@ -268,13 +270,17 @@ class ReviewScreen(Screen):
 
         self.app.push_screen(InboxScreen())
 
+    def action_go_projects(self) -> None:
+        """Navigate to projects screen."""
+        from flow.tui.screens.projects.projects import ProjectsScreen
+
+        self.app.push_screen(ProjectsScreen())
+
     def action_show_help(self) -> None:
         """Show help toast."""
         self.notify(
-            "📖 Keyboard shortcuts:\n"
-            "1/2/3: Switch sections │ Tab: Cycle\n"
-            "a: Archive │ r: Resurface\n"
-            "j/k: Navigate │ Esc: Back │ q: Quit",
+            "1/2/3: Sections │ Tab: Next │ a: Archive │ r: Resurface\n"
+            "j/k: Navigate │ i: Inbox │ P: Projects │ Esc: Back │ q: Quit",
             title="Help",
             timeout=5,
         )

@@ -3,6 +3,7 @@
 import asyncio
 from typing import Optional
 
+from textual.binding import Binding
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
@@ -26,8 +27,9 @@ class ActionScreen(Screen):
         ("k", "cursor_up", "Up"),
         ("enter", "select_action", "Select"),
         ("c", "complete_action", "Complete"),
-        ("tab", "focus_sidecar", "Focus Sidecar"),
-        ("i", "go_inbox", "Inbox"),
+        ("tab", "focus_sidecar", "Sidecar"),
+        Binding("i", "go_inbox", "Inbox", show=False),
+        Binding("P", "go_projects", "Projects", show=False),
         ("?", "show_help", "Help"),
     ]
 
@@ -35,6 +37,7 @@ class ActionScreen(Screen):
         super().__init__()
         self._engine = Engine()
         self._items: list[Item] = []
+        self._project_titles: list[Optional[str]] = []
         self._debounce_task: Optional[asyncio.Task] = None
 
     def compose(self) -> ComposeResult:
@@ -51,7 +54,7 @@ class ActionScreen(Screen):
                 yield ResourceContextPanel(id="sidecar")
         with Container(id="action-help"):
             yield Static(
-                "j/k: Navigate │ Enter: Details │ c: Complete │ Tab: Focus Sidecar │ Esc: Back",
+                "j/k: Navigate │ Enter: Select │ c: Complete │ Tab: Sidecar │ Esc: Back │ ?: Help",
                 id="action-help-text",
             )
         yield Footer()
@@ -71,14 +74,16 @@ class ActionScreen(Screen):
     async def _refresh_list_async(self) -> None:
         """Load next actions in a background thread and update UI when ready."""
         try:
-            items = await asyncio.to_thread(self._engine.next_actions)
+            rows = await asyncio.to_thread(self._engine.next_actions_with_project_titles)
             if not self.is_mounted:
                 return
-            self._items = items
+            self._items = [item for item, _ in rows]
+            self._project_titles = [project_title for _, project_title in rows]
             self._apply_items_to_ui()
         except Exception:
             if self.is_mounted:
                 self._items = []
+                self._project_titles = []
                 self._apply_items_to_ui()
                 self.notify("Failed to load actions", severity="error", timeout=3)
 
@@ -96,6 +101,10 @@ class ActionScreen(Screen):
 
         for i, item in enumerate(self._items):
             title = item.title
+            project_title = (
+                self._project_titles[i] if i < len(self._project_titles) else None
+            )
+            project_label = project_title or "No project"
             # Priority from meta_payload: 1 or "high" -> high, 3 or "low" -> low
             raw = item.meta_payload.get("priority")
             if raw == 1 or raw == "high":
@@ -110,7 +119,9 @@ class ActionScreen(Screen):
                 indicator = "🟢"
             else:
                 indicator = "🟡"
-            opt_list.add_option(Option(f"  {indicator}  {title}", id=str(i)))
+            opt_list.add_option(
+                Option(f"  {indicator}  {title}  ·  📁 {project_label}", id=str(i))
+            )
 
     def _on_highlight(self, idx: int) -> None:
         """Handle item highlight - show matching resources."""
@@ -194,13 +205,17 @@ class ActionScreen(Screen):
 
         self.app.push_screen(InboxScreen())
 
+    def action_go_projects(self) -> None:
+        """Navigate to projects screen."""
+        from flow.tui.screens.projects.projects import ProjectsScreen
+
+        self.app.push_screen(ProjectsScreen())
+
     def action_show_help(self) -> None:
         """Show help toast."""
         self.notify(
-            "📖 Keyboard shortcuts:\n"
-            "j/k: Navigate │ Enter: Select\n"
-            "c: Complete task │ Tab: Sidecar\n"
-            "i: Inbox │ Esc: Back │ q: Quit",
+            "j/k: Navigate │ Enter: Select │ c: Complete │ Tab: Sidecar\n"
+            "i: Inbox │ P: Projects │ Esc: Back │ q: Quit",
             title="Help",
             timeout=5,
         )

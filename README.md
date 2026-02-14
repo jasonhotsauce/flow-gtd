@@ -27,7 +27,6 @@ source .venv/bin/activate
 | Variable | Description |
 |----------|-------------|
 | `FLOW_DB_PATH` | SQLite path (default: `data/flow.db`) |
-| `FLOW_CHROMA_PATH` | ChromaDB path (default: `data/knowledge_base`) |
 | `FLOW_GEMINI_API_KEY` or `GOOGLE_API_KEY` | Gemini API key (optional; AI features need it) |
 
 ## Commands
@@ -41,6 +40,7 @@ source .venv/bin/activate
 | `flow tui` | Launch TUI (Inbox) |
 | `flow process` | Launch Process Funnel (Dedup → Cluster → 2-Min → Coach) |
 | `flow next` | Launch Action screen (next actions + Sidecar: resources matched by task tags) |
+| `flow projects` | Launch Projects screen (GTD project list and proceed) |
 | `flow sync` | Sync Apple Reminders into Flow (macOS only) |
 | `flow review` | Launch Weekly Review (Stale, Someday, Report) |
 | `flow report` | Print weekly report to stdout |
@@ -50,14 +50,15 @@ source .venv/bin/activate
 
 1. **Capture**: `flow c "task"` or Siri → Apple Reminders → `flow sync`
 2. **Save resources**: `flow save <url>`, `flow save <file>`, or `flow save "text"` — URLs, files, or text with automatic tagging for task matching
-3. **Process**: `flow process` — deduplicate, cluster, 2-min drill, coach vague tasks
-4. **Execute**: `flow next` — next actions list + Sidecar (resources matched by task tags)
+3. **Process**: `flow process` — deduplicate, cluster into projects, 2-min drill, coach vague tasks
+4. **Projects** (GTD review): `flow projects` — list active projects, see suggested next action and full task list per project; open a project to complete or defer actions
+5. **Execute**: `flow next` — next actions list + Sidecar (resources matched by task tags)
 
 ## Tech
 
 - **CLI**: Typer  
 - **TUI**: Textual  
-- **DB**: SQLite, ChromaDB (local)  
+- **DB**: SQLite (local)  
 - **LLM**: Google GenAI (Gemini 2.0 Flash)  
 - **Sync**: PyObjC EventKit (macOS)
 

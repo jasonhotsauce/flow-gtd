@@ -59,10 +59,21 @@ InboxScreen {
     color: $text;
 }
 
-/* Main list container */
+/* Main content: list (left) + detail (right) */
+#inbox-content {
+    height: 1fr;
+    layout: horizontal;
+    padding: 1 2;
+}
+
+#inbox-left {
+    width: 42%;
+    height: 100%;
+    padding: 0 1 0 0;
+}
+
 #inbox-list-container {
     height: 1fr;
-    padding: 1 2;
 }
 
 #inbox-list {
@@ -79,6 +90,40 @@ InboxScreen {
 #inbox-list > .option-list--option-highlighted {
     background: $primary;
     color: white;
+}
+
+/* Right panel: full task text + tags */
+#inbox-right {
+    width: 58%;
+    height: 100%;
+    padding: 0 0 0 1;
+    border-left: solid $border;
+    min-width: 20;
+}
+
+#inbox-detail-title {
+    padding: 0 0 1 0;
+    text-style: bold;
+    color: $primary-light;
+}
+
+#inbox-detail-scroll {
+    height: 1fr;
+    background: $surface-light;
+    border: round $border;
+    padding: 1 2;
+    overflow-y: auto;
+    scrollbar-size: 1 1;
+}
+
+#inbox-detail-body {
+    width: 100%;
+    padding: 0 1;
+}
+
+#inbox-detail-tags {
+    padding-top: 1;
+    color: $text-muted;
 }
 
 /* Empty state styling */
