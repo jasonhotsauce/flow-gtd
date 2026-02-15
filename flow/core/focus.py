@@ -3,6 +3,7 @@
 from typing import Optional
 
 from flow.core.engine import Engine
+from flow.database.vector_store import VectorHit
 from flow.models import Item, Resource
 from flow.sync.calendar import CalendarEvent, get_next_event
 
@@ -135,6 +136,10 @@ class FocusDispatcher:
         if not item.context_tags:
             return []
         return self._engine.get_resources_by_tags(item.context_tags)
+
+    def get_semantic_resources_for_task(self, item: Item, top_k: int = 3) -> list[VectorHit]:
+        """Get semantically related resources for task title."""
+        return self._engine.get_semantic_resources(item.title, top_k=top_k)
 
     def get_task_count(self) -> int:
         """Get total count of available active tasks.

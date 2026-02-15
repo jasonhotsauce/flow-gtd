@@ -54,6 +54,38 @@ This repository is configured for Codex-first collaboration.
 - Run targeted tests for touched behavior when practical:
   - `pytest tests/unit -v`
 
+## Debugging Guardrails (Mandatory)
+
+When handling bugs, regressions, or unexpected behavior, follow these rules:
+
+1. **No fix before evidence**
+- Reproduce first.
+- Gather logs/traces at component boundaries before proposing code changes.
+
+2. **Single-hypothesis iteration**
+- One root-cause hypothesis at a time.
+- One minimal code change to test that hypothesis.
+- Re-verify before any additional change.
+
+3. **Framework/API contract check first**
+- Verify method signatures and behavior in the actual runtime/library before changing flow logic.
+
+4. **No time-based UX control flow**
+- Do not use arbitrary delays (for example `sleep`, magic milliseconds) to mask event-order issues.
+- Use deterministic state/intent checks instead.
+
+5. **Failing test before fix**
+- Add/adjust a test that reproduces the observed failure path.
+- Implement only after the test fails for the expected reason.
+
+6. **Debug instrumentation discipline**
+- Keep instrumentation scoped and temporary.
+- Remove debug-only logs/probes once root cause is confirmed and fix is verified.
+
+7. **Stop-and-reset rule**
+- If two consecutive fixes fail, stop patching and return to root-cause investigation.
+- Re-state evidence, hypothesis, and test plan before continuing.
+
 ## Codex Skills (Project Local)
 
 - `.codex/skills/testing-flow/SKILL.md`

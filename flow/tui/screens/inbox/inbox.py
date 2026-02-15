@@ -39,10 +39,11 @@ class InboxScreen(Screen):
         ("?", "show_help", "Help"),
     ]
 
-    def __init__(self) -> None:
+    def __init__(self, startup_context: dict[str, object] | None = None) -> None:
         super().__init__()
         self._engine = Engine()
         self._items: list[Item] = []
+        self._startup_context = startup_context
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -75,11 +76,10 @@ class InboxScreen(Screen):
 
     def on_mount(self) -> None:
         """Load inbox items on mount."""
-        self._refresh_list()
+        asyncio.create_task(self._refresh_items_async())
 
     def _refresh_list(self) -> None:
-        """Refresh the inbox list from database."""
-        self._items = self._engine.list_inbox()
+        """Render inbox list from current in-memory items."""
         opt_list = self.query_one("#inbox-list", OptionList)
         opt_list.clear_options()
 
@@ -113,18 +113,31 @@ class InboxScreen(Screen):
                 bullet = "●" if self._is_today(item) else "○"
                 opt_list.add_option(Option(f" {bullet}  {preview}", id=str(i)))
 
-            # Show first item's full text and tags in detail panel
-            try:
-                opt_list.action_first()
-                idx = opt_list.highlighted
-                if idx is not None and 0 <= idx < len(self._items):
-                    self._update_detail_panel(self._items[idx])
-            except Exception:
-                self._update_detail_panel(self._items[0] if self._items else None)
+            startup_index = self._find_startup_highlight_index()
+            if startup_index is not None:
+                opt_list.highlighted = startup_index
+                self._update_detail_panel(self._items[startup_index])
+            else:
+                # Show first item's full text and tags in detail panel
+                try:
+                    opt_list.action_first()
+                    idx = opt_list.highlighted
+                    if idx is not None and 0 <= idx < len(self._items):
+                        self._update_detail_panel(self._items[idx])
+                except Exception:
+                    self._update_detail_panel(self._items[0] if self._items else None)
             try:
                 opt_list.focus()
             except (ValueError, KeyError):
                 pass
+
+        self._consume_startup_context_once()
+
+    async def _refresh_items_async(self) -> None:
+        """Reload inbox rows in background, then render."""
+        self._items = await asyncio.to_thread(self._engine.list_inbox)
+        if self.is_mounted:
+            self._refresh_list()
 
     def _is_today(self, item: Item) -> bool:
         """Check if item was created today."""
@@ -185,6 +198,29 @@ class InboxScreen(Screen):
             return self._items[idx]
         return None
 
+    def _find_startup_highlight_index(self) -> int | None:
+        """Resolve one-time startup highlight target index from startup context."""
+        if not self._startup_context:
+            return None
+        highlighted_item_id = self._startup_context.get("highlighted_item_id")
+        if not isinstance(highlighted_item_id, str) or not highlighted_item_id:
+            return None
+        for idx, item in enumerate(self._items):
+            if item.id == highlighted_item_id:
+                return idx
+        return None
+
+    def _consume_startup_context_once(self) -> None:
+        """Apply one-time first-value hint and clear startup context."""
+        if not self._startup_context:
+            return
+
+        if self._startup_context.get("show_first_value_hint") is True:
+            self.notify(
+                "Captured your first inbox item. Start by clarifying the next action."
+            )
+        self._startup_context = None
+
     def action_process_item(self) -> None:
         """Back-compat action alias for process menu."""
         self.action_open_process_menu()
@@ -203,11 +239,42 @@ class InboxScreen(Screen):
         self, item_id: str, result: dict[str, str] | None
     ) -> None:
         """Apply selected process action for an inbox item."""
+        if result and result.get("action") == "add_to_project":
+            self._open_project_picker(item_id)
+            return
+        try:
+            asyncio.get_running_loop().create_task(
+                self._apply_process_result_async(item_id, result)
+            )
+        except RuntimeError:
+            # Fallback for unit tests and non-async contexts.
+            if not result:
+                return
+            action = result.get("action")
+            if action == "do_now":
+                item = self._engine.get_item(item_id)
+                if item:
+                    self.notify(f"Processing: {item.title[:40]}...", timeout=2)
+            elif action == "delete":
+                item = self._engine.get_item(item_id)
+                if item:
+                    self._engine.archive_item(item.id)
+                    self.notify(
+                        f"🗑️ Archived: {item.title[:30]}...",
+                        severity="warning",
+                        timeout=2,
+                    )
+                    self._refresh_list()
+
+    async def _apply_process_result_async(
+        self, item_id: str, result: dict[str, str] | None
+    ) -> None:
+        """Apply selected process action for an inbox item."""
         if not result:
             return
         action = result.get("action")
         if action == "do_now":
-            item = self._engine.get_item(item_id)
+            item = await asyncio.to_thread(self._engine.get_item, item_id)
             if item:
                 self.notify(f"Processing: {item.title[:40]}...", timeout=2)
             return
@@ -220,20 +287,20 @@ class InboxScreen(Screen):
             )
             return
         if action == "delete":
-            item = self._engine.get_item(item_id)
+            item = await asyncio.to_thread(self._engine.get_item, item_id)
             if item is None:
                 self.notify(
                     "Item no longer exists. Refreshing…",
                     severity="warning",
                     timeout=2,
                 )
-                self._refresh_list()
+                asyncio.create_task(self._refresh_items_async())
                 return
-            self._engine.archive_item(item.id)
+            await asyncio.to_thread(self._engine.archive_item, item.id)
             self.notify(
                 f"🗑️ Archived: {item.title[:30]}...", severity="warning", timeout=2
             )
-            self._refresh_list()
+            asyncio.create_task(self._refresh_items_async())
             return
         if action == "add_to_project":
             self._open_project_picker(item_id)
@@ -297,7 +364,7 @@ class InboxScreen(Screen):
         project = await asyncio.to_thread(self._engine.get_item, project_id)
         project_name = project.title if project else "project"
         self.notify(f"📁 Added to project: {project_name}", timeout=2)
-        self._refresh_list()
+        await self._refresh_items_async()
 
     def action_delete_item(self) -> None:
         """Delete the selected item."""
@@ -307,11 +374,13 @@ class InboxScreen(Screen):
         idx = opt_list.highlighted
         if idx is not None and 0 <= idx < len(self._items):
             item = self._items[idx]
-            self._engine.archive_item(item.id)
-            self.notify(
-                f"🗑️ Archived: {item.title[:30]}...", severity="warning", timeout=2
-            )
-            self._refresh_list()
+            asyncio.create_task(self._archive_item_async(item.id, item.title))
+
+    async def _archive_item_async(self, item_id: str, title: str) -> None:
+        await asyncio.to_thread(self._engine.archive_item, item_id)
+        if self.is_mounted:
+            self.notify(f"🗑️ Archived: {title[:30]}...", severity="warning", timeout=2)
+            await self._refresh_items_async()
 
     def action_defer_item(self) -> None:
         """Defer the selected inbox item using the shared defer chooser."""
@@ -331,23 +400,29 @@ class InboxScreen(Screen):
 
     def _apply_defer_result(self, item_id: str, result: dict[str, str] | None) -> None:
         """Apply defer selection and refresh inbox list."""
+        asyncio.create_task(self._apply_defer_result_async(item_id, result))
+
+    async def _apply_defer_result_async(
+        self, item_id: str, result: dict[str, str] | None
+    ) -> None:
+        """Apply defer selection and refresh inbox list."""
         if not result:
             return
 
-        item = self._engine.get_item(item_id)
+        item = await asyncio.to_thread(self._engine.get_item, item_id)
         if not item:
             self.notify(
                 "Item no longer exists. Refreshing…", severity="warning", timeout=2
             )
-            self._refresh_list()
+            await self._refresh_items_async()
             return
 
         mode = result.get("mode")
         if mode == "waiting":
-            self._engine.defer_item(item.id, mode="waiting")
+            await asyncio.to_thread(self._engine.defer_item, item.id, "waiting")
             self.notify("⏳ Deferred to Waiting For", timeout=2)
         elif mode == "someday":
-            self._engine.defer_item(item.id, mode="someday")
+            await asyncio.to_thread(self._engine.defer_item, item.id, "someday")
             self.notify("🌱 Moved to Someday/Maybe", timeout=2)
         elif mode == "until":
             raw = result.get("defer_until", "")
@@ -360,14 +435,14 @@ class InboxScreen(Screen):
             if parsed is None:
                 self.notify("Unable to parse defer date", severity="error", timeout=3)
                 return
-            self._engine.defer_item(item.id, mode="until", defer_until=parsed)
+            await asyncio.to_thread(self._engine.defer_item, item.id, "until", parsed)
             self.notify(
                 f"📅 Deferred until {parsed.strftime('%Y-%m-%d %H:%M')}", timeout=2
             )
         else:
             return
 
-        self._refresh_list()
+        await self._refresh_items_async()
 
     def action_go_process(self) -> None:
         """Navigate to process screen."""

@@ -1,10 +1,11 @@
 """[Layer: Presentation] Typer CLI Commands."""
 
 import re
+import threading
 import uuid
 from importlib.metadata import PackageNotFoundError, version as get_package_version
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Type
+from typing import TYPE_CHECKING, Optional, Type, TypedDict
 
 import typer
 
@@ -34,6 +35,15 @@ if TYPE_CHECKING:
 _URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 
 
+def _kickoff_index_worker(db_path: Path) -> None:
+    """Process pending index jobs asynchronously."""
+    try:
+        Engine(db_path=db_path).process_index_jobs(limit=20)
+    except Exception:
+        # Best-effort background indexing; foreground save must not fail.
+        return
+
+
 def _get_version() -> str:
     """Get version from package metadata (single source of truth: pyproject.toml)."""
     try:
@@ -55,11 +65,46 @@ app = typer.Typer(
 )
 
 
-def _check_onboarding() -> bool:
+class InboxStartupContext(TypedDict):
+    """Startup hints passed from CLI onboarding into Inbox."""
+
+    highlighted_item_id: str
+    show_first_value_hint: bool
+
+
+def _build_startup_context_from_onboarding(
+    onboarding_result: dict[str, object],
+) -> InboxStartupContext | None:
+    """Create Inbox startup context from onboarding first-capture outcome."""
+    first_capture = onboarding_result.get("first_capture")
+    if not isinstance(first_capture, dict):
+        return None
+
+    action = first_capture.get("action")
+    text = first_capture.get("text")
+    if action != "submit" or not isinstance(text, str):
+        return None
+
+    capture_text = text.strip()
+    if not capture_text:
+        return None
+
+    try:
+        created_item = Engine().capture(capture_text)
+    except Exception:
+        # First-capture handoff is optional; continue launching app on failure.
+        return None
+    return {
+        "highlighted_item_id": created_item.id,
+        "show_first_value_hint": True,
+    }
+
+
+def _check_onboarding() -> tuple[bool, InboxStartupContext | None]:
     """Check if onboarding is needed and run wizard if so.
 
     Returns:
-        True if onboarding completed successfully, False if user quit.
+        Tuple of (completed, inbox startup context).
 
     Note:
         Uses lazy imports to avoid circular dependencies:
@@ -72,13 +117,19 @@ def _check_onboarding() -> bool:
     from flow.utils.llm.config import is_onboarding_completed
 
     if is_onboarding_completed():
-        return True
+        return True, None
 
     # Lazy import: OnboardingApp has heavy TUI dependencies
     from flow.tui.onboarding.app import OnboardingApp
 
-    result = OnboardingApp().run()
-    return result is True
+    onboarding_app = OnboardingApp()
+    result = onboarding_app.run()
+    if result is not True:
+        return False, None
+
+    onboarding_result = onboarding_app.get_onboarding_result()
+    startup_context = _build_startup_context_from_onboarding(onboarding_result)
+    return True, startup_context
 
 
 def _launch_tui(initial_screen: "Optional[Type[Screen]]" = None) -> None:
@@ -91,9 +142,10 @@ def _launch_tui(initial_screen: "Optional[Type[Screen]]" = None) -> None:
     Raises:
         typer.Exit: If user quits during onboarding.
     """
-    if not _check_onboarding():
+    onboarding_completed, startup_context = _check_onboarding()
+    if not onboarding_completed:
         raise typer.Exit(0)
-    FlowApp(initial_screen=initial_screen).run()
+    FlowApp(initial_screen=initial_screen, startup_context=startup_context).run()
 
 
 @app.callback(invoke_without_command=True)
@@ -318,6 +370,27 @@ def _fetch_url_metadata(url: str) -> tuple[Optional[str], Optional[str]]:
         return None, None
 
 
+def _extract_file_content(path: Path, max_chars: int = 5000) -> Optional[str]:
+    """Extract lightweight local file content for semantic indexing."""
+    try:
+        suffix = path.suffix.lower()
+        if suffix in (".txt", ".md", ".py", ".js", ".ts", ".json", ".yaml", ".yml"):
+            return path.read_text(encoding="utf-8", errors="ignore")[:max_chars]
+        if suffix == ".pdf":
+            try:
+                from pypdf import PdfReader
+            except ImportError:
+                return None
+            reader = PdfReader(str(path))
+            chunks: list[str] = []
+            for page in reader.pages[:5]:
+                chunks.append(page.extract_text() or "")
+            return "\n".join(chunks).strip()[:max_chars] or None
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
+    return None
+
+
 def _interactive_tag_selection(existing_tags: list[str]) -> list[str]:
     """Interactive tag selection for private mode.
 
@@ -397,6 +470,7 @@ def save(
             resource.title = title
         if preview:
             resource.summary = preview[:200]
+            resource.raw_content = preview
 
     # Get file content preview
     if content_type == "file":
@@ -404,17 +478,18 @@ def save(
             path = Path(content)
             if path.exists() and path.is_file():
                 resource.title = path.name
-                # Read first 500 chars for preview (text files only)
-                if path.suffix.lower() in (".txt", ".md", ".py", ".js", ".ts", ".json"):
-                    text = path.read_text(encoding="utf-8", errors="ignore")[:500]
-                    preview = text
-                    resource.summary = text[:200] if text else None
+                file_content = _extract_file_content(path)
+                if file_content:
+                    preview = file_content[:500]
+                    resource.summary = preview[:200]
+                    resource.raw_content = file_content
         except (OSError, UnicodeDecodeError):
             pass
 
     # For text content, use first 200 chars as summary
     if content_type == "text":
         resource.summary = content[:200]
+        resource.raw_content = content[:5000]
         preview = content
 
     # Determine tags
@@ -465,6 +540,21 @@ def save(
     typer.echo(f"Saved: {resource.title or content[:50]}...")
     if resource.tags:
         typer.echo(f"Tags: {', '.join(resource.tags)}")
+
+    # Enqueue local semantic indexing (non-blocking).
+    try:
+        Engine(db_path=settings.db_path).enqueue_resource_index(
+            resource_id=resource.id,
+            content_type=resource.content_type,
+            source=resource.source,
+            title=resource.title,
+            summary=resource.summary,
+        )
+        threading.Thread(
+            target=_kickoff_index_worker, args=(settings.db_path,), daemon=True
+        ).start()
+    except Exception:
+        pass
 
 
 @app.command()

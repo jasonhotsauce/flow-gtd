@@ -245,13 +245,17 @@ class ProjectDetailScreen(Screen):
         idx = opt_list.highlighted
         if idx is not None and 0 <= idx < len(self._actions):
             item = self._actions[idx]
-            self._engine.complete_item(item.id)
+            asyncio.create_task(self._complete_action_async(item.id, item.title))
+
+    async def _complete_action_async(self, item_id: str, title: str) -> None:
+        await asyncio.to_thread(self._engine.complete_item, item_id)
+        if self.is_mounted:
             self.notify(
-                f"✅ Completed: {item.title[:30]}…",
+                f"✅ Completed: {title[:30]}…",
                 severity="information",
                 timeout=2,
             )
-            asyncio.create_task(self._refresh_list_async())
+            await self._refresh_list_async()
 
     def action_defer_action(self) -> None:
         """Defer selected action using defer chooser."""
@@ -268,27 +272,33 @@ class ProjectDetailScreen(Screen):
 
     def _apply_defer_result(self, item_id: str, result: dict[str, str] | None) -> None:
         """Apply defer selection and refresh list."""
+        asyncio.create_task(self._apply_defer_result_async(item_id, result))
+
+    async def _apply_defer_result_async(
+        self, item_id: str, result: dict[str, str] | None
+    ) -> None:
+        """Apply defer selection and refresh list."""
         if not result:
             return
 
-        item = self._engine.get_item(item_id)
+        item = await asyncio.to_thread(self._engine.get_item, item_id)
         if not item:
             self.notify(
                 "Item no longer exists. Refreshing…", severity="warning", timeout=2
             )
-            asyncio.create_task(self._refresh_list_async())
+            await self._refresh_list_async()
             return
 
         mode = result.get("mode")
         if mode == "waiting":
-            self._engine.defer_item(item.id, mode="waiting")
+            await asyncio.to_thread(self._engine.defer_item, item.id, "waiting")
             self.notify(
                 f"⏸ Waiting For: {item.title[:30]}…",
                 severity="information",
                 timeout=2,
             )
         elif mode == "someday":
-            self._engine.defer_item(item.id, mode="someday")
+            await asyncio.to_thread(self._engine.defer_item, item.id, "someday")
             self.notify(
                 f"🌱 Someday/Maybe: {item.title[:30]}…",
                 severity="information",
@@ -306,7 +316,7 @@ class ProjectDetailScreen(Screen):
                 self.notify("Unable to parse defer date", severity="error", timeout=3)
                 return
 
-            self._engine.defer_item(item.id, mode="until", defer_until=parsed)
+            await asyncio.to_thread(self._engine.defer_item, item.id, "until", parsed)
             self.notify(
                 f"📅 Deferred until {parsed.strftime('%Y-%m-%d %H:%M')}",
                 severity="information",
@@ -315,7 +325,7 @@ class ProjectDetailScreen(Screen):
         else:
             return
 
-        asyncio.create_task(self._refresh_list_async())
+        await self._refresh_list_async()
 
     def action_show_help(self) -> None:
         """Show help toast."""

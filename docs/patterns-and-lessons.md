@@ -59,3 +59,35 @@ Run `git diff` on modified files and apply that checklist (or invoke the code-re
 | Task tags storage    | Item `context_tags`; persisted in `flow/database/sqlite.py` (items table) |
 | Tag vocabulary       | `flow/database/resources.py`: `tags` table, `increment_tag_usage()`, `list_tags()` |
 | `flow tags` command  | `flow/cli.py`: `list_tags()` → `ResourceDB.list_tags()` |
+
+---
+
+## 5. Debugging Rules to Prevent Thrash
+
+These rules are mandatory for future bugfix work:
+
+1. **No fixes before evidence**
+- Reproduce the bug first.
+- Add logs/traces at boundaries and identify where behavior diverges.
+
+2. **One hypothesis, one change**
+- Make one minimal change per hypothesis.
+- Re-run targeted tests after each change.
+
+3. **Verify framework API contracts early**
+- Confirm method signatures/semantics in the installed library before implementation changes.
+
+4. **No time-based masking**
+- Do not use arbitrary delays as control flow fixes.
+- Prefer deterministic checks based on state and explicit user intent.
+
+5. **Failing regression test first**
+- Add a reproducing test before implementing.
+- Ensure it fails for the expected reason, then make it pass.
+
+6. **Temporary instrumentation only**
+- Remove debug-only probes/log statements after root cause is confirmed and fix is verified.
+
+7. **Reset after repeated misses**
+- After two failed fix attempts, stop and return to root-cause investigation.
+- Re-document evidence and hypothesis before continuing.

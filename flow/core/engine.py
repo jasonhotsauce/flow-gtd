@@ -8,14 +8,12 @@ from pathlib import Path
 from typing import Callable, Literal, Optional
 
 from flow.config import get_settings
-from flow.core.coach import (
-    estimate_duration,
-    estimate_duration_heuristic,
-    suggest_clusters,
-)
+from flow.core.rag import RAGService
+from flow.core.services import ProcessService, ResourceService, ReviewService, TaskService
 from flow.core.tagging import extract_tags, extract_tags_async
 from flow.database.resources import ResourceDB
 from flow.database.sqlite import SqliteDB
+from flow.database.vector_store import VectorHit
 from flow.models import Item, Resource
 
 logger = logging.getLogger(__name__)
@@ -32,6 +30,11 @@ class Engine:
         self._db.init_db()
         self._resource_db = ResourceDB(self._db_path)
         self._resource_db.init_db()
+        self._task_service = TaskService(self._db)
+        self._review_service = ReviewService(self._db)
+        self._process_service = ProcessService(self._db)
+        self._resource_service = ResourceService(self._resource_db)
+        self._rag_service = RAGService(self._db, self._resource_db)
         self._process_inbox: list[Item] = []
         self._dedup_index = 0
         self._two_min_index = 0
@@ -213,17 +216,41 @@ class Engine:
         Returns:
             List of Resource objects with matching tags.
         """
-        if not tags:
-            return []
-        return self._resource_db.find_resources_by_tags(tags)
+        return self._resource_service.get_resources_by_tags(tags)
+
+    def get_semantic_resources(self, query_text: str, top_k: int = 3) -> list[VectorHit]:
+        """Retrieve semantically related resources for the given text."""
+        return self._rag_service.semantic_search(query_text, top_k=top_k)
+
+    def enqueue_resource_index(
+        self,
+        *,
+        resource_id: str,
+        content_type: str,
+        source: str,
+        title: Optional[str],
+        summary: Optional[str],
+    ) -> str:
+        """Enqueue a resource for background semantic indexing."""
+        return self._rag_service.enqueue_resource_index(
+            resource_id=resource_id,
+            content_type=content_type,
+            source=source,
+            title=title,
+            summary=summary,
+        )
+
+    def process_index_jobs(self, limit: int = 20) -> int:
+        """Process pending semantic indexing jobs."""
+        return self._rag_service.process_pending_jobs_once(limit=limit)
 
     def get_item(self, item_id: str) -> Optional[Item]:
         """Return one item by id."""
-        return self._db.get_item(item_id)
+        return self._task_service.get_item(item_id)
 
     def update_item(self, item: Item) -> None:
         """Persist changes to an item."""
-        self._db.update_item(item)
+        self._task_service.update_item(item)
 
     def next_actions(self, parent_id: Optional[str] = None) -> list[Item]:
         """Return active actionable items for execution view (excludes projects)."""
@@ -366,14 +393,7 @@ class Engine:
 
     def dedup_merge(self, keep_id: str, remove_id: str) -> None:
         """Merge remove into keep (combine titles), archive remove."""
-        keep = self._db.get_item(keep_id)
-        remove = self._db.get_item(remove_id)
-        if not keep or not remove:
-            return
-        updated = keep.model_copy(update={"title": keep.title + " / " + remove.title})
-        self._db.update_item(updated)
-        archived = remove.model_copy(update={"status": "archived"})
-        self._db.update_item(archived)
+        self._process_service.dedup_merge(keep_id, remove_id)
         self._process_inbox = self.list_inbox()
 
     def dedup_keep_both(self) -> None:
@@ -381,29 +401,11 @@ class Engine:
 
     def get_cluster_suggestions(self) -> list[tuple[str, list[str]]]:
         """Return suggested (project_name, [item_ids]) clusters."""
-        items = [i for i in self._process_inbox if i.status != "archived"]
-        if not items:
-            return []
-        titles = [i.title for i in items]
-        suggestions = suggest_clusters(titles)
-        return [
-            (name, [items[idx].id for idx in indices]) for name, indices in suggestions
-        ]
+        return self._process_service.get_cluster_suggestions(self._process_inbox)
 
     def create_project(self, name: str, item_ids: list[str]) -> Item:
         """Create project and set children parent_id. Returns the new project Item."""
-        proj = Item(
-            id=str(uuid.uuid4()),
-            type="project",
-            title=name,
-            status="active",
-        )
-        self._db.insert_inbox(proj)
-        for iid in item_ids:
-            item = self._db.get_item(iid)
-            if item:
-                child = item.model_copy(update={"parent_id": proj.id, "type": "action"})
-                self._db.update_item(child)
+        proj = self._process_service.create_project(name, item_ids)
         self._process_inbox = self.list_inbox()
         return proj
 
@@ -418,9 +420,8 @@ class Engine:
         self._process_inbox = self.list_inbox()
 
     def get_2min_items(self) -> list[Item]:
-        """Items for 2-min drill (Stage 3): short-title or first N."""
-        items = [i for i in self._process_inbox if i.status != "archived"]
-        return items[:20]
+        """Items for 2-min drill (Stage 3): prioritize short, low-effort tasks."""
+        return self._process_service.two_min_items(self._process_inbox, duration_cutoff_minutes=15)
 
     def get_2min_current(self) -> Optional[Item]:
         """Current item in 2-min drill."""
@@ -435,16 +436,12 @@ class Engine:
 
     def two_min_do_now(self, item_id: str) -> None:
         """Mark item done."""
-        item = self._db.get_item(item_id)
-        if item:
-            self._db.update_item(
-                item.model_copy(
-                    update={
-                        "status": "done",
-                        "updated_at": datetime.now(timezone.utc),
-                    }
-                )
-            )
+        self._process_service.two_min_do_now(item_id)
+        self._process_inbox = self.list_inbox()
+
+    def two_min_delete(self, item_id: str) -> None:
+        """Archive an item from the 2-minute stage."""
+        self._process_service.two_min_delete(item_id)
         self._process_inbox = self.list_inbox()
 
     def two_min_defer(self, item_id: str) -> None:
@@ -483,22 +480,9 @@ class Engine:
         Raises:
             ValueError: If new_title is empty or whitespace-only.
         """
-        if not new_title or not new_title.strip():
-            raise ValueError("Title cannot be empty")
-
-        item = self._db.get_item(item_id)
-        if item:
-            updates: dict = {"title": new_title.strip()}
-
-            # Estimate duration if not already set and auto-estimate is enabled
-            if auto_estimate_duration and item.estimated_duration is None:
-                duration = estimate_duration(new_title)
-                if duration is None:
-                    # Fallback to heuristic if LLM unavailable
-                    duration = estimate_duration_heuristic(new_title)
-                updates["estimated_duration"] = duration
-
-            self._db.update_item(item.model_copy(update=updates))
+        self._process_service.coach_apply_suggestion(
+            item_id, new_title, auto_estimate_duration=auto_estimate_duration
+        )
         self._process_inbox = self.list_inbox()
 
     def set_item_duration(self, item_id: str, duration_minutes: int) -> None:
@@ -512,20 +496,7 @@ class Engine:
             ValueError: If duration_minutes is not a valid duration value.
             ValueError: If item_id does not exist.
         """
-        from flow.core.coach import VALID_DURATIONS
-
-        if duration_minutes not in VALID_DURATIONS:
-            raise ValueError(
-                f"Duration must be one of {VALID_DURATIONS}, got {duration_minutes}"
-            )
-
-        item = self._db.get_item(item_id)
-        if not item:
-            raise ValueError(f"Item with id '{item_id}' not found")
-
-        self._db.update_item(
-            item.model_copy(update={"estimated_duration": duration_minutes})
-        )
+        self._process_service.set_item_duration(item_id, duration_minutes)
 
     def estimate_item_duration(
         self, item_id: str, use_llm: bool = True
@@ -539,53 +510,28 @@ class Engine:
         Returns:
             Estimated duration in minutes, or None if item not found.
         """
-        item = self._db.get_item(item_id)
-        if not item:
-            return None
-
-        if use_llm:
-            duration = estimate_duration(item.title)
-            if duration is None:
-                duration = estimate_duration_heuristic(item.title)
-        else:
-            duration = estimate_duration_heuristic(item.title)
-
-        self._db.update_item(item.model_copy(update={"estimated_duration": duration}))
-        return duration
+        return self._process_service.estimate_item_duration(item_id, use_llm=use_llm)
 
     # ---- Weekly Review ----
     def get_stale(self, days: int = 14) -> list[Item]:
         """Items older than days (suggest archiving)."""
-        return self._db.list_stale(days=days)
+        return self._review_service.get_stale(days=days)
 
     def get_someday_suggestions(self) -> list[Item]:
         """Items with status=someday (suggest resurfacing)."""
-        return self._db.list_someday()
+        return self._review_service.get_someday_suggestions()
 
     def archive_item(self, item_id: str) -> None:
         """Set item status to archived."""
-        item = self._db.get_item(item_id)
-        if item:
-            self._db.update_item(item.model_copy(update={"status": "archived"}))
+        self._task_service.archive_item(item_id)
 
     def resurface_item(self, item_id: str) -> None:
         """Set item status to active (from someday)."""
-        item = self._db.get_item(item_id)
-        if item:
-            self._db.update_item(item.model_copy(update={"status": "active"}))
+        self._task_service.resurface_item(item_id)
 
     def complete_item(self, item_id: str) -> None:
         """Set item status to done (mark as completed)."""
-        item = self._db.get_item(item_id)
-        if item:
-            self._db.update_item(
-                item.model_copy(
-                    update={
-                        "status": "done",
-                        "updated_at": datetime.now(timezone.utc),
-                    }
-                )
-            )
+        self._task_service.complete_item(item_id)
 
     def defer_item(
         self,
@@ -624,15 +570,4 @@ class Engine:
 
     def weekly_report(self, days: int = 7) -> str:
         """Markdown/ASCII weekly report: completed items in the last days."""
-        done = self._db.list_done_since(days=days)
-        lines = [
-            "# Flow Weekly Report",
-            "",
-            f"**Completed this week:** {len(done)} items",
-            "",
-            "## Done",
-            "",
-        ]
-        for item in done:
-            lines.append(f"- {item.title[:80]}{'...' if len(item.title) > 80 else ''}")
-        return "\n".join(lines)
+        return self._review_service.weekly_report(days=days)

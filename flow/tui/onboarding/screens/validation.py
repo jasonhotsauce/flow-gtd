@@ -1,7 +1,7 @@
 """Screen 3: Credential Validation."""
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
@@ -9,10 +9,17 @@ from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, LoadingIndicator, Static
 
 from flow.tui.onboarding.constants import VALIDATION_PROMPT
+from flow.tui.onboarding.keybindings import (
+    BACK_ESCAPE_BINDING,
+    RETRY_R_BINDING,
+    START_FLOW_ENTER_BINDING,
+    compose_bindings,
+)
 from flow.utils.llm.provider import LLMProvider
 
 if TYPE_CHECKING:
     from flow.tui.onboarding.app import OnboardingApp
+    from flow.tui.onboarding.screens.first_capture import FirstCaptureResult
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +32,11 @@ class ValidationScreen(Screen):
 
     CSS_PATH = "validation.tcss"
 
-    BINDINGS = [
-        ("escape", "go_back", "Back"),
-        ("r", "retry", "Retry"),
-    ]
+    BINDINGS = compose_bindings(
+        BACK_ESCAPE_BINDING,
+        RETRY_R_BINDING,
+        START_FLOW_ENTER_BINDING,
+    )
 
     def __init__(self) -> None:
         super().__init__()
@@ -253,7 +261,7 @@ class ValidationScreen(Screen):
         elif event.button.id == "retry-btn":
             self.action_retry()
         elif event.button.id == "start-btn":
-            self._start_flow()
+            self.action_start_flow()
 
     def action_go_back(self) -> None:
         """Return to credentials screen."""
@@ -264,6 +272,30 @@ class ValidationScreen(Screen):
         self._show_loading()
         self.run_worker(self._validate_credentials(), exclusive=True)
 
+    def action_start_flow(self) -> None:
+        """Continue onboarding flow from keyboard/button after successful validation."""
+        if not self._validation_success:
+            return
+        self._start_flow()
+
     def _start_flow(self) -> None:
-        """Exit onboarding and signal to start main app."""
+        """Open first capture step before exiting onboarding."""
+        from flow.tui.onboarding.screens.first_capture import FirstCaptureScreen
+
+        self.app.push_screen(FirstCaptureScreen(), self._on_first_capture_complete)
+
+    def _on_first_capture_complete(self, result: Any) -> None:
+        """Store first-capture outcome and exit onboarding."""
+        onboarding_app: OnboardingApp = self.app  # type: ignore[assignment]
+        default_result: FirstCaptureResult = {"action": "skip", "text": ""}
+        if isinstance(result, dict):
+            action = result.get("action")
+            text = result.get("text")
+            if action in {"submit", "skip"} and isinstance(text, str):
+                onboarding_app.first_capture_outcome = cast("FirstCaptureResult", result)
+            else:
+                onboarding_app.first_capture_outcome = default_result
+        else:
+            onboarding_app.first_capture_outcome = default_result
+
         self.app.exit(result=True)

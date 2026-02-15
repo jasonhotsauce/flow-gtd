@@ -8,6 +8,15 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header, RadioButton, RadioSet, Static
 
 from flow.tui.onboarding.constants import PROVIDERS, PROVIDER_HINTS
+from flow.tui.onboarding.keybindings import (
+    CONFIRM_C_BINDING,
+    CONFIRM_ENTER_BINDING,
+    NAV_DOWN_J_BINDING,
+    NAV_UP_K_BINDING,
+    QUIT_ESCAPE_BINDING,
+    QUIT_Q_BINDING,
+    compose_bindings,
+)
 
 if TYPE_CHECKING:
     from flow.tui.onboarding.app import OnboardingApp
@@ -18,13 +27,14 @@ class ProviderSelectScreen(Screen):
 
     CSS_PATH = "provider.tcss"
 
-    BINDINGS = [
-        ("escape", "quit", "Quit"),
-        ("q", "quit", "Quit"),
-        ("j", "cursor_down", "Down"),
-        ("k", "cursor_up", "Up"),
-        ("c", "confirm", "Continue"),
-    ]
+    BINDINGS = compose_bindings(
+        QUIT_ESCAPE_BINDING,
+        QUIT_Q_BINDING,
+        NAV_DOWN_J_BINDING,
+        NAV_UP_K_BINDING,
+        CONFIRM_ENTER_BINDING,
+        CONFIRM_C_BINDING,
+    )
 
     def compose(self) -> ComposeResult:
         """Build the provider selection UI."""

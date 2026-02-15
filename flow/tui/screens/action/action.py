@@ -144,8 +144,18 @@ class ActionScreen(Screen):
         sidecar = self.query_one("#sidecar", ResourceContextPanel)
 
         try:
-            # Get resources matching the task's tags
-            resources = self._engine.get_resources_by_tags(item.context_tags)
+            hits = await asyncio.to_thread(
+                self._engine.get_semantic_resources,
+                item.title,
+                3,
+            )
+            if hits:
+                sidecar.show_semantic_hits(hits, task_tags=item.context_tags)
+                return
+            # Fallback to tag matching when semantic store is unavailable/empty.
+            resources = await asyncio.to_thread(
+                self._engine.get_resources_by_tags, item.context_tags
+            )
             sidecar.show_resources(resources, task_tags=item.context_tags)
         except (IOError, ValueError, RuntimeError):
             sidecar.show_error("Failed to load resources")
@@ -189,13 +199,21 @@ class ActionScreen(Screen):
         idx = opt_list.highlighted
         if idx is not None and 0 <= idx < len(self._items):
             item = self._items[idx]
-            self._engine.complete_item(item.id)
-            self.notify(
-                f"✅ Completed: {item.title[:30]}...",
-                severity="information",
-                timeout=2,
-            )
-            asyncio.create_task(self._refresh_list_async())
+            asyncio.create_task(self._complete_action_async(item.id, item.title))
+
+    async def _complete_action_async(self, item_id: str, title: str) -> None:
+        try:
+            await asyncio.to_thread(self._engine.complete_item, item_id)
+            if self.is_mounted:
+                self.notify(
+                    f"✅ Completed: {title[:30]}...",
+                    severity="information",
+                    timeout=2,
+                )
+                await self._refresh_list_async()
+        except Exception:
+            if self.is_mounted:
+                self.notify("Failed to complete action", severity="error", timeout=3)
 
     def action_focus_sidecar(self) -> None:
         """Focus the sidecar panel."""
@@ -220,23 +238,29 @@ class ActionScreen(Screen):
 
     def _apply_defer_result(self, item_id: str, result: dict[str, str] | None) -> None:
         """Apply defer selection and refresh next actions."""
+        asyncio.create_task(self._apply_defer_result_async(item_id, result))
+
+    async def _apply_defer_result_async(
+        self, item_id: str, result: dict[str, str] | None
+    ) -> None:
+        """Apply defer selection off the UI thread and refresh next actions."""
         if not result:
             return
 
-        item = self._engine.get_item(item_id)
+        item = await asyncio.to_thread(self._engine.get_item, item_id)
         if not item:
             self.notify(
                 "Item no longer exists. Refreshing…", severity="warning", timeout=2
             )
-            asyncio.create_task(self._refresh_list_async())
+            await self._refresh_list_async()
             return
 
         mode = result.get("mode")
         if mode == "waiting":
-            self._engine.defer_item(item.id, mode="waiting")
+            await asyncio.to_thread(self._engine.defer_item, item.id, "waiting")
             self.notify("⏳ Deferred to Waiting For", timeout=2)
         elif mode == "someday":
-            self._engine.defer_item(item.id, mode="someday")
+            await asyncio.to_thread(self._engine.defer_item, item.id, "someday")
             self.notify("🌱 Moved to Someday/Maybe", timeout=2)
         elif mode == "until":
             raw = result.get("defer_until", "")
@@ -249,14 +273,16 @@ class ActionScreen(Screen):
             if parsed is None:
                 self.notify("Unable to parse defer date", severity="error", timeout=3)
                 return
-            self._engine.defer_item(item.id, mode="until", defer_until=parsed)
+            await asyncio.to_thread(
+                self._engine.defer_item, item.id, "until", parsed
+            )
             self.notify(
                 f"📅 Deferred until {parsed.strftime('%Y-%m-%d %H:%M')}", timeout=2
             )
         else:
             return
 
-        asyncio.create_task(self._refresh_list_async())
+        await self._refresh_list_async()
 
     def action_go_inbox(self) -> None:
         """Navigate to inbox."""

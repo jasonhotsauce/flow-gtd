@@ -1,5 +1,6 @@
 """Process Funnel: 4-stage wizard (Dedup, Cluster, 2-Min, Coach)."""
 
+import asyncio
 from datetime import datetime
 
 from textual.binding import Binding
@@ -32,6 +33,7 @@ class ProcessScreen(Screen):
         Binding("b", "keep_both", "Keep Both", show=False),
         Binding("d", "do_now", "Do Now", show=False),
         Binding("f", "defer", "Defer", show=False),
+        Binding("x", "delete", "Delete", show=False),
         Binding("c", "create_project", "Create", show=False),
         Binding("a", "accept", "Accept", show=False),
         Binding("n", "skip", "Skip", show=False),
@@ -100,8 +102,12 @@ class ProcessScreen(Screen):
 
     def on_mount(self) -> None:
         """Initialize process screen."""
-        self._engine.process_start()
-        self._go_stage(1)
+        asyncio.create_task(self._init_async())
+
+    async def _init_async(self) -> None:
+        await asyncio.to_thread(self._engine.process_start)
+        if self.is_mounted:
+            self._go_stage(1)
 
     def _update_progress(self) -> None:
         """Update progress bar visual state."""
@@ -163,9 +169,23 @@ class ProcessScreen(Screen):
 
     def _render_cluster(self) -> None:
         """Render clustering stage."""
-        self._cluster_suggestions = self._engine.get_cluster_suggestions()
+        self._cluster_suggestions = []
         help_text = self.query_one("#process-help-text", Static)
+        self.query_one("#cluster-list", OptionList).display = True
+        opt_list = self.query_one("#cluster-list", OptionList)
+        opt_list.clear_options()
+        opt_list.add_option(Option("  ⏳  Loading clusters…", id="loading"))
+        help_text.update("Loading cluster suggestions…")
+        asyncio.create_task(self._render_cluster_async())
 
+    async def _render_cluster_async(self) -> None:
+        suggestions = await asyncio.to_thread(self._engine.get_cluster_suggestions)
+        if not self.is_mounted or self._stage != 2:
+            return
+        self._cluster_suggestions = suggestions
+        help_text = self.query_one("#process-help-text", Static)
+        opt_list = self.query_one("#cluster-list", OptionList)
+        opt_list.clear_options()
         if not self._cluster_suggestions:
             self.query_one("#complete-state", Vertical).display = True
             self.query_one("#complete-text", Static).update(
@@ -173,16 +193,10 @@ class ProcessScreen(Screen):
             )
             help_text.update("3: Next Stage │ 1-4: Jump to Stage │ Esc: Back")
             return
-
-        self.query_one("#cluster-list", OptionList).display = True
-        opt_list = self.query_one("#cluster-list", OptionList)
-        opt_list.clear_options()
-
         for i, (name, ids) in enumerate(self._cluster_suggestions):
             opt_list.add_option(
                 Option(f"  📁  {name} ({len(ids)} items)", id=f"cluster-{i}")
             )
-
         help_text.update("j/k: Navigate │ c: Create Project │ n: Skip │ 3: Next Stage")
 
     def _render_twomin(self) -> None:
@@ -201,7 +215,7 @@ class ProcessScreen(Screen):
         self.query_one("#twomin-card", Vertical).display = True
         self.query_one("#twomin-title", Static).update(item.title)
         self.query_one("#twomin-hint", Static).update("Can you do this in 2 minutes?")
-        help_text.update("d: Do Now (mark done) │ f: Defer │ 4: Skip to Coach")
+        help_text.update("d: Do Now │ f: Defer │ x: Delete │ 4: Skip to Coach")
 
     def _render_coach(self) -> None:
         """Render coach stage."""
@@ -219,12 +233,17 @@ class ProcessScreen(Screen):
 
         self.query_one("#coach-panel", Vertical).display = True
         self.query_one("#coach-task-title", Static).update(item.title)
+        self.query_one("#coach-suggestion-text", Static).update("Generating suggestion…")
+        help_text.update("a: Accept suggestion │ n: Skip │ Esc: Back")
+        asyncio.create_task(self._load_coach_suggestion_async(item.title))
 
-        # Get AI suggestion
-        self._coach_suggestion = coach_task(item.title)
+    async def _load_coach_suggestion_async(self, title: str) -> None:
+        suggestion = await asyncio.to_thread(coach_task, title)
+        if not self.is_mounted or self._stage != 4:
+            return
+        self._coach_suggestion = suggestion
         suggestion_text = self._coach_suggestion or "(Add API key for AI suggestions)"
         self.query_one("#coach-suggestion-text", Static).update(suggestion_text)
-        help_text.update("a: Accept suggestion │ n: Skip │ Esc: Back")
 
     # Action handlers
     def action_stage1(self) -> None:
@@ -259,7 +278,11 @@ class ProcessScreen(Screen):
         """Merge duplicate items (Stage 1)."""
         if self._stage == 1 and self._dedup_pair:
             a, b = self._dedup_pair
-            self._engine.dedup_merge(a.id, b.id)
+            asyncio.create_task(self._merge_async(a.id, b.id))
+
+    async def _merge_async(self, keep_id: str, remove_id: str) -> None:
+        await asyncio.to_thread(self._engine.dedup_merge, keep_id, remove_id)
+        if self.is_mounted:
             self.notify("🔀 Merged items", severity="information", timeout=2)
             self._go_stage(1)
 
@@ -273,24 +296,41 @@ class ProcessScreen(Screen):
     def action_do_now(self) -> None:
         """Do item now (Stage 3)."""
         if self._stage == 3:
-            item = self._engine.get_2min_current()
-            if item:
-                self._engine.two_min_do_now(item.id)
-                self._engine.two_min_advance()
-                self.notify("⚡ Done!", severity="information", timeout=1)
-                self._go_stage(3)
+            asyncio.create_task(self._do_now_async())
+
+    async def _do_now_async(self) -> None:
+        item = await asyncio.to_thread(self._engine.get_2min_current)
+        if item and self.is_mounted:
+            await asyncio.to_thread(self._engine.two_min_do_now, item.id)
+            self._engine.two_min_advance()
+            self.notify("⚡ Done!", severity="information", timeout=1)
+            self._go_stage(3)
+
+    def action_delete(self) -> None:
+        """Delete item from 2-minute drill (Stage 3)."""
+        if self._stage == 3:
+            asyncio.create_task(self._delete_async())
+
+    async def _delete_async(self) -> None:
+        item = await asyncio.to_thread(self._engine.get_2min_current)
+        if item and self.is_mounted:
+            await asyncio.to_thread(self._engine.two_min_delete, item.id)
+            self._engine.two_min_advance()
+            self.notify("🗑️ Deleted", severity="warning", timeout=1)
+            self._go_stage(3)
 
     def action_defer(self) -> None:
         """Defer item (Stage 3)."""
         if self._stage != 3:
             return
+        asyncio.create_task(self._open_stage3_defer_async())
 
-        item = self._engine.get_2min_current()
+    async def _open_stage3_defer_async(self) -> None:
+        item = await asyncio.to_thread(self._engine.get_2min_current)
         if not item:
             self.notify("No current item to defer", severity="warning", timeout=2)
             self._go_stage(3)
             return
-
         self.app.push_screen(
             DeferDialog(),
             callback=lambda result: self._apply_stage3_defer_result(item.id, result),
@@ -300,10 +340,16 @@ class ProcessScreen(Screen):
         self, item_id: str, result: dict[str, str] | None
     ) -> None:
         """Apply selected defer behavior for Stage 3."""
+        asyncio.create_task(self._apply_stage3_defer_result_async(item_id, result))
+
+    async def _apply_stage3_defer_result_async(
+        self, item_id: str, result: dict[str, str] | None
+    ) -> None:
+        """Apply selected defer behavior for Stage 3 off the main thread."""
         if not result:
             return
 
-        item = self._engine.get_item(item_id)
+        item = await asyncio.to_thread(self._engine.get_item, item_id)
         if not item:
             self.notify(
                 "Item no longer exists. Refreshing…", severity="warning", timeout=2
@@ -313,10 +359,10 @@ class ProcessScreen(Screen):
 
         mode = result.get("mode")
         if mode == "waiting":
-            self._engine.defer_item(item.id, mode="waiting")
+            await asyncio.to_thread(self._engine.defer_item, item.id, "waiting")
             self.notify("⏳ Deferred to Waiting For", timeout=2)
         elif mode == "someday":
-            self._engine.defer_item(item.id, mode="someday")
+            await asyncio.to_thread(self._engine.defer_item, item.id, "someday")
             self.notify("🌱 Moved to Someday/Maybe", timeout=2)
         elif mode == "until":
             raw = result.get("defer_until", "")
@@ -329,7 +375,7 @@ class ProcessScreen(Screen):
             if parsed is None:
                 self.notify("Unable to parse defer date", severity="error", timeout=3)
                 return
-            self._engine.defer_item(item.id, mode="until", defer_until=parsed)
+            await asyncio.to_thread(self._engine.defer_item, item.id, "until", parsed)
             self.notify(
                 f"📅 Deferred until {parsed.strftime('%Y-%m-%d %H:%M')}", timeout=2
             )
@@ -346,22 +392,28 @@ class ProcessScreen(Screen):
             idx = opt_list.highlighted
             if idx is not None and 0 <= idx < len(self._cluster_suggestions):
                 name, ids = self._cluster_suggestions[idx]
-                self._engine.create_project(name, ids)
-                self.notify(
-                    f"📁 Created project: {name}", severity="information", timeout=2
-                )
-                self._cluster_suggestions = self._engine.get_cluster_suggestions()
-                self._go_stage(2)
+                asyncio.create_task(self._create_project_async(name, ids))
+
+    async def _create_project_async(self, name: str, ids: list[str]) -> None:
+        await asyncio.to_thread(self._engine.create_project, name, ids)
+        if self.is_mounted:
+            self.notify(f"📁 Created project: {name}", severity="information", timeout=2)
+            self._go_stage(2)
 
     def action_accept(self) -> None:
         """Accept AI suggestion (Stage 4)."""
         if self._stage == 4 and self._coach_suggestion:
-            item = self._engine.get_coach_current()
-            if item:
-                self._engine.coach_apply_suggestion(item.id, self._coach_suggestion)
-                self._engine.coach_advance()
-                self.notify("✨ Applied suggestion", severity="information", timeout=2)
-                self._go_stage(4)
+            asyncio.create_task(self._accept_async())
+
+    async def _accept_async(self) -> None:
+        item = await asyncio.to_thread(self._engine.get_coach_current)
+        if item and self._coach_suggestion and self.is_mounted:
+            await asyncio.to_thread(
+                self._engine.coach_apply_suggestion, item.id, self._coach_suggestion
+            )
+            self._engine.coach_advance()
+            self.notify("✨ Applied suggestion", severity="information", timeout=2)
+            self._go_stage(4)
 
     def action_skip(self) -> None:
         """Skip current item."""

@@ -11,6 +11,12 @@ from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Input, Static
 
 from flow.tui.onboarding.constants import PROVIDER_MAP
+from flow.tui.onboarding.keybindings import (
+    BACK_CTRL_B_BINDING,
+    BACK_ESCAPE_BINDING,
+    SUBMIT_ENTER_BINDING,
+    compose_bindings,
+)
 
 if TYPE_CHECKING:
     from flow.tui.onboarding.app import OnboardingApp
@@ -23,11 +29,11 @@ class CredentialsScreen(Screen):
 
     CSS_PATH = "credentials.tcss"
 
-    BINDINGS = [
-        ("escape", "go_back", "Back"),
-        ("ctrl+b", "go_back", "Back"),
-        ("enter", "submit", "Continue"),
-    ]
+    BINDINGS = compose_bindings(
+        BACK_ESCAPE_BINDING,
+        BACK_CTRL_B_BINDING,
+        SUBMIT_ENTER_BINDING,
+    )
 
     def compose(self) -> ComposeResult:
         """Build the credentials form UI."""

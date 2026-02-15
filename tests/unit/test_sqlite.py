@@ -94,3 +94,23 @@ def test_list_inbox_excludes_deferred_and_project_assigned_items(db: SqliteDB) -
     items = db.list_inbox()
     assert len(items) == 1
     assert items[0].id == "visible"
+
+
+def test_index_job_roundtrip(db: SqliteDB) -> None:
+    """Index jobs should be persisted and status updates should be queryable."""
+    db.enqueue_index_job(
+        resource_id="r1",
+        content_type="text",
+        source="hello world",
+        title="Hello",
+        summary="hello summary",
+    )
+
+    jobs = db.list_index_jobs(status="pending", limit=10)
+    assert len(jobs) == 1
+    assert jobs[0]["resource_id"] == "r1"
+
+    db.update_index_job_status(job_id=jobs[0]["id"], status="done")
+    done_jobs = db.list_index_jobs(status="done", limit=10)
+    assert len(done_jobs) == 1
+    assert done_jobs[0]["resource_id"] == "r1"
