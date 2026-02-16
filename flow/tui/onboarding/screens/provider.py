@@ -4,9 +4,9 @@ from typing import TYPE_CHECKING
 
 from textual.app import ComposeResult
 from textual.containers import Container, Vertical
-from textual.screen import Screen
 from textual.widgets import Footer, Header, RadioButton, RadioSet, Static
 
+from flow.tui.common.base_screen import FlowScreen
 from flow.tui.onboarding.constants import PROVIDERS, PROVIDER_HINTS
 from flow.tui.onboarding.keybindings import (
     CONFIRM_C_BINDING,
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from flow.tui.onboarding.app import OnboardingApp
 
 
-class ProviderSelectScreen(Screen):
+class ProviderSelectScreen(FlowScreen):
     """Select an LLM provider for Flow GTD."""
 
     CSS_PATH = "provider.tcss"
@@ -105,4 +105,8 @@ class ProviderSelectScreen(Screen):
 
     def action_quit(self) -> None:
         """Exit the application."""
+        self.app.exit()
+
+    def action_go_back(self) -> None:
+        """Treat back as exit on the provider entry screen."""
         self.app.exit()

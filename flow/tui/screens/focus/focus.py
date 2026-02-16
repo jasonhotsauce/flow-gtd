@@ -5,15 +5,16 @@ from typing import Optional
 
 from textual.app import ComposeResult
 from textual.containers import Container, Vertical
-from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
 from flow.core.focus import FocusDispatcher
 from flow.models import Item
+from flow.tui.common.base_screen import FlowScreen
+from flow.tui.common.keybindings import with_global_bindings
 from flow.tui.common.widgets.sidecar import ResourceContextPanel
 
 
-class FocusScreen(Screen):
+class FocusScreen(FlowScreen):
     """Focus Mode: AI selects best task based on available time window.
 
     Layout:
@@ -25,14 +26,11 @@ class FocusScreen(Screen):
 
     CSS_PATH = "focus.tcss"
 
-    BINDINGS = [
-        ("q", "app.quit", "Quit"),
-        ("escape", "app.pop_screen", "Exit"),
+    BINDINGS = with_global_bindings(
         ("space", "complete_task", "Complete"),
         ("s", "skip_task", "Skip"),
         ("r", "refresh", "Refresh"),
-        ("?", "show_help", "Help"),
-    ]
+    )
 
     def __init__(self) -> None:
         super().__init__()
@@ -259,6 +257,10 @@ class FocusScreen(Screen):
         self._dispatcher.reset_skipped()
         asyncio.create_task(self._refresh_task_async())
         self.notify("Refreshed task selection", timeout=2)
+
+    def action_go_back(self) -> None:
+        """Return to previous screen."""
+        self.app.pop_screen()
 
     def action_show_help(self) -> None:
         """Show help toast."""

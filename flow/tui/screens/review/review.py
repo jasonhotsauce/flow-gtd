@@ -5,23 +5,20 @@ import asyncio
 from textual.binding import Binding
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
-from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
 from flow.core.engine import Engine
+from flow.tui.common.base_screen import FlowScreen
+from flow.tui.common.keybindings import with_global_bindings
 
 
-class ReviewScreen(Screen):
+class ReviewScreen(FlowScreen):
     """Weekly review: Stale (archive), Someday (resurface), Report."""
 
     CSS_PATH = "review.tcss"
 
-    BINDINGS = [
-        ("q", "app.quit", "Quit"),
-        ("escape", "app.pop_screen", "Back"),
-        ("j", "cursor_down", "Down"),
-        ("k", "cursor_up", "Up"),
+    BINDINGS = with_global_bindings(
         ("a", "archive", "Archive"),
         ("r", "resurface", "Resurface"),
         ("1", "show_stale", "Stale"),
@@ -30,8 +27,7 @@ class ReviewScreen(Screen):
         ("tab", "next_section", "Next"),
         Binding("i", "go_inbox", "Inbox", show=False),
         Binding("P", "go_projects", "Projects", show=False),
-        ("?", "show_help", "Help"),
-    ]
+    )
 
     def __init__(self) -> None:
         super().__init__()
@@ -313,6 +309,10 @@ class ReviewScreen(Screen):
         from flow.tui.screens.projects.projects import ProjectsScreen
 
         self.app.push_screen(ProjectsScreen())
+
+    def action_go_back(self) -> None:
+        """Return to previous screen."""
+        self.app.pop_screen()
 
     def action_show_help(self) -> None:
         """Show help toast."""

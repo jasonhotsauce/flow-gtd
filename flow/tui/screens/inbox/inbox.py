@@ -8,26 +8,24 @@ from rich.text import Text
 from textual.binding import Binding
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
-from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
 from flow.core.engine import Engine
 from flow.models import Item
+from flow.tui.common.base_screen import FlowScreen
+from flow.tui.common.keybindings import with_global_bindings
 from flow.tui.common.widgets.defer_dialog import DeferDialog
 from flow.tui.common.widgets.process_task_dialog import ProcessTaskDialog
 from flow.tui.common.widgets.project_picker_dialog import ProjectPickerDialog
 
 
-class InboxScreen(Screen):
+class InboxScreen(FlowScreen):
     """Screen showing inbox items. Default landing for TUI."""
 
     CSS_PATH = "inbox.tcss"
 
-    BINDINGS = [
-        ("q", "app.quit", "Quit"),
-        ("j", "cursor_down", "Down"),
-        ("k", "cursor_up", "Up"),
+    BINDINGS = with_global_bindings(
         ("enter", "open_process_menu", "Process"),
         ("d", "delete_item", "Delete"),
         ("f", "defer_item", "Defer"),
@@ -36,8 +34,7 @@ class InboxScreen(Screen):
         Binding("a", "go_action", "Actions", show=False),
         Binding("r", "go_review", "Review", show=False),
         Binding("P", "go_projects", "Projects", show=False),
-        ("?", "show_help", "Help"),
-    ]
+    )
 
     def __init__(self, startup_context: dict[str, object] | None = None) -> None:
         super().__init__()

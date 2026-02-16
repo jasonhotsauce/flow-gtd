@@ -8,30 +8,26 @@ from rich.text import Text
 from textual.binding import Binding
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, ScrollableContainer, Vertical
-from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
 from flow.core.engine import Engine
 from flow.models import Item
+from flow.tui.common.base_screen import FlowScreen
+from flow.tui.common.keybindings import with_global_bindings
 
 
-class ProjectsScreen(Screen):
+class ProjectsScreen(FlowScreen):
     """Screen showing active projects and next-action preview. Enter opens project detail."""
 
     CSS_PATH = "projects.tcss"
 
-    BINDINGS = [
-        ("q", "app.quit", "Quit"),
-        ("escape", "pop_screen", "Back"),
-        ("j", "cursor_down", "Down"),
-        ("k", "cursor_up", "Up"),
+    BINDINGS = with_global_bindings(
         ("enter", "open_project", "Open"),
         Binding("a", "go_action", "Actions", show=False),
         Binding("i", "go_inbox", "Inbox", show=False),
         Binding("r", "go_review", "Review", show=False),
-        ("?", "show_help", "Help"),
-    ]
+    )
 
     def __init__(self) -> None:
         super().__init__()
@@ -238,6 +234,10 @@ class ProjectsScreen(Screen):
             title="Help",
             timeout=5,
         )
+
+    def action_go_back(self) -> None:
+        """Map global back action to existing pop-screen behavior."""
+        self.action_pop_screen()
 
     def action_pop_screen(self) -> None:
         """Pop screen or quit if only screen."""

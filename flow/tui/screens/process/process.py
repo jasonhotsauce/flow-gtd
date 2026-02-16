@@ -6,23 +6,22 @@ from datetime import datetime
 from textual.binding import Binding
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
-from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
 from flow.core.engine import Engine
 from flow.core.coach import coach_task
+from flow.tui.common.base_screen import FlowScreen
+from flow.tui.common.keybindings import with_global_bindings
 from flow.tui.common.widgets.defer_dialog import DeferDialog
 
 
-class ProcessScreen(Screen):
+class ProcessScreen(FlowScreen):
     """TUI Wizard for Process Funnel: Dedup -> Cluster -> 2-Min -> Coach."""
 
     CSS_PATH = "process.tcss"
 
-    BINDINGS = [
-        ("q", "app.quit", "Quit"),
-        ("escape", "app.pop_screen", "Back"),
+    BINDINGS = with_global_bindings(
         Binding("1", "stage1", "Dedup", show=False),
         Binding("2", "stage2", "Cluster", show=False),
         Binding("3", "stage3", "2-Min", show=False),
@@ -37,8 +36,7 @@ class ProcessScreen(Screen):
         Binding("c", "create_project", "Create", show=False),
         Binding("a", "accept", "Accept", show=False),
         Binding("n", "skip", "Skip", show=False),
-        ("?", "show_help", "Help"),
-    ]
+    )
 
     STAGE_INFO = {
         1: ("🔀 Deduplication", "Find and merge duplicate items"),
@@ -423,6 +421,10 @@ class ProcessScreen(Screen):
         elif self._stage == 4:
             self._engine.coach_advance()
             self._go_stage(4)
+
+    def action_go_back(self) -> None:
+        """Return to previous screen."""
+        self.app.pop_screen()
 
     def action_show_help(self) -> None:
         """Show help toast."""

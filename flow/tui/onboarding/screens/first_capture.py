@@ -6,8 +6,16 @@ from typing import Literal, TypedDict
 
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
-from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Input, Static
+
+from flow.tui.common.base_screen import FlowScreen
+from flow.tui.common.keybindings import (
+    HELP_BINDING,
+    NAV_DOWN_BINDING,
+    NAV_UP_BINDING,
+    QUIT_Q_BINDING,
+    compose_bindings,
+)
 
 
 class FirstCaptureResult(TypedDict):
@@ -17,13 +25,17 @@ class FirstCaptureResult(TypedDict):
     text: str
 
 
-class FirstCaptureScreen(Screen):
+class FirstCaptureScreen(FlowScreen):
     """Collect an optional first capture before entering the main app."""
 
-    BINDINGS = [
+    BINDINGS = compose_bindings(
+        QUIT_Q_BINDING,
+        NAV_DOWN_BINDING,
+        NAV_UP_BINDING,
+        HELP_BINDING,
         ("enter", "submit", "Submit"),
         ("escape", "skip", "Skip"),
-    ]
+    )
 
     def compose(self) -> ComposeResult:
         """Build first-capture UI."""
