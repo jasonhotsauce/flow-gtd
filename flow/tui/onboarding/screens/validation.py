@@ -5,9 +5,9 @@ from typing import TYPE_CHECKING, Any, Optional, cast
 
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
-from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, LoadingIndicator, Static
 
+from flow.tui.common.base_screen import FlowScreen
 from flow.tui.onboarding.constants import VALIDATION_PROMPT
 from flow.tui.onboarding.keybindings import (
     BACK_ESCAPE_BINDING,
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 VALIDATION_TIMEOUT = 10.0
 
 
-class ValidationScreen(Screen):
+class ValidationScreen(FlowScreen):
     """Validate credentials by testing connection to the LLM provider."""
 
     CSS_PATH = "validation.tcss"

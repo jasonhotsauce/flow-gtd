@@ -3,23 +3,19 @@
 from __future__ import annotations
 
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import Vertical
-from textual.screen import ModalScreen
 from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from flow.core.defer_utils import parse_defer_until
+from flow.tui.common.base_screen import FlowModalScreen
+from flow.tui.common.keybindings import with_modal_bindings
 
 
-class DeferDialog(ModalScreen[dict[str, str] | None]):
+class DeferDialog(FlowModalScreen[dict[str, str] | None]):
     """Modal for choosing defer mode and optional defer-until input."""
 
-    BINDINGS = [
-        Binding("escape", "cancel", "Cancel"),
-        Binding("j", "cursor_down", "Down", show=False),
-        Binding("k", "cursor_up", "Up", show=False),
-    ]
+    BINDINGS = with_modal_bindings()
 
     DEFAULT_CSS = """
     DeferDialog {

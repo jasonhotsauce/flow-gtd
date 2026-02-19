@@ -8,30 +8,26 @@ from rich.text import Text
 from textual.binding import Binding
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
-from textual.screen import Screen
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
 from flow.core.engine import Engine
 from flow.models import Item
+from flow.tui.common.base_screen import FlowScreen
+from flow.tui.common.keybindings import with_global_bindings
 from flow.tui.common.widgets.defer_dialog import DeferDialog
 
 
-class ProjectDetailScreen(Screen):
+class ProjectDetailScreen(FlowScreen):
     """Screen to work through a project's next actions. Complete or defer; Esc back to list."""
 
     CSS_PATH = "projects.tcss"
 
-    BINDINGS = [
-        ("q", "app.quit", "Quit"),
-        ("escape", "pop_screen", "Back"),
-        ("j", "cursor_down", "Down"),
-        ("k", "cursor_up", "Up"),
+    BINDINGS = with_global_bindings(
         Binding("enter", "select_action", "Select", show=False),
         ("c", "complete_action", "Complete"),
         ("f", "defer_action", "Defer"),
-        ("?", "show_help", "Help"),
-    ]
+    )
 
     def __init__(self, project: Item) -> None:
         super().__init__()
@@ -336,6 +332,10 @@ class ProjectDetailScreen(Screen):
             title="Help",
             timeout=5,
         )
+
+    def action_go_back(self) -> None:
+        """Map global back action to existing pop behavior."""
+        self.action_pop_screen()
 
     def action_pop_screen(self) -> None:
         """Pop back to project list."""

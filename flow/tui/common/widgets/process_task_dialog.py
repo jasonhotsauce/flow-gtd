@@ -3,21 +3,18 @@
 from __future__ import annotations
 
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import Vertical
-from textual.screen import ModalScreen
 from textual.widgets import OptionList, Static
 from textual.widgets.option_list import Option
 
+from flow.tui.common.base_screen import FlowModalScreen
+from flow.tui.common.keybindings import with_modal_bindings
 
-class ProcessTaskDialog(ModalScreen[dict[str, str] | None]):
+
+class ProcessTaskDialog(FlowModalScreen[dict[str, str] | None]):
     """Modal for choosing how to process an inbox task."""
 
-    BINDINGS = [
-        Binding("escape", "cancel", "Cancel"),
-        Binding("j", "cursor_down", "Down", show=False),
-        Binding("k", "cursor_up", "Up", show=False),
-    ]
+    BINDINGS = with_modal_bindings()
 
     DEFAULT_CSS = """
     ProcessTaskDialog {

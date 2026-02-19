@@ -7,9 +7,9 @@ from urllib.parse import urlparse
 
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
-from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Input, Static
 
+from flow.tui.common.base_screen import FlowScreen
 from flow.tui.onboarding.constants import PROVIDER_MAP
 from flow.tui.onboarding.keybindings import (
     BACK_CTRL_B_BINDING,
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class CredentialsScreen(Screen):
+class CredentialsScreen(FlowScreen):
     """Enter credentials for the selected LLM provider."""
 
     CSS_PATH = "credentials.tcss"
