@@ -135,7 +135,7 @@ This file is the source of truth for implementation stages.
 | 1B | First-value handoff (capture -> inbox) | completed | Approved by user on 2026-02-15 | `pytest tests/unit/test_cli_main.py tests/unit/test_inbox_startup_context.py tests/unit/utils/llm/test_config.py -v` (12 passed) |
 | 1C | Navigation contract hooks for later phases | completed | Approved by user on 2026-02-15 | `pytest tests/unit/test_onboarding_keybindings_contract.py -v` (4 passed) |
 | 2 | Unified cross-screen navigation rollout | completed | Approved by user on 2026-02-16 | `pytest tests/unit -v -k "bindings or keybinding"` (22 passed) and `pytest tests/unit/test_inbox_startup_context.py tests/unit/test_inbox_screen_process_menu.py tests/unit/test_projects_screen.py tests/unit/test_project_detail_screen.py tests/unit/test_first_capture_screen.py tests/unit/test_validation_screen.py -v` (16 passed) |
-| 3 | Process throughput simplification | planned | pending | pending |
+| 3 | Process throughput simplification | in_progress | pending | `source .venv/bin/activate && pytest tests/unit/test_process_screen_bindings.py -v` (3 passed) |
 | 4 | Focus stickiness entry loop | planned | pending | pending |
 
 ## Carry-Over for Next Iterations

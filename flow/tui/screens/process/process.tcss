@@ -250,11 +250,17 @@ ProcessScreen {
 /* Help bar */
 #process-help {
     dock: bottom;
-    height: 3;
-    padding: 0 2;
+    height: 4;
+    padding: 0 2 1 2;
     background: $surface-light;
     border-top: solid $border;
-    content-align: center middle;
+    layout: vertical;
+}
+
+#process-cta-text {
+    color: $primary-light;
+    text-style: bold;
+    text-align: center;
 }
 
 #process-help-text {

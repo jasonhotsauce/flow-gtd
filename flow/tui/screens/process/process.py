@@ -30,6 +30,7 @@ class ProcessScreen(FlowScreen):
         ("k", "cursor_up", "Up"),
         Binding("m", "merge", "Merge", show=False),
         Binding("b", "keep_both", "Keep Both", show=False),
+        Binding("enter", "primary", "Primary Action", show=False),
         Binding("d", "do_now", "Do Now", show=False),
         Binding("f", "defer", "Defer", show=False),
         Binding("x", "delete", "Delete", show=False),
@@ -95,6 +96,7 @@ class ProcessScreen(FlowScreen):
                 yield Static("✅", id="complete-icon", classes="complete-icon")
                 yield Static("", id="complete-text", classes="complete-text")
         with Container(id="process-help"):
+            yield Static("", id="process-cta-text")
             yield Static("", id="process-help-text")
         yield Footer()
 
@@ -134,6 +136,7 @@ class ProcessScreen(FlowScreen):
         title, desc = self.STAGE_INFO.get(stage, ("", ""))
         self.query_one("#process-stage-title", Static).update(title)
         self.query_one("#process-stage-desc", Static).update(desc)
+        self._update_stage_guidance(stage)
 
         if stage == 1:
             self._render_dedup()
@@ -149,31 +152,40 @@ class ProcessScreen(FlowScreen):
         pair = self._engine.get_dedup_pair()
         self._dedup_pair = pair
 
-        help_text = self.query_one("#process-help-text", Static)
-
         if not pair:
             self.query_one("#complete-state", Vertical).display = True
             self.query_one("#complete-text", Static).update(
                 "No duplicates found! Press 2 for Clustering."
             )
-            help_text.update("2: Next Stage │ 1-4: Jump to Stage │ Esc: Back")
+            self._update_stage_guidance(
+                1,
+                primary="Primary: Enter to Continue to Cluster",
+                controls="2: Next Stage │ 1-4: Jump to Stage │ Esc: Back",
+                next_step="Next: Start grouping related tasks into projects.",
+            )
             return
 
         self.query_one("#dedup-container", Horizontal).display = True
         a, b = pair
         self.query_one("#dedup-a-title", Static).update(a.title[:80])
         self.query_one("#dedup-b-title", Static).update(b.title[:80])
-        help_text.update("m: Merge (keep A) │ b: Keep Both │ 2: Skip to Cluster")
+        self._update_stage_guidance(
+            1, controls="m: Merge (keep A) │ b: Keep Both │ 2: Skip to Cluster"
+        )
 
     def _render_cluster(self) -> None:
         """Render clustering stage."""
         self._cluster_suggestions = []
-        help_text = self.query_one("#process-help-text", Static)
         self.query_one("#cluster-list", OptionList).display = True
         opt_list = self.query_one("#cluster-list", OptionList)
         opt_list.clear_options()
         opt_list.add_option(Option("  ⏳  Loading clusters…", id="loading"))
-        help_text.update("Loading cluster suggestions…")
+        self._update_stage_guidance(
+            2,
+            primary="Primary: Enter to Create Project",
+            controls="Loading cluster suggestions…",
+            next_step="Next: Promote one cluster, then move to 2-Min.",
+        )
         asyncio.create_task(self._render_cluster_async())
 
     async def _render_cluster_async(self) -> None:
@@ -181,44 +193,56 @@ class ProcessScreen(FlowScreen):
         if not self.is_mounted or self._stage != 2:
             return
         self._cluster_suggestions = suggestions
-        help_text = self.query_one("#process-help-text", Static)
         opt_list = self.query_one("#cluster-list", OptionList)
         opt_list.clear_options()
         if not self._cluster_suggestions:
+            self.query_one("#cluster-list", OptionList).display = False
             self.query_one("#complete-state", Vertical).display = True
             self.query_one("#complete-text", Static).update(
                 "No clusters found. Press 3 for 2-Min Drill."
             )
-            help_text.update("3: Next Stage │ 1-4: Jump to Stage │ Esc: Back")
+            self._update_stage_guidance(
+                2,
+                primary="Primary: Enter to Continue to 2-Min",
+                controls="3: Next Stage │ 1-4: Jump to Stage │ Esc: Back",
+                next_step="Next: Process quick wins in 2-Min Drill.",
+            )
             return
         for i, (name, ids) in enumerate(self._cluster_suggestions):
             opt_list.add_option(
                 Option(f"  📁  {name} ({len(ids)} items)", id=f"cluster-{i}")
             )
-        help_text.update("j/k: Navigate │ c: Create Project │ n: Skip │ 3: Next Stage")
+        self._update_stage_guidance(
+            2, controls="j/k: Navigate │ c: Create Project │ n: Skip │ 3: Next Stage"
+        )
 
     def _render_twomin(self) -> None:
         """Render 2-minute drill stage."""
         item = self._engine.get_2min_current()
-        help_text = self.query_one("#process-help-text", Static)
 
         if not item:
             self.query_one("#complete-state", Vertical).display = True
             self.query_one("#complete-text", Static).update(
                 "2-Min Drill complete! Press 4 for Coach."
             )
-            help_text.update("4: Next Stage │ 1-4: Jump to Stage │ Esc: Back")
+            self._update_stage_guidance(
+                3,
+                primary="Primary: Enter to Continue to Coach",
+                controls="4: Next Stage │ 1-4: Jump to Stage │ Esc: Back",
+                next_step="Next: Use Coach for the remaining unclear tasks.",
+            )
             return
 
         self.query_one("#twomin-card", Vertical).display = True
         self.query_one("#twomin-title", Static).update(item.title)
         self.query_one("#twomin-hint", Static).update("Can you do this in 2 minutes?")
-        help_text.update("d: Do Now │ f: Defer │ x: Delete │ 4: Skip to Coach")
+        self._update_stage_guidance(
+            3, controls="d: Do Now │ f: Defer │ x: Delete │ 4: Skip to Coach"
+        )
 
     def _render_coach(self) -> None:
         """Render coach stage."""
         item = self._engine.get_coach_current()
-        help_text = self.query_one("#process-help-text", Static)
 
         if not item:
             self.query_one("#complete-state", Vertical).display = True
@@ -226,14 +250,58 @@ class ProcessScreen(FlowScreen):
             self.query_one("#complete-text", Static).update(
                 "Process complete! You're all set."
             )
-            help_text.update("Press Esc or q to exit │ 1-4: Review stages")
+            self._update_stage_guidance(
+                4,
+                primary="Primary: Enter to Exit Process",
+                controls="Press Esc or q to exit │ 1-4: Review stages",
+                next_step="Next: Return to Inbox and keep capture moving.",
+            )
             return
 
         self.query_one("#coach-panel", Vertical).display = True
         self.query_one("#coach-task-title", Static).update(item.title)
         self.query_one("#coach-suggestion-text", Static).update("Generating suggestion…")
-        help_text.update("a: Accept suggestion │ n: Skip │ Esc: Back")
+        self._update_stage_guidance(
+            4, controls="a: Accept suggestion │ n: Skip │ Esc: Back"
+        )
         asyncio.create_task(self._load_coach_suggestion_async(item.title))
+
+    def _primary_cta_text(self, stage: int) -> str:
+        """Return one explicit default CTA per process stage."""
+        return {
+            1: "Primary: Enter to Merge",
+            2: "Primary: Enter to Create Project",
+            3: "Primary: Enter to Do Now",
+            4: "Primary: Enter to Accept Suggestion",
+        }.get(stage, "")
+
+    def _next_step_hint(self, stage: int) -> str:
+        """Return one-step-next guidance for process momentum."""
+        return {
+            1: "Next: Press 2 to move to Clustering.",
+            2: "Next: Press 3 to move to 2-Min Drill.",
+            3: "Next: Press 4 for Coach when this item is handled.",
+            4: "Next: Press Esc to return after processing.",
+        }.get(stage, "")
+
+    def _update_stage_guidance(
+        self,
+        stage: int,
+        *,
+        primary: str | None = None,
+        controls: str | None = None,
+        next_step: str | None = None,
+    ) -> None:
+        """Refresh CTA and one-step guidance copy for the current stage."""
+        self.query_one("#process-cta-text", Static).update(
+            primary or self._primary_cta_text(stage)
+        )
+        controls_text = controls or "1-4: Jump stages │ ?: Help │ Esc: Back"
+        next_text = next_step or self._next_step_hint(stage)
+        help_parts = [controls_text]
+        if next_text:
+            help_parts.append(next_text)
+        self.query_one("#process-help-text", Static).update(" │ ".join(help_parts))
 
     async def _load_coach_suggestion_async(self, title: str) -> None:
         suggestion = await asyncio.to_thread(coach_task, title)
@@ -259,6 +327,44 @@ class ProcessScreen(FlowScreen):
     def action_stage4(self) -> None:
         """Go to stage 4."""
         self._go_stage(4)
+
+    def action_primary(self) -> None:
+        """Run the stage-specific primary CTA action."""
+        if self._stage == 1:
+            if self._dedup_pair:
+                self.action_merge()
+            else:
+                self.action_stage2()
+            return
+        if self._stage == 2:
+            if self._cluster_suggestions:
+                self.action_create_project()
+            else:
+                self.action_stage3()
+            return
+        if self._stage == 3:
+            asyncio.create_task(self._primary_stage3_async())
+            return
+        if self._stage == 4:
+            asyncio.create_task(self._primary_stage4_async())
+
+    async def _primary_stage3_async(self) -> None:
+        """Run Stage 3 primary action without blocking the UI thread."""
+        item = await asyncio.to_thread(self._engine.get_2min_current)
+        if item:
+            self.action_do_now()
+        else:
+            self.action_stage4()
+
+    async def _primary_stage4_async(self) -> None:
+        """Run Stage 4 primary action without blocking the UI thread."""
+        item = await asyncio.to_thread(self._engine.get_coach_current)
+        if item and self._coach_suggestion:
+            self.action_accept()
+        elif item:
+            self.action_skip()
+        else:
+            self.action_go_back()
 
     def action_cursor_down(self) -> None:
         """Move cursor down in lists."""
