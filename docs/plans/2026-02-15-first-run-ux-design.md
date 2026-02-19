@@ -136,12 +136,12 @@ This file is the source of truth for implementation stages.
 | 1C | Navigation contract hooks for later phases | completed | Approved by user on 2026-02-15 | `pytest tests/unit/test_onboarding_keybindings_contract.py -v` (4 passed) |
 | 2 | Unified cross-screen navigation rollout | completed | Approved by user on 2026-02-16 | `pytest tests/unit -v -k "bindings or keybinding"` (22 passed) and `pytest tests/unit/test_inbox_startup_context.py tests/unit/test_inbox_screen_process_menu.py tests/unit/test_projects_screen.py tests/unit/test_project_detail_screen.py tests/unit/test_first_capture_screen.py tests/unit/test_validation_screen.py -v` (16 passed) |
 | 3 | Process throughput simplification | in_progress | pending | `source .venv/bin/activate && pytest tests/unit/test_process_screen_bindings.py -v` (3 passed) |
-| 4 | Focus stickiness entry loop | planned | pending | pending |
+| 4 | Focus stickiness entry loop | completed | Pending user approval (2026-02-19) | `source .venv/bin/activate && pytest tests/unit/test_process_screen_bindings.py -v` (6 passed) |
 
 ## Carry-Over for Next Iterations
 
 - Phase 3 should reduce process funnel interaction cost by reusing first-run guidance patterns (single explicit CTA, one-step-next hints).
-- Phase 4 should add first-run-to-focus bridge prompts after users complete the initial capture/process loop.
+- Phase 4 delivered a first-run focus bridge from Process completion (`Enter` starts Focus and marks first-run loop complete).
 
 ## Completion Protocol
 

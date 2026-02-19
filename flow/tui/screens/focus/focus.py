@@ -153,6 +153,7 @@ class FocusScreen(FlowScreen):
         task_title = self.query_one("#focus-task-title", Static)
         duration_badge = self.query_one("#focus-duration-badge", Static)
         tags_widget = self.query_one("#focus-tags", Static)
+        resources_panel = self.query_one("#focus-resources", ResourceContextPanel)
 
         main_container = self.query_one("#focus-main", Vertical)
         empty_container = self.query_one("#focus-empty", Vertical)
@@ -176,13 +177,19 @@ class FocusScreen(FlowScreen):
             main_container.display = False
             empty_container.display = True
             empty_icon.update("[dim]v[/]")
-            resources_panel = self.query_one("#focus-resources", ResourceContextPanel)
+            resources_panel.display = False
             resources_panel.clear_resources()
             return
 
         # Show task
         main_container.display = True
         empty_container.display = False
+        resources_panel.display = True
+        resources_panel.update(
+            "🔗 Related Resources\n"
+            "────────────────────────────\n\n"
+            "Loading resources for this task…"
+        )
 
         # Update task title
         title = self._current_task.title
@@ -203,7 +210,7 @@ class FocusScreen(FlowScreen):
         # Update tags
         tags = self._current_task.context_tags
         if tags:
-            tags_str = " ".join(f"[cyan]{tag}[/]" for tag in tags)
+            tags_str = " ".join(f"[cyan]#{tag}[/]" for tag in tags)
             tags_widget.update(tags_str)
         else:
             tags_widget.update("")

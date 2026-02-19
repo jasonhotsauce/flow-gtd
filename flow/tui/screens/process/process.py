@@ -14,6 +14,8 @@ from flow.core.coach import coach_task
 from flow.tui.common.base_screen import FlowScreen
 from flow.tui.common.keybindings import with_global_bindings
 from flow.tui.common.widgets.defer_dialog import DeferDialog
+from flow.tui.screens.focus.focus import FocusScreen
+from flow.utils.llm.config import mark_first_value_completed, read_first_run_state
 
 
 class ProcessScreen(FlowScreen):
@@ -54,6 +56,7 @@ class ProcessScreen(FlowScreen):
         self._cluster_suggestions: list = []
         self._cluster_selected = 0
         self._coach_suggestion: str | None = None
+        self._first_run_focus_bridge_pending = read_first_run_state().first_value_pending
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -246,16 +249,28 @@ class ProcessScreen(FlowScreen):
 
         if not item:
             self.query_one("#complete-state", Vertical).display = True
-            self.query_one("#complete-icon", Static).update("🎉")
-            self.query_one("#complete-text", Static).update(
-                "Process complete! You're all set."
-            )
-            self._update_stage_guidance(
-                4,
-                primary="Primary: Enter to Exit Process",
-                controls="Press Esc or q to exit │ 1-4: Review stages",
-                next_step="Next: Return to Inbox and keep capture moving.",
-            )
+            if self._first_run_focus_bridge_pending:
+                self.query_one("#complete-icon", Static).update("🎯")
+                self.query_one("#complete-text", Static).update(
+                    "Process complete! Start Focus mode to keep momentum."
+                )
+                self._update_stage_guidance(
+                    4,
+                    primary="Primary: Enter to Start Focus",
+                    controls="Press Enter to open Focus │ Esc: Back │ 1-4: Review stages",
+                    next_step="Next: Complete one focused task to build the habit loop.",
+                )
+            else:
+                self.query_one("#complete-icon", Static).update("🎉")
+                self.query_one("#complete-text", Static).update(
+                    "Process complete! You're all set."
+                )
+                self._update_stage_guidance(
+                    4,
+                    primary="Primary: Enter to Exit Process",
+                    controls="Press Esc or q to exit │ 1-4: Review stages",
+                    next_step="Next: Return to Inbox and keep capture moving.",
+                )
             return
 
         self.query_one("#coach-panel", Vertical).display = True
@@ -277,6 +292,8 @@ class ProcessScreen(FlowScreen):
 
     def _next_step_hint(self, stage: int) -> str:
         """Return one-step-next guidance for process momentum."""
+        if stage == 4 and self._first_run_focus_bridge_pending:
+            return "Next: Press Enter to launch Focus mode."
         return {
             1: "Next: Press 2 to move to Clustering.",
             2: "Next: Press 3 to move to 2-Min Drill.",
@@ -364,7 +381,12 @@ class ProcessScreen(FlowScreen):
         elif item:
             self.action_skip()
         else:
-            self.action_go_back()
+            if self._first_run_focus_bridge_pending:
+                await asyncio.to_thread(mark_first_value_completed)
+                self._first_run_focus_bridge_pending = False
+                self.action_start_focus()
+            else:
+                self.action_go_back()
 
     def action_cursor_down(self) -> None:
         """Move cursor down in lists."""
@@ -531,6 +553,10 @@ class ProcessScreen(FlowScreen):
     def action_go_back(self) -> None:
         """Return to previous screen."""
         self.app.pop_screen()
+
+    def action_start_focus(self) -> None:
+        """Launch Focus mode from process completion."""
+        self.app.push_screen(FocusScreen())
 
     def action_show_help(self) -> None:
         """Show help toast."""
