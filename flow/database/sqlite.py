@@ -2,7 +2,8 @@
 
 import json
 import sqlite3
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -58,6 +59,7 @@ class SqliteDB:
             self._migrate_add_estimated_duration(conn)
             # Migration: add updated_at column if missing
             self._migrate_add_updated_at(conn)
+            self._init_index_jobs(conn)
             conn.commit()
 
     def _migrate_add_estimated_duration(self, conn: sqlite3.Connection) -> None:
@@ -76,6 +78,33 @@ class SqliteDB:
             conn.execute(
                 "UPDATE items SET updated_at = created_at WHERE updated_at IS NULL"
             )
+
+    def _init_index_jobs(self, conn: sqlite3.Connection) -> None:
+        """Create durable index queue table for background semantic indexing."""
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS index_jobs (
+                    id TEXT PRIMARY KEY,
+                    resource_id TEXT NOT NULL,
+                    content_type TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    title TEXT,
+                    summary TEXT,
+                    status TEXT NOT NULL,
+                    error TEXT,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_index_jobs_status_created "
+                "ON index_jobs(status, created_at)"
+            )
+        except sqlite3.OperationalError:
+            # Read-only databases (e.g., certain test harnesses) should still load.
+            return
 
     def insert_inbox(self, item: Item) -> None:
         """Insert a single inbox item (type=inbox, status=active)."""
@@ -250,6 +279,56 @@ class SqliteDB:
             query += " ORDER BY created_at ASC"
             rows = conn.execute(query, params).fetchall()
         return [_row_to_item(r) for r in rows]
+
+    def enqueue_index_job(
+        self,
+        resource_id: str,
+        content_type: str,
+        source: str,
+        title: Optional[str] = None,
+        summary: Optional[str] = None,
+    ) -> str:
+        """Enqueue a background semantic-indexing job."""
+        job_id = str(uuid.uuid4())
+        now = _iso(datetime.now(timezone.utc))
+        with sqlite3.connect(self._path) as conn:
+            conn.execute(
+                """
+                INSERT INTO index_jobs (
+                    id, resource_id, content_type, source, title, summary,
+                    status, error, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?)
+                """,
+                (job_id, resource_id, content_type, source, title, summary, now, now),
+            )
+            conn.commit()
+        return job_id
+
+    def list_index_jobs(self, status: str = "pending", limit: int = 20) -> list[dict]:
+        """List queued indexing jobs by status."""
+        with sqlite3.connect(self._path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT * FROM index_jobs WHERE status = ? ORDER BY created_at ASC LIMIT ?",
+                (status, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def update_index_job_status(
+        self, job_id: str, status: str, error: Optional[str] = None
+    ) -> None:
+        """Update queue job status and optional error string."""
+        with sqlite3.connect(self._path) as conn:
+            conn.execute(
+                """
+                UPDATE index_jobs
+                SET status = ?, error = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (status, error, _iso(datetime.now(timezone.utc)), job_id),
+            )
+            conn.commit()
 
 
 def _row_to_item(row: sqlite3.Row) -> Item:

@@ -1,5 +1,7 @@
 """Review screen: stale items, someday suggestions, weekly report."""
 
+import asyncio
+
 from textual.binding import Binding
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
@@ -56,7 +58,7 @@ class ReviewScreen(Screen):
 
     def on_mount(self) -> None:
         """Initialize review screen."""
-        self._show_stale()
+        asyncio.create_task(self._show_stale_async())
 
     def _update_tabs(self) -> None:
         """Update tab visual states."""
@@ -81,7 +83,6 @@ class ReviewScreen(Screen):
         """Show stale items view."""
         self._mode = "stale"
         self._update_tabs()
-        self._stale = self._engine.get_stale(days=14)
 
         title = self.query_one("#review-title", Static)
         subtitle = self.query_one("#review-subtitle", Static)
@@ -112,7 +113,6 @@ class ReviewScreen(Screen):
         """Show someday suggestions view."""
         self._mode = "someday"
         self._update_tabs()
-        self._someday = self._engine.get_someday_suggestions()
 
         title = self.query_one("#review-title", Static)
         subtitle = self.query_one("#review-subtitle", Static)
@@ -207,6 +207,10 @@ class ReviewScreen(Screen):
 
     def action_archive(self) -> None:
         """Archive the selected stale item."""
+        asyncio.create_task(self._archive_async())
+
+    async def _archive_async(self) -> None:
+        """Archive selected stale item off the main thread."""
         if self._mode != "stale" or not self._stale:
             return
         opt_list = self.query_one("#review-list", OptionList)
@@ -214,18 +218,22 @@ class ReviewScreen(Screen):
             idx = opt_list.highlighted
             if idx is not None and 0 <= idx < len(self._stale):
                 item = self._stale[idx]
-                self._engine.archive_item(item.id)
+                await asyncio.to_thread(self._engine.archive_item, item.id)
                 self.notify(
                     f"🗑️ Archived: {item.title[:30]}...",
                     severity="warning",
                     timeout=2,
                 )
-                self._show_stale()
+                await self._show_stale_async()
         except (ValueError, TypeError, IndexError):
             pass
 
     def action_resurface(self) -> None:
         """Resurface the selected someday item."""
+        asyncio.create_task(self._resurface_async())
+
+    async def _resurface_async(self) -> None:
+        """Resurface selected someday item off the main thread."""
         if self._mode != "someday" or not self._someday:
             return
         opt_list = self.query_one("#review-list", OptionList)
@@ -233,36 +241,66 @@ class ReviewScreen(Screen):
             idx = opt_list.highlighted
             if idx is not None and 0 <= idx < len(self._someday):
                 item = self._someday[idx]
-                self._engine.resurface_item(item.id)
+                await asyncio.to_thread(self._engine.resurface_item, item.id)
                 self.notify(
                     f"🔄 Resurfaced: {item.title[:30]}...",
                     severity="information",
                     timeout=2,
                 )
-                self._show_someday()
+                await self._show_someday_async()
         except (ValueError, TypeError, IndexError):
             pass
 
     def action_next_section(self) -> None:
         """Cycle to next section."""
         if self._mode == "stale":
-            self._show_someday()
+            asyncio.create_task(self._show_someday_async())
         elif self._mode == "someday":
-            self._show_report()
+            asyncio.create_task(self._show_report_async())
         else:
-            self._show_stale()
+            asyncio.create_task(self._show_stale_async())
 
     def action_show_stale(self) -> None:
         """Show stale items."""
-        self._show_stale()
+        asyncio.create_task(self._show_stale_async())
 
     def action_show_someday(self) -> None:
         """Show someday items."""
-        self._show_someday()
+        asyncio.create_task(self._show_someday_async())
 
     def action_show_report(self) -> None:
         """Show weekly report."""
-        self._show_report()
+        asyncio.create_task(self._show_report_async())
+
+    async def _show_stale_async(self) -> None:
+        stale = await asyncio.to_thread(self._engine.get_stale, 14)
+        if not self.is_mounted:
+            return
+        self._stale = stale
+        self._show_stale()
+
+    async def _show_someday_async(self) -> None:
+        someday = await asyncio.to_thread(self._engine.get_someday_suggestions)
+        if not self.is_mounted:
+            return
+        self._someday = someday
+        self._show_someday()
+
+    async def _show_report_async(self) -> None:
+        report = await asyncio.to_thread(self._engine.weekly_report)
+        if not self.is_mounted:
+            return
+        self._mode = "report"
+        self._update_tabs()
+        title = self.query_one("#review-title", Static)
+        subtitle = self.query_one("#review-subtitle", Static)
+        title.update("📊  Weekly Report")
+        subtitle.update("Completed this week.")
+        opt_list = self.query_one("#review-list", OptionList)
+        detail = self.query_one("#review-detail", Static)
+        opt_list.display = False
+        detail.display = True
+        detail.update(self._format_report(report))
 
     def action_go_inbox(self) -> None:
         """Navigate to inbox."""

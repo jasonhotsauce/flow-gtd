@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     # Paths (local-first data stored in ~/.flow/data/)
     db_path: Path = _data_dir / "flow.db"
+    rag_store_path: Path = _data_dir / "chroma"
 
     # LLM Provider Settings
     # Primary config is in ~/.flow/config.toml, env vars provide override
@@ -46,6 +47,9 @@ class Settings(BaseSettings):
     # Feature flags
     enable_ai: bool = True
     enable_sync: bool = True
+    rag_enabled: bool = True
+    rag_top_k: int = 3
+    rag_debounce_ms: int = 300
 
     # Logging
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

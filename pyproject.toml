@@ -26,6 +26,9 @@ tomli = {version = "^2.0.0", python = "<3.11"}  # TOML config (required for Pyth
 
 # Web content extraction for resource capture (optional)
 trafilatura = {version = "^2.0.0", optional = true}
+pypdf = {version = "^5.4.0", optional = true}
+chromadb = {version = "^1.0.15", optional = true}
+sentence-transformers = {version = "^5.0.0", optional = true}
 
 # Configuration
 pydantic-settings = "^2.7.0"
@@ -38,7 +41,8 @@ openai = ["openai"]
 ollama = ["httpx"]
 all-llm = ["openai", "httpx"]
 web = ["trafilatura"]  # For URL content fetching
-all = ["openai", "httpx", "trafilatura"]
+rag = ["chromadb", "sentence-transformers", "pypdf"]
+all = ["openai", "httpx", "trafilatura", "chromadb", "sentence-transformers", "pypdf"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

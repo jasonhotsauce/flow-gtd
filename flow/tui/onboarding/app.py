@@ -29,8 +29,17 @@ class OnboardingApp(App):
         super().__init__()
         # Shared state across screens
         self.selected_provider: str = "gemini"
-        self.credentials: dict = {}
+        self.credentials: dict[str, str] = {}
+        self.first_capture_outcome: dict[str, str] | None = None
 
     def on_mount(self) -> None:
         """Push the first screen on mount."""
         self.push_screen(ProviderSelectScreen())
+
+    def get_onboarding_result(self) -> dict[str, object]:
+        """Return structured onboarding outcome for follow-up steps."""
+        return {
+            "completed": True,
+            "provider": self.selected_provider,
+            "first_capture": self.first_capture_outcome,
+        }

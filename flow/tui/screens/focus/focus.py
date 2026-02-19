@@ -100,14 +100,24 @@ class FocusScreen(Screen):
             # Load resources for current task off main thread
             if self._current_task is not None and self.is_mounted:
                 try:
-                    resources = await asyncio.to_thread(
-                        self._dispatcher.get_resources_for_task, self._current_task
+                    hits = await asyncio.to_thread(
+                        self._dispatcher.get_semantic_resources_for_task,
+                        self._current_task,
+                        3,
                     )
                     if self.is_mounted:
                         sidecar = self.query_one("#focus-resources", ResourceContextPanel)
-                        sidecar.show_resources(
-                            resources, task_tags=self._current_task.context_tags
-                        )
+                        if hits:
+                            sidecar.show_semantic_hits(
+                                hits, task_tags=self._current_task.context_tags
+                            )
+                        else:
+                            resources = await asyncio.to_thread(
+                                self._dispatcher.get_resources_for_task, self._current_task
+                            )
+                            sidecar.show_resources(
+                                resources, task_tags=self._current_task.context_tags
+                            )
                 except (IOError, ValueError, RuntimeError):
                     if self.is_mounted:
                         self.query_one(

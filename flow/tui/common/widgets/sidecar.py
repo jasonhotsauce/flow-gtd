@@ -4,6 +4,7 @@ from typing import Optional
 
 from textual.widgets import Static
 
+from flow.database.vector_store import VectorHit
 from flow.models import Resource
 
 
@@ -83,6 +84,35 @@ class ResourceContextPanel(Static):
         if len(resources) > 5:
             lines.append(f"   ... and {len(resources) - 5} more")
 
+        self.update("\n".join(lines))
+
+    def show_semantic_hits(
+        self,
+        hits: list[VectorHit],
+        task_tags: Optional[list[str]] = None,
+    ) -> None:
+        """Render semantic RAG hits."""
+        self._current_tags = task_tags or []
+        if not hits:
+            self.show_resources([], task_tags=task_tags)
+            return
+        lines = ["🔗 Related Resources", "────────────────────────────"]
+        if self._current_tags:
+            lines.append(f"Tags: {', '.join(self._current_tags)}")
+        lines.append("")
+        for hit in hits[:5]:
+            score_pct = int(hit.score * 100)
+            title = hit.title or hit.source
+            if len(title) > 40:
+                title = title[:37] + "..."
+            snippet = hit.snippet.strip() if hit.snippet else ""
+            if len(snippet) > 110:
+                snippet = snippet[:107] + "..."
+            lines.append(f"📄 {title}")
+            lines.append(f"   score: {score_pct}%")
+            if snippet:
+                lines.append(f"   {snippet}")
+            lines.append("")
         self.update("\n".join(lines))
 
     def show_error(self, message: str = "Failed to load") -> None:

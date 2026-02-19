@@ -14,6 +14,19 @@ def engine(temp_db_path: Path) -> Engine:
     return Engine(db_path=temp_db_path)
 
 
+def test_engine_init_does_not_eagerly_init_rag_backend(
+    monkeypatch: pytest.MonkeyPatch, temp_db_path: Path
+) -> None:
+    """Engine startup should not block on vector backend initialization."""
+    import flow.core.rag.service as rag_service
+
+    def _boom(*args: object, **kwargs: object) -> object:
+        raise AssertionError("Chroma backend should not be initialized in Engine.__init__")
+
+    monkeypatch.setattr(rag_service, "ChromaVectorStore", _boom)
+    Engine(db_path=temp_db_path)
+
+
 def test_capture(engine: Engine) -> None:
     """capture creates inbox item and returns it."""
     item = engine.capture("Hello world")
@@ -228,3 +241,32 @@ def test_project_open_tasks_includes_waiting_someday_and_future_deferred(
     assert waiting.id in open_ids
     assert someday.id in open_ids
     assert deferred_until.id in open_ids
+
+
+def test_get_2min_items_prefers_short_estimated_duration(engine: Engine) -> None:
+    """2-min list should prioritize short tasks over long ones."""
+    short_1 = engine.capture("Reply to quick email")
+    short_2 = engine.capture("Confirm deployment status")
+    long_1 = engine.capture("Write architecture proposal")
+
+    engine.set_item_duration(short_1.id, 5)
+    engine.set_item_duration(short_2.id, 15)
+    engine.set_item_duration(long_1.id, 120)
+    engine.process_start()
+
+    two_min_ids = [item.id for item in engine.get_2min_items()]
+    assert short_1.id in two_min_ids
+    assert short_2.id in two_min_ids
+    assert long_1.id not in two_min_ids
+
+
+def test_two_min_delete_archives_item(engine: Engine) -> None:
+    """2-min workflow should support deleting an item."""
+    item = engine.capture("Drop this task")
+    engine.process_start()
+
+    engine.two_min_delete(item.id)
+    deleted = engine.get_item(item.id)
+
+    assert deleted is not None
+    assert deleted.status == "archived"
