@@ -1,7 +1,9 @@
 # Product Requirements Document: Flow
-**Version**: 1.0.0 (Release Candidate) 
-**Status**: Approved for Development 
-**Tech Stack**: Python (Typer/Textual), SQLite, ChromaDB, Multi-LLM (Gemini/OpenAI/Ollama), PyObjC
+**Version**: 1.0.0 (Living Document) 
+**Status**: Product direction + requirements reference (partially implemented) 
+**Tech Stack**: Python (Typer/Textual), SQLite, optional ChromaDB stack, Multi-LLM (Gemini/OpenAI/Ollama), PyObjC
+
+> Note: This PRD defines target behavior. For implementation-accurate command usage, treat `README.md` as source of truth.
 
 ## 1. Executive Summary
 **Flow** is a **Local-First, AI-Native GTD CLI** tool explicitly designed for Senior Engineering Managers and Architects.
@@ -40,7 +42,7 @@ The system operates on a unidirectional data pipeline: **Ingest (Input) -> Refin
 
 | ID | Feature | Description | Technical Constraints |
 | ---- | ---- | ---- | ---- |
-| A.1 |	**CLI Capture** | flow c <text> 极速写入 SQLite Inbox 表。|	启动延迟 < 100ms。|
+| A.1 | **CLI Capture** | `flow c <text>` writes to the SQLite inbox with minimal friction. | Startup latency target < 100ms. |
 | A.2 | Context Hook | Capture metadata from the active App (Xcode File/Line, Browser URL, Git Branch). | Use NSWorkspace + AppleScript. Store as JSON Payload. |
 | A.3 | Apple Bridge | Background Daemon for bi-directional sync with Apple Reminders. | **Safety Rule**: Move imported Reminders to a "Flow-Imported" list. **NEVER physically delete**. |
 | A.4 | Auto-Index | Automatically download and vectorize content if the capture contains URLs/PDF paths. | Async processing; must not block CLI return. |
@@ -183,7 +185,7 @@ default_model = "llama3.2"
 3. Resilience:
    * Offline Mode: If network fails, AI features (Clustering, Coach) must degrade gracefully (Disable or Prompt Retry), while core CRUD remains functional.
 
-## 6. Implementation Roadmap
+## 6. Implementation Roadmap (Historical)
 
 * Phase 1: Skeleton (Day 1)
   * Initialize poetry, typer, textual.
@@ -196,4 +198,4 @@ default_model = "llama3.2"
   * Implement VectorStore (ChromaDB) and wire up the Sidecar.
 * Phase 4: The Brain (Day 4)
   * Implement ProcessScreen (The Funnel logic).
-  * Integrate Gemini 3 for the "Coach" agent.
+  * Integrate a Gemini-based coach agent.

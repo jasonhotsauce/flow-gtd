@@ -7,7 +7,7 @@ Local-First, AI-Augmented GTD CLI for Senior Engineering Managers (Apple ecosyst
 ### Homebrew (Recommended)
 
 ```bash
-brew tap YOUR_GITHUB_USERNAME/flow
+brew tap <your-github-username>/flow
 brew install flow-gtd
 ```
 
@@ -16,12 +16,22 @@ brew install flow-gtd
 For development or contributing:
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USERNAME/flow-gtd.git
+git clone https://github.com/<your-github-username>/flow-gtd.git
 cd flow-gtd
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip3 install poetry
-make install
+poetry install
+```
+
+Optional extras:
+
+```bash
+# URL extraction support for `flow save <url>`
+poetry install --extras "web"
+
+# Local RAG sidecar stack (ChromaDB + embeddings + PDF parsing)
+poetry install --extras "rag"
 ```
 
 ## Environment
@@ -29,13 +39,17 @@ make install
 | Variable | Description |
 |----------|-------------|
 | `FLOW_DB_PATH` | SQLite path (default: `data/flow.db`) |
-| `FLOW_GEMINI_API_KEY` or `GOOGLE_API_KEY` | Gemini API key (optional; AI features need it) |
+| `FLOW_LLM_PROVIDER` | LLM provider override (`gemini`, `openai`, `ollama`) |
+| `FLOW_GEMINI_API_KEY` or `GOOGLE_API_KEY` | Gemini API key |
+| `FLOW_OPENAI_API_KEY` | OpenAI API key (when provider is `openai`) |
+| `FLOW_OLLAMA_BASE_URL` | Ollama base URL (default: `http://localhost:11434`) |
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `flow c <text>` / `flow capture <text>` | Quick capture to inbox (auto-tagged for resource matching; use `-p` or `--tags` to override) |
+| `flow c <text>` | Quick capture alias (supports `--private/-p`) |
+| `flow capture <text>` | Full capture command (supports `--private/-p` and `--tags/-t`) |
 | `flow save <url\|file\|text>` | Save a resource (URL, file path, or text) with automatic LLM tagging; use `--private` for manual tags |
 | `flow resources` | List saved resources (optional `--tag`, `--limit`) |
 | `flow tags` | List all tags with usage counts |
@@ -44,7 +58,9 @@ make install
 | `flow next` | Launch Action screen (next actions + Sidecar: resources matched by task tags) |
 | `flow projects` | Launch Projects screen (GTD project list and proceed) |
 | `flow sync` | Sync Apple Reminders into Flow (macOS only) |
+| `flow sync-status` | Check Reminders permission status |
 | `flow review` | Launch Weekly Review (Stale, Someday, Report) |
+| `flow focus` | Launch Focus Mode (calendar-aware task selection) |
 | `flow report` | Print weekly report to stdout |
 | `flow version` | Show version |
 
@@ -61,7 +77,7 @@ make install
 - **CLI**: Typer  
 - **TUI**: Textual  
 - **DB**: SQLite (local)  
-- **LLM**: Google GenAI (Gemini 2.0 Flash)  
+- **LLM**: Multi-provider adapter (Gemini default, OpenAI/Ollama optional)  
 - **Sync**: PyObjC EventKit (macOS)
 
 ## Tests

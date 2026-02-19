@@ -10,7 +10,7 @@ This repository is configured for Codex-first collaboration.
 ## Project Snapshot
 
 - Product: Local-first, AI-augmented GTD CLI for macOS users.
-- Core stack: Python 3.11+, `typer`, `textual`, raw `sqlite3`, PyObjC EventKit.
+- Core stack: Python 3.11+, `typer`, `textual`, raw `sqlite3`, optional ChromaDB, PyObjC EventKit.
 - LLM integration: `flow/utils/llm/` (Gemini, OpenAI, Ollama), config in `~/.flow/config.toml`.
 
 ## Architecture Guardrails
@@ -33,7 +33,8 @@ This repository is configured for Codex-first collaboration.
   - Ensure dependency tooling exists in venv:
     - `pip3 install poetry`
   - Install project dependencies:
-    - `make install`
+    - `poetry install` (preferred)
+    - `make install` (wrapper target, equivalent for default setup)
   - After activation, use `python` / `pytest` from that active environment.
   - This project uses Poetry for dependency management; use `poetry` commands
     (for example `poetry install`, `poetry add`, `poetry update`) when changing dependencies.
@@ -53,6 +54,14 @@ This repository is configured for Codex-first collaboration.
   - Security/privacy, architecture direction, placement, typing, async safety, and tests.
 - Run targeted tests for touched behavior when practical:
   - `pytest tests/unit -v`
+
+## Documentation Sync (Mandatory)
+
+- If you change user-facing behavior, update docs in the same task:
+  - CLI command behavior/options -> `README.md` and any affected docs under `docs/features/`.
+  - Workflow/architecture behavior -> `docs/PRD.md` and/or `docs/patterns-and-lessons.md`.
+- Keep `README.md` implementation-accurate; move speculative roadmap details to `docs/PRD.md`.
+- Prefer concrete placeholders in docs (for example `<your-github-username>`) over unresolved template literals.
 
 ## Debugging Guardrails (Mandatory)
 

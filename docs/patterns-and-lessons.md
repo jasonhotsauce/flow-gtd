@@ -1,6 +1,6 @@
-# Flow: Patterns and Lessons (Cursor Rules)
+# Flow: Patterns and Lessons (Codex Rules)
 
-This doc captures implementation patterns and lessons learned so Cursor and developers can follow consistent rules when changing `flow/` or `tests/`.
+This doc captures implementation patterns and lessons learned so Codex and developers can follow consistent rules when changing `flow/` or `tests/`.
 
 ---
 
@@ -40,12 +40,11 @@ So: any feature that adds tags to **tasks** (e.g. auto-tagging on capture) must 
 
 ## 3. Code review requirement
 
-**All changes under `flow/` or `tests/` must pass the project code reviewer** before being considered complete. See:
+**All changes under `flow/` or `tests/` must run the Flow code-review skill** before being considered complete. See:
 
-- `.cursor/rules/code-review-required.mdc` — when review is required.
-- `.cursor/agents/code-reviewer.md` — checklist (security, architecture, code quality, Flow-specific rules).
+- `.codex/skills/code-review-flow/SKILL.md` — required review checklist and acceptance bar.
 
-Run `git diff` on modified files and apply that checklist (or invoke the code-reviewer agent) before finalizing.
+Run `git diff` on modified files and apply that checklist before finalizing.
 
 ---
 
