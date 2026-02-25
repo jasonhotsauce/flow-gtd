@@ -1,7 +1,7 @@
 """[Layer: Presentation] Typer CLI Commands."""
 
 import re
-import threading
+import multiprocessing
 import uuid
 from importlib.metadata import PackageNotFoundError, version as get_package_version
 from pathlib import Path
@@ -39,6 +39,20 @@ def _kickoff_index_worker(db_path: Path) -> None:
     """Process pending index jobs asynchronously."""
     try:
         Engine(db_path=db_path).process_index_jobs(limit=20)
+    except Exception:
+        # Best-effort background indexing; foreground save must not fail.
+        return
+
+
+def _start_index_worker_process(db_path: Path) -> None:
+    """Start queue processing in a detached process that outlives CLI exit."""
+    try:
+        process = multiprocessing.Process(
+            target=_kickoff_index_worker,
+            args=(db_path,),
+            daemon=False,
+        )
+        process.start()
     except Exception:
         # Best-effort background indexing; foreground save must not fail.
         return
@@ -550,9 +564,7 @@ def save(
             title=resource.title,
             summary=resource.summary,
         )
-        threading.Thread(
-            target=_kickoff_index_worker, args=(settings.db_path,), daemon=True
-        ).start()
+        _start_index_worker_process(settings.db_path)
     except Exception:
         pass
 

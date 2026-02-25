@@ -8,7 +8,8 @@ from typing import Any
 import pytest
 import typer
 
-from flow.cli import _launch_tui, main
+import flow.cli as cli
+from flow.cli import _launch_tui, main, save
 
 
 def test_main_without_subcommand_launches_default_tui(monkeypatch: Any) -> None:
@@ -169,3 +170,68 @@ def test_launch_tui_exits_when_onboarding_not_completed(monkeypatch: Any) -> Non
         _launch_tui()
 
     assert run_calls == []
+
+
+def test_save_spawns_index_worker_process(monkeypatch: Any, tmp_path: Any) -> None:
+    """Save should enqueue indexing and start detached process worker."""
+    db_path = tmp_path / "flow.db"
+    enqueue_calls: list[dict[str, object]] = []
+    process_inits: list[dict[str, object]] = []
+    process_starts: list[bool] = []
+
+    class _FakeResourceDB:
+        def __init__(self, _db_path: object) -> None:
+            return
+
+        def init_db(self) -> None:
+            return
+
+        def get_resource_by_source(self, _source: str) -> None:
+            return None
+
+        def get_tag_names(self) -> list[str]:
+            return []
+
+        def insert_resource(self, _resource: object) -> None:
+            return
+
+        def increment_tag_usage(self, _tag: str) -> None:
+            return
+
+    class _FakeEngine:
+        def __init__(self, db_path: object = None) -> None:
+            self._db_path = db_path
+
+        def enqueue_resource_index(self, **kwargs: object) -> str:
+            enqueue_calls.append(kwargs)
+            return "job-1"
+
+    class _FakeProcess:
+        def __init__(
+            self,
+            *,
+            target: object,
+            args: tuple[object, ...],
+            daemon: bool,
+        ) -> None:
+            process_inits.append({"target": target, "args": args, "daemon": daemon})
+
+        def start(self) -> None:
+            process_starts.append(True)
+
+    monkeypatch.setattr("flow.cli.get_settings", lambda: SimpleNamespace(db_path=db_path))
+    monkeypatch.setattr("flow.cli.ResourceDB", _FakeResourceDB)
+    monkeypatch.setattr("flow.cli.Engine", _FakeEngine)
+    monkeypatch.setattr("flow.cli.multiprocessing.Process", _FakeProcess)
+
+    save(content="A plain text note", tags="reference")
+
+    assert len(enqueue_calls) == 1
+    assert process_inits == [
+        {
+            "target": cli._kickoff_index_worker,
+            "args": (db_path,),
+            "daemon": False,
+        }
+    ]
+    assert process_starts == [True]
