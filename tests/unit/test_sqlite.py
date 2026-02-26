@@ -1,5 +1,7 @@
 """Unit tests for SQLite layer."""
 
+from datetime import datetime, timedelta, timezone
+
 from flow.database.sqlite import SqliteDB
 from flow.models import Item
 
@@ -94,6 +96,36 @@ def test_list_inbox_excludes_deferred_and_project_assigned_items(db: SqliteDB) -
     items = db.list_inbox()
     assert len(items) == 1
     assert items[0].id == "visible"
+
+
+def test_list_stale_excludes_completed_items(db: SqliteDB) -> None:
+    """list_stale should not include done items in weekly review stale list."""
+    old = datetime.now(timezone.utc) - timedelta(days=30)
+
+    db.insert_inbox(
+        Item(
+            id="stale-open",
+            type="inbox",
+            title="Stale open",
+            status="active",
+            created_at=old,
+        )
+    )
+    db.insert_inbox(
+        Item(
+            id="stale-done",
+            type="inbox",
+            title="Stale done",
+            status="done",
+            created_at=old,
+        )
+    )
+
+    stale_items = db.list_stale(days=14)
+    stale_ids = {item.id for item in stale_items}
+
+    assert "stale-open" in stale_ids
+    assert "stale-done" not in stale_ids
 
 
 def test_index_job_roundtrip(db: SqliteDB) -> None:

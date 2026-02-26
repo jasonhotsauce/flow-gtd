@@ -59,7 +59,7 @@ poetry install --extras "rag"
 | `flow projects` | Launch Projects screen (GTD project list and proceed) |
 | `flow sync` | Sync Apple Reminders into Flow (macOS only) |
 | `flow sync-status` | Check Reminders permission status |
-| `flow review` | Launch Weekly Review (Stale, Someday, Report) |
+| `flow review` | Launch Weekly Review (Stale, Someday, Report; contextual actions per section) |
 | `flow focus` | Launch Focus Mode (calendar-aware task selection) |
 | `flow report` | Print weekly report to stdout |
 | `flow version` | Show version |

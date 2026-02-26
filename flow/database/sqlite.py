@@ -226,7 +226,7 @@ class SqliteDB:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 "SELECT * FROM items WHERE created_at < datetime('now', ?) "
-                "AND status != 'archived' ORDER BY created_at ASC",
+                "AND status NOT IN ('archived', 'done') ORDER BY created_at ASC",
                 (f"-{days} days",),
             ).fetchall()
         return [_row_to_item(r) for r in rows]

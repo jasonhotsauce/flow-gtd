@@ -316,9 +316,22 @@ class ReviewScreen(FlowScreen):
 
     def action_show_help(self) -> None:
         """Show help toast."""
+        mode_actions = "a: Archive"
+        if self._mode == "someday":
+            mode_actions = "r: Resurface"
+        elif self._mode == "report":
+            mode_actions = "-"
+
         self.notify(
-            "1/2/3: Sections │ Tab: Next │ a: Archive │ r: Resurface\n"
+            f"1/2/3: Sections │ Tab: Next │ {mode_actions}\n"
             "j/k: Navigate │ i: Inbox │ P: Projects │ Esc: Back │ q: Quit",
             title="Help",
             timeout=5,
         )
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Hide mode-specific actions when they are not available."""
+        del parameters  # Signature required by Textual.
+        if action == "resurface":
+            return self._mode == "someday"
+        return None
