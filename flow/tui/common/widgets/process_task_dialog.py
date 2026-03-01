@@ -24,8 +24,8 @@ class ProcessTaskDialog(FlowModalScreen[dict[str, str] | None]):
     #process-task-dialog {
         width: 56;
         height: auto;
-        border: round $primary;
-        background: $surface;
+        border: round #3f5a73;
+        background: #121922;
         padding: 1 2;
     }
 
@@ -33,6 +33,7 @@ class ProcessTaskDialog(FlowModalScreen[dict[str, str] | None]):
         content-align: center middle;
         margin-bottom: 1;
         text-style: bold;
+        color: #7ad0de;
     }
     """
 

@@ -1,0 +1,39 @@
+/* Shared design tokens for all TUI stylesheets. */
+
+$bg-0: #0d1117;
+$bg-1: #121922;
+$bg-2: #18222d;
+$bg-3: #1e2b37;
+
+$line-0: #253241;
+$line-1: #304254;
+$line-strong: #3f5a73;
+
+$text-0: #e6eef7;
+$text-1: #b8c6d8;
+$text-2: #8ea2b7;
+
+$accent: #36b3c9;
+$accent-soft: #7ad0de;
+$ok: #43b581;
+$warn: #f2b84b;
+$err: #e36d6d;
+$info: #4f9fe6;
+
+/* Compatibility aliases for existing selectors/components. */
+$primary: $accent;
+$primary-light: $accent-soft;
+$primary-dark: #0f3141;
+$success: $ok;
+$success-light: #7cd0a8;
+$warning: $warn;
+$warning-light: #f6ca78;
+$danger: $err;
+$surface: $bg-0;
+$surface-light: $bg-1;
+$surface-lighter: $bg-2;
+$text: $text-0;
+$text-muted: $text-1;
+$text-dim: $text-2;
+$border: $line-0;
+$border-focus: $accent;

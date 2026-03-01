@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING
 
 from textual.app import ComposeResult
-from textual.containers import Container, Vertical
+from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Footer, Header, RadioButton, RadioSet, Static
 
 from flow.tui.common.base_screen import FlowScreen
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 class ProviderSelectScreen(FlowScreen):
     """Select an LLM provider for Flow GTD."""
 
-    CSS_PATH = "provider.tcss"
+    CSS_PATH = ["../../common/ops_tokens.tcss", "provider.tcss"]
 
     BINDINGS = compose_bindings(
         QUIT_ESCAPE_BINDING,
@@ -39,26 +39,31 @@ class ProviderSelectScreen(FlowScreen):
     def compose(self) -> ComposeResult:
         """Build the provider selection UI."""
         yield Header()
-        with Container(id="provider-container"):
-            yield Static("Welcome to Flow GTD", id="welcome-title")
-            yield Static(
-                "Select your AI provider to get started",
-                id="welcome-subtitle",
-            )
-            with Vertical(id="provider-form"):
-                yield Static("Choose Provider", id="provider-label")
-                with RadioSet(id="provider-radio"):
-                    for i, provider in enumerate(PROVIDERS):
-                        # First provider (Gemini) is selected by default
-                        yield RadioButton(
-                            provider.display_name,
-                            id=f"provider-{provider.id}",
-                            value=(i == 0),
+        with Container(id="onboarding-shell"):
+            yield Static("Step 1/5  |  LLM Provider", id="onboarding-progress")
+            with Horizontal(id="onboarding-layout"):
+                with Vertical(id="onboarding-main-pane"):
+                    yield Static("Configure AI Provider", id="onboarding-title")
+                    yield Static(
+                        "Select the model provider that powers Flow guidance.",
+                        id="onboarding-subtitle",
+                    )
+                    with Vertical(id="provider-form", classes="onboarding-panel"):
+                        yield Static("Provider", id="provider-label", classes="section-title")
+                        with RadioSet(id="provider-radio"):
+                            for i, provider in enumerate(PROVIDERS):
+                                yield RadioButton(
+                                    provider.display_name,
+                                    id=f"provider-{provider.id}",
+                                    value=(i == 0),
+                                )
+                with Vertical(id="onboarding-ops-pane"):
+                    with Vertical(classes="onboarding-side-panel"):
+                        yield Static("DETAILS", classes="section-title")
+                        yield Static(
+                            PROVIDER_HINTS["gemini"],
+                            id="provider-hint",
                         )
-                yield Static(
-                    PROVIDER_HINTS["gemini"],
-                    id="provider-hint",
-                )
         yield Footer()
 
     def on_mount(self) -> None:
@@ -98,10 +103,10 @@ class ProviderSelectScreen(FlowScreen):
         onboarding_app: OnboardingApp = self.app  # type: ignore[assignment]
         onboarding_app.selected_provider = provider_id
 
-        # Push credentials screen
-        from flow.tui.onboarding.screens.credentials import CredentialsScreen
+        # Push storage choice screen
+        from flow.tui.onboarding.screens.resource_storage import ResourceStorageScreen
 
-        self.app.push_screen(CredentialsScreen())
+        self.app.push_screen(ResourceStorageScreen())
 
     def action_quit(self) -> None:
         """Exit the application."""

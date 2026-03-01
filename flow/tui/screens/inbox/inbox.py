@@ -8,6 +8,7 @@ from rich.text import Text
 from textual.binding import Binding
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
+from textual.css.query import NoMatches
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
@@ -23,12 +24,16 @@ from flow.tui.common.widgets.project_picker_dialog import ProjectPickerDialog
 class InboxScreen(FlowScreen):
     """Screen showing inbox items. Default landing for TUI."""
 
-    CSS_PATH = "inbox.tcss"
+    CSS_PATH = ["../../common/ops_tokens.tcss", "inbox.tcss"]
 
     BINDINGS = with_global_bindings(
         ("enter", "open_process_menu", "Process"),
         ("d", "delete_item", "Delete"),
         ("f", "defer_item", "Defer"),
+        ("1", "focus_list_panel", "List"),
+        ("2", "focus_detail_panel", "Detail"),
+        ("l", "focus_list_panel", "List"),
+        ("e", "focus_detail_panel", "Detail"),
         ("p", "go_process", "Process"),
         ("g", "go_projects", "Projects"),
         Binding("a", "go_action", "Actions", show=False),
@@ -44,6 +49,8 @@ class InboxScreen(FlowScreen):
 
     def compose(self) -> ComposeResult:
         yield Header()
+        with Container(id="ops-status-strip"):
+            yield Static("INBOX  |  Capture Triage  |  Queue status visible in header", id="ops-status-text")
         with Container(id="inbox-header"):
             yield Static("📥 Inbox", id="inbox-title")
             yield Static("", id="inbox-count")
@@ -51,10 +58,11 @@ class InboxScreen(FlowScreen):
             yield Static("", id="inbox-stats-content")
         with Horizontal(id="inbox-content"):
             with Vertical(id="inbox-left"):
+                yield Static("[1] List (l)", id="inbox-list-title")
                 with Container(id="inbox-list-container"):
                     yield OptionList(id="inbox-list")
             with Vertical(id="inbox-right"):
-                yield Static("📄 Task", id="inbox-detail-title")
+                yield Static("[2] 📄 Detail (e)", id="inbox-detail-title")
                 with ScrollableContainer(id="inbox-detail-scroll"):
                     yield Static("", id="inbox-detail-body")
                 yield Static("", id="inbox-detail-tags")
@@ -66,7 +74,7 @@ class InboxScreen(FlowScreen):
             )
         with Container(id="inbox-help"):
             yield Static(
-                "j/k: Navigate │ Enter: Process Menu │ d: Delete │ f: Defer │ p: Process │ g: Projects │ ?: Help",
+                "j/k: Navigate │ 1/2 or l/e: Panels │ Enter: Process Menu │ d: Delete │ f: Defer │ p: Process │ g: Projects │ ?: Help",
                 id="inbox-help-text",
             )
         yield Footer()
@@ -134,7 +142,11 @@ class InboxScreen(FlowScreen):
         """Reload inbox rows in background, then render."""
         self._items = await asyncio.to_thread(self._engine.list_inbox)
         if self.is_mounted:
-            self._refresh_list()
+            try:
+                self._refresh_list()
+            except NoMatches:
+                # Screen can unmount while async refresh completes.
+                return
 
     def _is_today(self, item: Item) -> bool:
         """Check if item was created today."""
@@ -184,6 +196,14 @@ class InboxScreen(FlowScreen):
         """Move cursor up in list."""
         opt_list = self.query_one("#inbox-list", OptionList)
         opt_list.action_cursor_up()
+
+    def action_focus_list_panel(self) -> None:
+        """Focus the list panel."""
+        self.query_one("#inbox-list", OptionList).focus()
+
+    def action_focus_detail_panel(self) -> None:
+        """Focus the detail panel."""
+        self.query_one("#inbox-detail-scroll", ScrollableContainer).focus()
 
     def _selected_item(self) -> Item | None:
         """Return currently highlighted inbox item."""

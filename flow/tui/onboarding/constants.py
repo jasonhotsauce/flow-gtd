@@ -13,6 +13,15 @@ class ProviderMeta:
     api_key_url: Optional[str]
 
 
+@dataclass(frozen=True)
+class ResourceStorageOption:
+    """Plain-language storage choice shown in onboarding."""
+
+    id: str
+    display_name: str
+    hint: str
+
+
 # Provider definitions used across onboarding screens
 PROVIDERS: list[ProviderMeta] = [
     ProviderMeta("gemini", "Gemini (Google)", "https://aistudio.google.com/apikey"),
@@ -32,3 +41,17 @@ PROVIDER_HINTS: dict[str, str] = {
 
 # Validation prompt for testing provider connectivity
 VALIDATION_PROMPT = "Say 'ok' if you can read this."
+
+
+RESOURCE_STORAGE_OPTIONS: list[ResourceStorageOption] = [
+    ResourceStorageOption(
+        "flow-library",
+        "Flow Library",
+        "Built-in local storage managed by Flow",
+    ),
+    ResourceStorageOption(
+        "obsidian-vault",
+        "Obsidian Vault",
+        "Save resources as notes in your Obsidian vault",
+    ),
+]

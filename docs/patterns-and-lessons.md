@@ -56,8 +56,9 @@ Run `git diff` on modified files and apply that checklist before finalizing.
 | Capture + auto-tag   | `flow/core/engine.py`: `capture()`, `_run_auto_tagging()`, `_schedule_auto_tagging(..., block=...)` |
 | Tag extraction (LLM)| `flow/core/tagging.py`: `extract_tags()` |
 | Task tags storage    | Item `context_tags`; persisted in `flow/database/sqlite.py` (items table) |
-| Tag vocabulary       | `flow/database/resources.py`: `tags` table, `increment_tag_usage()`, `list_tags()` |
-| `flow tags` command  | `flow/cli.py`: `list_tags()` → `ResourceDB.list_tags()` |
+| Tag vocabulary       | Provider-specific via `ResourceStore.list_tags()` |
+| Resource storage     | `flow/core/resources/`: provider contract + factory + providers |
+| `flow tags` command  | `flow/cli.py`: `list_tags()` → selected `ResourceStore` |
 
 ---
 

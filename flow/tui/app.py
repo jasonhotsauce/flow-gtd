@@ -17,7 +17,7 @@ class FlowApp(App):
     and a beautiful dark theme.
     """
 
-    CSS_PATH = "common/theme.tcss"
+    CSS_PATH = ["common/ops_tokens.tcss", "common/theme.tcss"]
     TITLE = "Flow GTD"
     SUB_TITLE = "Get Things Done"
 

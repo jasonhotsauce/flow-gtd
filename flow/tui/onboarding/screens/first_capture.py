@@ -28,6 +28,8 @@ class FirstCaptureResult(TypedDict):
 class FirstCaptureScreen(FlowScreen):
     """Collect an optional first capture before entering the main app."""
 
+    CSS_PATH = ["../../common/ops_tokens.tcss", "first_capture.tcss"]
+
     BINDINGS = compose_bindings(
         QUIT_Q_BINDING,
         NAV_DOWN_BINDING,
@@ -40,19 +42,31 @@ class FirstCaptureScreen(FlowScreen):
     def compose(self) -> ComposeResult:
         """Build first-capture UI."""
         yield Header()
-        with Container(id="first-capture-container"):
-            with Vertical(id="first-capture-content"):
-                yield Static("Capture your first thought", id="first-capture-title")
-                yield Static(
-                    "Optional: add something to your inbox now.", id="first-capture-subtitle"
-                )
-                yield Input(
-                    placeholder="Example: Draft Q2 hiring plan",
-                    id="first-capture-input",
-                )
-                with Horizontal(id="first-capture-actions"):
-                    yield Button("Skip", id="skip-btn")
-                    yield Button("Submit", id="submit-btn", variant="primary")
+        with Container(id="onboarding-shell"):
+            yield Static("Step 5/5  |  First Capture", id="onboarding-progress")
+            with Horizontal(id="onboarding-layout"):
+                with Vertical(id="onboarding-main-pane"):
+                    yield Static("Capture First Thought", id="onboarding-title")
+                    yield Static(
+                        "Optional: add one item to your inbox now.",
+                        id="first-capture-subtitle",
+                    )
+                    with Vertical(id="first-capture-content", classes="onboarding-panel"):
+                        yield Static("Quick capture", id="first-capture-title", classes="section-title")
+                        yield Input(
+                            placeholder="Example: Draft Q2 hiring plan",
+                            id="first-capture-input",
+                        )
+                        with Horizontal(id="first-capture-actions"):
+                            yield Button("Skip", id="skip-btn")
+                            yield Button("Submit", id="submit-btn", variant="primary")
+                with Vertical(id="onboarding-ops-pane"):
+                    with Vertical(classes="onboarding-side-panel"):
+                        yield Static("WHY THIS STEP", classes="section-title")
+                        yield Static(
+                            "Starting with one capture confirms your setup and seeds your workflow.",
+                            id="first-capture-tip",
+                        )
         yield Footer()
 
     def on_mount(self) -> None:

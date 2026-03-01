@@ -1,65 +1,35 @@
-/* Inbox Screen Styles
- * The capture triage view - clean, focused inbox list
- */
-
-/* Import theme variables (Textual requires vars in each CSS file) */
-$primary: #7c3aed;
-$primary-light: #a78bfa;
-$success: #10b981;
-$surface: #1e1e2e;
-$surface-light: #313244;
-$text: #cdd6f4;
-$text-muted: #a6adc8;
-$text-dim: #6c7086;
-$border: #45475a;
+/* Inbox - Professional Ops */
 
 InboxScreen {
     layout: vertical;
-    background: $surface;
+    background: #0d1117;
 }
 
-/* Header section with title and count */
 #inbox-header {
     dock: top;
     height: auto;
     padding: 1 2;
-    background: $surface-light;
-    border-bottom: solid $border;
+    background: #121922;
+    border-bottom: solid #253241;
 }
 
 #inbox-title {
     text-style: bold;
-    color: $primary-light;
-    text-align: left;
+    color: #7ad0de;
 }
 
-#inbox-count {
-    color: $text-muted;
-    text-align: left;
-    padding-left: 2;
+#inbox-count,
+#inbox-stats-content {
+    color: #b8c6d8;
 }
 
-/* Stats bar */
 #inbox-stats {
     dock: top;
     height: 3;
     padding: 0 2;
-    background: $surface;
-    layout: horizontal;
+    background: #0d1117;
 }
 
-.stat-item {
-    width: auto;
-    padding: 0 2;
-    color: $text-muted;
-}
-
-.stat-value {
-    text-style: bold;
-    color: $text;
-}
-
-/* Main content: list (left) + detail (right) */
 #inbox-content {
     height: 1fr;
     layout: horizontal;
@@ -69,64 +39,39 @@ InboxScreen {
 #inbox-left {
     width: 42%;
     height: 100%;
-    padding: 0 1 0 0;
+    padding-right: 1;
 }
 
-#inbox-list-container {
-    height: 1fr;
-}
-
-#inbox-list {
-    height: 1fr;
-    background: $surface-light;
-    border: round $border;
-    padding: 1;
-}
-
-#inbox-list:focus {
-    border: round $primary;
-}
-
-#inbox-list > .option-list--option-highlighted {
-    background: $primary;
-    color: white;
-}
-
-/* Right panel: full task text + tags */
 #inbox-right {
     width: 58%;
     height: 100%;
-    padding: 0 0 0 1;
-    border-left: solid $border;
-    min-width: 20;
+    padding-left: 1;
+    border-left: solid #253241;
 }
 
+#inbox-list-title,
 #inbox-detail-title {
-    padding: 0 0 1 0;
+    color: #7ad0de;
     text-style: bold;
-    color: $primary-light;
+    margin-bottom: 1;
+}
+
+#inbox-list,
+#inbox-detail-scroll {
+    height: 1fr;
+    background: #121922;
+    border: round #253241;
 }
 
 #inbox-detail-scroll {
-    height: 1fr;
-    background: $surface-light;
-    border: round $border;
     padding: 1 2;
-    overflow-y: auto;
-    scrollbar-size: 1 1;
-}
-
-#inbox-detail-body {
-    width: 100%;
-    padding: 0 1;
 }
 
 #inbox-detail-tags {
-    padding-top: 1;
-    color: $text-muted;
+    color: #b8c6d8;
+    margin-top: 1;
 }
 
-/* Empty state styling */
 #inbox-empty {
     width: 100%;
     height: auto;
@@ -134,49 +79,23 @@ InboxScreen {
     padding: 4 2;
 }
 
-#inbox-empty-icon {
+#inbox-empty-icon,
+#inbox-empty-hint,
+#inbox-help-text {
+    color: #8ea2b7;
     text-align: center;
-    color: $text-dim;
-    padding: 1;
 }
 
 #inbox-empty-text {
+    color: #b8c6d8;
     text-align: center;
-    color: $text-muted;
-    padding: 1;
 }
 
-#inbox-empty-hint {
-    text-align: center;
-    color: $text-dim;
-    text-style: italic;
-    padding: 1;
-}
-
-/* Help panel at bottom */
 #inbox-help {
     dock: bottom;
     height: 3;
     padding: 0 2;
-    background: $surface-light;
-    border-top: solid $border;
-    content-align: center middle;
-}
-
-#inbox-help-text {
-    color: $text-dim;
-    text-align: center;
-}
-
-/* Task item styling in list */
-.task-item {
-    padding: 0 1;
-}
-
-.task-bullet {
-    color: $primary-light;
-}
-
-.task-new {
-    color: $success;
+    background: #121922;
+    border-top: solid #253241;
+    content-align: left middle;
 }

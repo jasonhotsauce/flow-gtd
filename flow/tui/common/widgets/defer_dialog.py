@@ -25,8 +25,8 @@ class DeferDialog(FlowModalScreen[dict[str, str] | None]):
     #defer-dialog {
         width: 72;
         height: auto;
-        border: round $primary;
-        background: $surface;
+        border: round #3f5a73;
+        background: #121922;
         padding: 1 2;
     }
 
@@ -34,11 +34,12 @@ class DeferDialog(FlowModalScreen[dict[str, str] | None]):
         content-align: center middle;
         margin-bottom: 1;
         text-style: bold;
+        color: #7ad0de;
     }
 
     #defer-hint {
         margin: 1 0 0 0;
-        color: $text-muted;
+        color: #b8c6d8;
     }
 
     #defer-until-input {

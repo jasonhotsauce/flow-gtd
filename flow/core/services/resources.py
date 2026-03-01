@@ -2,23 +2,21 @@
 
 from __future__ import annotations
 
-from flow.database.resources import ResourceDB
+from flow.core.resources.store import ResourceStore
 from flow.models import Resource
 
 
 class ResourceService:
     """Resource retrieval and queue orchestration."""
 
-    def __init__(self, resource_db: ResourceDB) -> None:
-        self._resource_db = resource_db
+    def __init__(self, store: ResourceStore) -> None:
+        self._store = store
 
     def get_resources_by_tags(self, tags: list[str]) -> list[Resource]:
         if not tags:
             return []
-        return self._resource_db.find_resources_by_tags(tags)
+        records = self._store.search_by_tags(tags)
+        return [record.to_domain_model() for record in records]
 
     def get_tag_names(self) -> list[str]:
-        return self._resource_db.get_tag_names()
-
-    def increment_tag_usage(self, tag: str) -> None:
-        self._resource_db.increment_tag_usage(tag)
+        return self._store.list_tags()

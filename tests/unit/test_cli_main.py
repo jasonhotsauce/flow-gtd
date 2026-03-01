@@ -179,24 +179,16 @@ def test_save_spawns_index_worker_process(monkeypatch: Any, tmp_path: Any) -> No
     process_inits: list[dict[str, object]] = []
     process_starts: list[bool] = []
 
-    class _FakeResourceDB:
-        def __init__(self, _db_path: object) -> None:
-            return
-
-        def init_db(self) -> None:
-            return
-
-        def get_resource_by_source(self, _source: str) -> None:
-            return None
-
-        def get_tag_names(self) -> list[str]:
+    class _FakeStore:
+        def list_resources(self, *, limit: int = 100, content_type: str | None = None) -> list[object]:
+            _ = (limit, content_type)
             return []
 
-        def insert_resource(self, _resource: object) -> None:
-            return
+        def list_tags(self) -> list[str]:
+            return []
 
-        def increment_tag_usage(self, _tag: str) -> None:
-            return
+        def save_resource(self, resource: object) -> object:
+            return resource
 
     class _FakeEngine:
         def __init__(self, db_path: object = None) -> None:
@@ -220,7 +212,9 @@ def test_save_spawns_index_worker_process(monkeypatch: Any, tmp_path: Any) -> No
             process_starts.append(True)
 
     monkeypatch.setattr("flow.cli.get_settings", lambda: SimpleNamespace(db_path=db_path))
-    monkeypatch.setattr("flow.cli.ResourceDB", _FakeResourceDB)
+    monkeypatch.setattr(
+        "flow.cli.create_resource_store", lambda provider, **_kwargs: _FakeStore()
+    )
     monkeypatch.setattr("flow.cli.Engine", _FakeEngine)
     monkeypatch.setattr("flow.cli.multiprocessing.Process", _FakeProcess)
 
@@ -235,3 +229,105 @@ def test_save_spawns_index_worker_process(monkeypatch: Any, tmp_path: Any) -> No
         }
     ]
     assert process_starts == [True]
+
+
+def test_save_uses_selected_resource_store(monkeypatch: Any, tmp_path: Any) -> None:
+    db_path = tmp_path / "flow.db"
+    calls: list[str] = []
+
+    class _FakeStore:
+        def list_resources(self, *, limit: int = 100, content_type: str | None = None) -> list[object]:
+            _ = (limit, content_type)
+            return []
+
+        def save_resource(self, resource: object) -> object:
+            calls.append("save_resource")
+            return resource
+
+        def list_tags(self) -> list[str]:
+            calls.append("list_tags")
+            return []
+
+    monkeypatch.setattr("flow.cli.get_settings", lambda: SimpleNamespace(db_path=db_path))
+    monkeypatch.setattr(
+        "flow.cli.load_config",
+        lambda: SimpleNamespace(
+            resource_storage="flow-library",
+            obsidian_vault_path="",
+            obsidian_notes_dir="flow/resources",
+        ),
+    )
+    monkeypatch.setattr(
+        "flow.cli.create_resource_store", lambda provider, **_kwargs: _FakeStore()
+    )
+
+    save(content="A plain text note", tags="reference")
+
+    assert "save_resource" in calls
+
+
+def test_launch_tui_prompts_existing_user_for_storage_selection(
+    monkeypatch: Any,
+) -> None:
+    updates: list[dict[str, object]] = []
+    app_inits: list[dict[str, object]] = []
+
+    class _FakeFlowApp:
+        def __init__(self, **kwargs: object) -> None:
+            app_inits.append(dict(kwargs))
+
+        def run(self) -> None:
+            return
+
+    monkeypatch.setattr("flow.cli.is_onboarding_completed", lambda: True)
+    monkeypatch.setattr("flow.cli.has_resource_storage_config", lambda: False)
+    monkeypatch.setattr("flow.cli.typer.prompt", lambda *_args, **_kwargs: "1")
+    monkeypatch.setattr(
+        "flow.cli.set_resource_storage_config",
+        lambda **kwargs: updates.append(dict(kwargs)),
+    )
+    monkeypatch.setattr("flow.cli.FlowApp", _FakeFlowApp)
+
+    _launch_tui()
+
+    assert updates == [{"storage_provider": "flow-library"}]
+    assert app_inits == [{"initial_screen": None, "startup_context": None}]
+
+
+def test_resources_command_reads_from_resource_store(monkeypatch: Any, tmp_path: Any) -> None:
+    db_path = tmp_path / "flow.db"
+    outputs: list[str] = []
+
+    class _FakeResource:
+        def __init__(self, source: str, title: str, tags: list[str]) -> None:
+            self.source = source
+            self.title = title
+            self.tags = tags
+            self.content_type = "url"
+
+    class _FakeStore:
+        def list_resources(self, *, limit: int = 20, content_type: str | None = None) -> list[object]:
+            _ = content_type
+            return [_FakeResource("https://x", "X", ["docs"])][:limit]
+
+        def search_by_tags(self, tags: list[str], *, limit: int = 100) -> list[object]:
+            _ = tags
+            return [_FakeResource("https://x", "X", ["docs"])][:limit]
+
+    monkeypatch.setattr("flow.cli.get_settings", lambda: SimpleNamespace(db_path=db_path))
+    monkeypatch.setattr(
+        "flow.cli.load_config",
+        lambda: SimpleNamespace(
+            resource_storage="flow-library",
+            obsidian_vault_path="",
+            obsidian_notes_dir="flow/resources",
+        ),
+    )
+    monkeypatch.setattr(
+        "flow.cli.create_resource_store", lambda provider, **_kwargs: _FakeStore()
+    )
+    monkeypatch.setattr("flow.cli.typer.echo", lambda msg="": outputs.append(str(msg)))
+
+    cli.resources(limit=5)
+
+    assert any("Resources" in line for line in outputs)

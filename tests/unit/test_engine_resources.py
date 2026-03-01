@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from flow.core.engine import Engine
+from flow.core.resources.models import ResourceRecord
 from flow.database.resources import ResourceDB
 from flow.models import Resource
 
@@ -33,6 +34,23 @@ def resource_db(temp_db_path: Path) -> ResourceDB:
     db = ResourceDB(temp_db_path)
     db.init_db()
     return db
+
+
+@pytest.fixture(autouse=True)
+def force_flow_library_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep resource-matching tests independent from local user config."""
+    monkeypatch.setattr(
+        "flow.core.engine.load_config",
+        lambda: type(
+            "Cfg",
+            (),
+            {
+                "resource_storage": "flow-library",
+                "obsidian_vault_path": "",
+                "obsidian_notes_dir": "flow/resources",
+            },
+        )(),
+    )
 
 
 class TestEngineCaptureWithTags:
@@ -196,3 +214,38 @@ class TestEngineResourceDBInitialization:
 
         result = engine._resource_db.get_resource("test")
         assert result is not None
+
+
+def test_engine_get_resources_by_tags_uses_resource_store(monkeypatch) -> None:
+    class _FakeStore:
+        def search_by_tags(self, tags: list[str], *, limit: int = 100):
+            _ = (tags, limit)
+            return [
+                ResourceRecord(
+                    id="from-store",
+                    content_type="text",
+                    source="x",
+                    tags=["auth"],
+                )
+            ]
+
+    monkeypatch.setattr(
+        "flow.core.engine.create_resource_store",
+        lambda provider, **_kwargs: _FakeStore(),
+    )
+    monkeypatch.setattr(
+        "flow.core.engine.load_config",
+        lambda: type(
+            "Cfg",
+            (),
+            {
+                "resource_storage": "flow-library",
+                "obsidian_vault_path": "",
+            },
+        )(),
+    )
+
+    engine = Engine()
+    results = engine.get_resources_by_tags(["auth"])
+    assert len(results) == 1
+    assert results[0].id == "from-store"

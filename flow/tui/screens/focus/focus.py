@@ -24,7 +24,7 @@ class FocusScreen(FlowScreen):
     - Footer: Actions (Complete, Skip, Exit)
     """
 
-    CSS_PATH = "focus.tcss"
+    CSS_PATH = ["../../common/ops_tokens.tcss", "focus.tcss"]
 
     BINDINGS = with_global_bindings(
         ("space", "complete_task", "Complete"),
@@ -40,6 +40,8 @@ class FocusScreen(FlowScreen):
 
     def compose(self) -> ComposeResult:
         yield Header()
+        with Container(id="ops-status-strip"):
+            yield Static("FOCUS  |  Select one best task for current time window", id="ops-status-text")
 
         # Focus header with mode indicator
         with Container(id="focus-header"):
@@ -69,6 +71,12 @@ class FocusScreen(FlowScreen):
             yield Static(
                 "No tasks available for your current time window",
                 id="focus-empty-hint",
+            )
+
+        with Container(id="ops-keyhint"):
+            yield Static(
+                "Space: Complete  |  s: Skip  |  r: Refresh  |  Esc: Back  |  ?: Help",
+                id="ops-keyhint-text",
             )
 
         yield Footer()

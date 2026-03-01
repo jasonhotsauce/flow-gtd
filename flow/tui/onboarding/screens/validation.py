@@ -7,6 +7,7 @@ from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Button, Footer, Header, LoadingIndicator, Static
 
+from flow.core.resources.factory import create_resource_store
 from flow.tui.common.base_screen import FlowScreen
 from flow.tui.onboarding.constants import VALIDATION_PROMPT
 from flow.tui.onboarding.keybindings import (
@@ -30,7 +31,7 @@ VALIDATION_TIMEOUT = 10.0
 class ValidationScreen(FlowScreen):
     """Validate credentials by testing connection to the LLM provider."""
 
-    CSS_PATH = "validation.tcss"
+    CSS_PATH = ["../../common/ops_tokens.tcss", "validation.tcss"]
 
     BINDINGS = compose_bindings(
         BACK_ESCAPE_BINDING,
@@ -46,38 +47,44 @@ class ValidationScreen(FlowScreen):
     def compose(self) -> ComposeResult:
         """Build the validation UI."""
         yield Header()
-        with Container(id="validation-container"):
-            yield Static("Validating Configuration", id="validation-title")
-            yield Static(
-                "Testing connection to your LLM provider...", id="validation-subtitle"
-            )
-
-            with Vertical(id="validation-status"):
-                # Loading state
-                with Vertical(id="loading-state"):
-                    yield LoadingIndicator(id="loader")
-                    yield Static("Connecting...", id="loading-text")
-
-                # Success state
-                with Vertical(id="success-state"):
-                    yield Static("✓", id="success-icon")
-                    yield Static("Connection Successful!", id="success-text")
+        with Container(id="onboarding-shell"):
+            yield Static("Step 4/5  |  Validation", id="onboarding-progress")
+            with Horizontal(id="onboarding-layout"):
+                with Vertical(id="onboarding-main-pane"):
+                    yield Static("Validate Configuration", id="onboarding-title")
                     yield Static(
-                        "Your configuration has been saved.",
-                        id="success-detail",
+                        "Testing connection and storage health.",
+                        id="validation-subtitle",
                     )
+                    with Vertical(id="validation-status", classes="onboarding-panel"):
+                        with Vertical(id="loading-state"):
+                            yield LoadingIndicator(id="loader")
+                            yield Static("Connecting...", id="loading-text")
 
-                # Error state
-                with Vertical(id="error-state"):
-                    yield Static("✗", id="error-icon")
-                    yield Static("Connection Failed", id="error-text")
-                    yield Static("", id="error-detail")
+                        with Vertical(id="success-state"):
+                            yield Static("OK", id="success-icon")
+                            yield Static("Connection Successful", id="success-text")
+                            yield Static(
+                                "Your configuration has been saved.",
+                                id="success-detail",
+                            )
 
-            # Action buttons
-            with Horizontal(id="validation-actions"):
-                yield Button("Back", id="back-btn")
-                yield Button("Retry", id="retry-btn")
-                yield Button("Start Flow", id="start-btn", variant="primary")
+                        with Vertical(id="error-state"):
+                            yield Static("ERR", id="error-icon")
+                            yield Static("Connection Failed", id="error-text")
+                            yield Static("", id="error-detail")
+
+                    with Horizontal(id="validation-actions"):
+                        yield Button("Back", id="back-btn")
+                        yield Button("Retry", id="retry-btn")
+                        yield Button("Start Flow", id="start-btn", variant="primary")
+                with Vertical(id="onboarding-ops-pane"):
+                    with Vertical(classes="onboarding-side-panel"):
+                        yield Static("CHECKLIST", classes="section-title")
+                        yield Static(
+                            "1) Provider reachable\n2) Credentials accepted\n3) Resource storage healthy",
+                            id="validation-title",
+                        )
 
         yield Footer()
 
@@ -121,6 +128,8 @@ class ValidationScreen(FlowScreen):
         onboarding_app: OnboardingApp = self.app  # type: ignore[assignment]
         provider = onboarding_app.selected_provider
         credentials = onboarding_app.credentials
+        resource_storage = onboarding_app.resource_storage
+        resource_settings = onboarding_app.resource_settings
 
         try:
             # Short delay to show loading state
@@ -143,8 +152,20 @@ class ValidationScreen(FlowScreen):
             )
 
             if result:
+                storage_error = self._validate_resource_storage(
+                    resource_storage=resource_storage,
+                    resource_settings=resource_settings,
+                )
+                if storage_error:
+                    self._show_error(storage_error)
+                    return
                 # Success - save configuration
-                self._save_config(provider, credentials)
+                self._save_config(
+                    provider,
+                    credentials,
+                    resource_storage=resource_storage,
+                    resource_settings=resource_settings,
+                )
                 self._validation_success = True
                 self._show_success()
             else:
@@ -154,6 +175,29 @@ class ValidationScreen(FlowScreen):
             logger.error("Credential validation failed: %s: %s", type(e).__name__, e)
             error_msg = self._format_error(e)
             self._show_error(error_msg)
+
+    def _validate_resource_storage(
+        self,
+        *,
+        resource_storage: str,
+        resource_settings: dict[str, str],
+    ) -> Optional[str]:
+        """Validate selected resource storage configuration."""
+        if resource_storage != "obsidian-vault":
+            return None
+
+        vault_path = resource_settings.get("obsidian_vault_path", "").strip()
+        if not vault_path:
+            return "Obsidian vault path is required."
+        store = create_resource_store(
+            "obsidian-vault",
+            vault_path=vault_path,
+            notes_dir=resource_settings.get("obsidian_notes_dir", "flow/resources"),
+        )
+        health = store.health_check()
+        if health.ok:
+            return None
+        return health.message or "Obsidian storage validation failed."
 
     def _create_provider(
         self, provider: str, credentials: dict
@@ -197,7 +241,14 @@ class ValidationScreen(FlowScreen):
             self._validation_error = f"Invalid configuration: {e}"
         return None
 
-    def _save_config(self, provider: str, credentials: dict) -> None:
+    def _save_config(
+        self,
+        provider: str,
+        credentials: dict,
+        *,
+        resource_storage: str,
+        resource_settings: dict[str, str],
+    ) -> None:
         """Save validated configuration to file."""
         from flow.utils.llm.config import save_config
 
@@ -205,6 +256,11 @@ class ValidationScreen(FlowScreen):
             provider=provider,  # type: ignore[arg-type]
             credentials=credentials,
             onboarding_completed=True,
+            resource_storage=resource_storage,  # type: ignore[arg-type]
+            obsidian_vault_path=resource_settings.get("obsidian_vault_path", ""),
+            obsidian_notes_dir=resource_settings.get(
+                "obsidian_notes_dir", "flow/resources"
+            ),
         )
 
     def _format_error(self, error: Exception) -> str:

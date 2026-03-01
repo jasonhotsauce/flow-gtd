@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Callable, Literal, Optional
 
 from flow.config import get_settings
+from flow.core.resources.factory import create_resource_store
+from flow.core.resources.store import ResourceStore
 from flow.core.rag import RAGService
 from flow.core.services import ProcessService, ResourceService, ReviewService, TaskService
 from flow.core.tagging import extract_tags, extract_tags_async
@@ -15,6 +17,7 @@ from flow.database.resources import ResourceDB
 from flow.database.sqlite import SqliteDB
 from flow.database.vector_store import VectorHit
 from flow.models import Item, Resource
+from flow.utils.llm.config import load_config
 
 logger = logging.getLogger(__name__)
 DeferMode = Literal["waiting", "until", "someday"]
@@ -30,15 +33,28 @@ class Engine:
         self._db.init_db()
         self._resource_db = ResourceDB(self._db_path)
         self._resource_db.init_db()
+        config = load_config()
+        self._resource_storage = config.resource_storage
+        self._resource_store = self._create_resource_store()
         self._task_service = TaskService(self._db)
         self._review_service = ReviewService(self._db)
         self._process_service = ProcessService(self._db)
-        self._resource_service = ResourceService(self._resource_db)
+        self._resource_service = ResourceService(self._resource_store)
         self._rag_service = RAGService(self._db, self._resource_db)
         self._process_inbox: list[Item] = []
         self._dedup_index = 0
         self._two_min_index = 0
         self._coach_index = 0
+
+    def _create_resource_store(self) -> ResourceStore:
+        config = load_config()
+        if config.resource_storage == "obsidian-vault":
+            return create_resource_store(
+                "obsidian-vault",
+                vault_path=config.obsidian_vault_path,
+                notes_dir=config.obsidian_notes_dir,
+            )
+        return create_resource_store("flow-library", resource_db=self._resource_db)
 
     def capture(
         self,
@@ -90,7 +106,7 @@ class Engine:
     def _run_auto_tagging(self, item_id: str, text: str) -> None:
         """Run LLM tag extraction and update item + tag usage. Swallows errors."""
         try:
-            existing_tags = self._resource_db.get_tag_names()
+            existing_tags = self._resource_service.get_tag_names()
             tags = extract_tags(text, "text", existing_tags)
             if tags:
                 item = self._db.get_item(item_id)
@@ -98,15 +114,13 @@ class Engine:
                     merged = list(dict.fromkeys(item.context_tags + tags))
                     updated = item.model_copy(update={"context_tags": merged})
                     self._db.update_item(updated)
-                    for tag in tags:
-                        self._resource_db.increment_tag_usage(tag)
         except (IOError, ValueError, RuntimeError) as e:
             logger.debug("Auto-tagging failed for item %s: %s", item_id, e)
 
     async def _run_auto_tagging_async(self, item_id: str, text: str) -> None:
         """Run LLM tag extraction (async) and update item + tag usage. Swallows errors."""
         try:
-            existing_tags = self._resource_db.get_tag_names()
+            existing_tags = self._resource_service.get_tag_names()
             tags = await extract_tags_async(text, "text", existing_tags)
             if tags:
                 item = self._db.get_item(item_id)
@@ -114,8 +128,6 @@ class Engine:
                     merged = list(dict.fromkeys(item.context_tags + tags))
                     updated = item.model_copy(update={"context_tags": merged})
                     self._db.update_item(updated)
-                    for tag in tags:
-                        self._resource_db.increment_tag_usage(tag)
         except (IOError, ValueError, RuntimeError) as e:
             logger.debug("Auto-tagging failed for item %s: %s", item_id, e)
 
@@ -205,7 +217,8 @@ class Engine:
         item = self._db.get_item(task_id)
         if not item or not item.context_tags:
             return []
-        return self._resource_db.find_resources_by_tags(item.context_tags)
+        records = self._resource_store.search_by_tags(item.context_tags)
+        return [record.to_domain_model() for record in records]
 
     def get_resources_by_tags(self, tags: list[str]) -> list[Resource]:
         """Get resources matching the given tags.
@@ -220,7 +233,19 @@ class Engine:
 
     def get_semantic_resources(self, query_text: str, top_k: int = 3) -> list[VectorHit]:
         """Retrieve semantically related resources for the given text."""
-        return self._rag_service.semantic_search(query_text, top_k=top_k)
+        if self._resource_storage == "flow-library":
+            return self._rag_service.semantic_search(query_text, top_k=top_k)
+        hits = self._resource_store.semantic_search(query_text, top_k=top_k)
+        return [
+            VectorHit(
+                resource_id=hit.resource_id,
+                score=hit.score,
+                title=hit.title or "",
+                snippet=hit.snippet or "",
+                source=hit.source or "",
+            )
+            for hit in hits
+        ]
 
     def enqueue_resource_index(
         self,

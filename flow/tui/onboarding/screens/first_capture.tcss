@@ -1,0 +1,31 @@
+/* First capture - Ops style */
+
+#first-capture-subtitle,
+#first-capture-tip {
+    color: #b8c6d8;
+    margin-bottom: 1;
+}
+
+#first-capture-content {
+    height: auto;
+}
+
+#first-capture-title {
+    margin-bottom: 1;
+}
+
+#first-capture-input {
+    width: 100%;
+    margin-bottom: 1;
+}
+
+#first-capture-actions {
+    align: right middle;
+    margin-top: 1;
+    border-top: solid #253241;
+    padding-top: 1;
+}
+
+#skip-btn {
+    margin-right: 1;
+}

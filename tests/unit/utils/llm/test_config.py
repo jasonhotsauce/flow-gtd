@@ -5,9 +5,12 @@ from datetime import datetime
 from pathlib import Path
 
 from flow.utils.llm.config import (
+    has_resource_storage_config,
+    load_config,
     mark_first_value_completed,
     read_first_run_state,
     save_config,
+    set_resource_storage_config,
 )
 
 
@@ -129,3 +132,63 @@ def test_mark_first_value_completed_preserves_unrelated_top_level_sections(
     assert parsed["onboarding_completed"] is True
     assert parsed["first_value_pending"] is False
     assert parsed["first_value_completed_at"] != ""
+
+
+def test_load_config_reads_resource_storage_settings(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "onboarding_completed = true",
+                "",
+                "[llm]",
+                'provider = "gemini"',
+                "",
+                "[resources]",
+                'storage = "obsidian-vault"',
+                'obsidian_vault_path = "/vault"',
+                'obsidian_notes_dir = "Flow/Resources"',
+            ]
+        )
+    )
+
+    config = load_config(config_path=config_path)
+
+    assert config.resource_storage == "obsidian-vault"
+    assert config.obsidian_vault_path == "/vault"
+    assert config.obsidian_notes_dir == "Flow/Resources"
+
+
+def test_set_resource_storage_config_updates_resources_section(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    save_config(
+        "gemini",
+        {"api_key": "k"},
+        config_path=config_path,
+        onboarding_completed=True,
+    )
+
+    set_resource_storage_config(
+        storage_provider="obsidian-vault",
+        config_path=config_path,
+        obsidian_vault_path="/vault",
+        obsidian_notes_dir="flow/resources",
+    )
+    parsed = tomllib.loads(config_path.read_text())
+
+    assert parsed["resources"]["storage"] == "obsidian-vault"
+    assert parsed["resources"]["obsidian_vault_path"] == "/vault"
+    assert parsed["resources"]["obsidian_notes_dir"] == "flow/resources"
+    assert parsed["llm"]["provider"] == "gemini"
+
+
+def test_has_resource_storage_config_detects_explicit_selection(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    save_config(
+        "gemini",
+        {"api_key": "k"},
+        config_path=config_path,
+        onboarding_completed=True,
+    )
+
+    assert has_resource_storage_config(config_path=config_path) is True

@@ -34,6 +34,15 @@ poetry install --extras "web"
 poetry install --extras "rag"
 ```
 
+## Resource Storage Options
+
+During setup, Flow asks where to store saved resources:
+
+- `Flow Library`: built-in local storage managed by Flow
+- `Obsidian Vault`: resources saved as notes via Obsidian CLI
+
+If you choose Obsidian Vault, install Obsidian CLI and provide your vault path.
+
 ## Environment
 
 | Variable | Description |
@@ -43,6 +52,9 @@ poetry install --extras "rag"
 | `FLOW_GEMINI_API_KEY` or `GOOGLE_API_KEY` | Gemini API key |
 | `FLOW_OPENAI_API_KEY` | OpenAI API key (when provider is `openai`) |
 | `FLOW_OLLAMA_BASE_URL` | Ollama base URL (default: `http://localhost:11434`) |
+| `FLOW_RESOURCE_STORAGE` | Resource storage provider (`flow-library`, `obsidian-vault`) |
+| `FLOW_OBSIDIAN_VAULT_PATH` | Obsidian vault path when using `obsidian-vault` |
+| `FLOW_OBSIDIAN_NOTES_DIR` | Notes subfolder for Flow resources (default: `flow/resources`) |
 
 ## Commands
 
@@ -50,9 +62,9 @@ poetry install --extras "rag"
 |---------|-------------|
 | `flow c <text>` | Quick capture alias (supports `--private/-p`) |
 | `flow capture <text>` | Full capture command (supports `--private/-p` and `--tags/-t`) |
-| `flow save <url\|file\|text>` | Save a resource (URL, file path, or text) with automatic LLM tagging; use `--private` for manual tags |
+| `flow save <url\|file\|text>` | Save a resource with automatic LLM tagging to your selected storage backend |
 | `flow resources` | List saved resources (optional `--tag`, `--limit`) |
-| `flow tags` | List all tags with usage counts |
+| `flow tags` | List resource tags |
 | `flow tui` | Launch TUI (Inbox) |
 | `flow process` | Launch Process Funnel (Dedup → Cluster → 2-Min → Coach) |
 | `flow next` | Launch Action screen (next actions + Sidecar: resources matched by task tags) |
@@ -71,6 +83,13 @@ poetry install --extras "rag"
 3. **Process**: `flow process` — deduplicate, cluster into projects, 2-min drill, coach vague tasks
 4. **Projects** (GTD review): `flow projects` — list active projects, see suggested next action and full task list per project; open a project to complete or defer actions
 5. **Execute**: `flow next` — next actions list + Sidecar (resources matched by task tags)
+
+## TUI Panel Shortcuts
+
+- On split-panel screens (`Inbox`, `Projects`, `Next Actions`), switch focus with:
+  - `1` / `2` for first/second panel
+  - Panel abbreviations shown in panel headers (for example `l`, `d`, `t`, `r`, `e`)
+- `Tab` focus switching remains available on the Next Actions screen.
 
 ## Tech
 

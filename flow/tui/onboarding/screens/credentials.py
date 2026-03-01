@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class CredentialsScreen(FlowScreen):
     """Enter credentials for the selected LLM provider."""
 
-    CSS_PATH = "credentials.tcss"
+    CSS_PATH = ["../../common/ops_tokens.tcss", "credentials.tcss"]
 
     BINDINGS = compose_bindings(
         BACK_ESCAPE_BINDING,
@@ -38,43 +38,49 @@ class CredentialsScreen(FlowScreen):
     def compose(self) -> ComposeResult:
         """Build the credentials form UI."""
         yield Header()
-        with Container(id="credentials-container"):
-            yield Static("Configure Provider", id="creds-title")
-            yield Static("", id="creds-subtitle")
+        with Container(id="onboarding-shell"):
+            yield Static("Step 3/5  |  Credentials", id="onboarding-progress")
+            with Horizontal(id="onboarding-layout"):
+                with Vertical(id="onboarding-main-pane"):
+                    yield Static("Provider Credentials", id="onboarding-title")
+                    yield Static("", id="creds-subtitle")
+                    with Vertical(id="credentials-form", classes="onboarding-panel"):
+                        with Vertical(id="api-key-section"):
+                            yield Static("API Key", id="api-key-label", classes="section-title")
+                            yield Input(
+                                placeholder="Paste your API key here...",
+                                password=True,
+                                id="api-key-input",
+                            )
+                            with Horizontal(id="api-key-actions"):
+                                yield Button("Get API Key", id="get-key-btn", variant="default")
+                                yield Static(
+                                    "Opens browser to provider dashboard",
+                                    id="get-key-hint",
+                                )
 
-            with Vertical(id="credentials-form"):
-                # API Key form (for Gemini/OpenAI)
-                with Vertical(id="api-key-section"):
-                    yield Static("API Key", id="api-key-label")
-                    yield Input(
-                        placeholder="Paste your API key here...",
-                        password=True,
-                        id="api-key-input",
-                    )
-                    with Horizontal(id="api-key-actions"):
-                        yield Button("Get API Key", id="get-key-btn", variant="default")
+                        with Vertical(id="url-section"):
+                            yield Static("Server URL", id="url-label", classes="section-title")
+                            yield Input(
+                                value="http://localhost:11434",
+                                placeholder="http://localhost:11434",
+                                id="url-input",
+                            )
+                            yield Static(
+                                "Make sure Ollama is running locally",
+                                id="url-hint",
+                            )
+
+                        with Horizontal(id="form-actions"):
+                            yield Button("Back", id="back-btn")
+                            yield Button("Continue", id="continue-btn", variant="primary")
+                with Vertical(id="onboarding-ops-pane"):
+                    with Vertical(classes="onboarding-side-panel"):
+                        yield Static("SECURITY", classes="section-title")
                         yield Static(
-                            "Opens browser to provider dashboard",
-                            id="get-key-hint",
+                            "Credentials are validated before saving. Invalid keys never proceed.",
+                            id="creds-title",
                         )
-
-                # URL form (for Ollama)
-                with Vertical(id="url-section"):
-                    yield Static("Server URL", id="url-label")
-                    yield Input(
-                        value="http://localhost:11434",
-                        placeholder="http://localhost:11434",
-                        id="url-input",
-                    )
-                    yield Static(
-                        "Make sure Ollama is running locally",
-                        id="url-hint",
-                    )
-
-                # Action buttons
-                with Horizontal(id="form-actions"):
-                    yield Button("Back", id="back-btn")
-                    yield Button("Continue", id="continue-btn", variant="primary")
 
         yield Footer()
 

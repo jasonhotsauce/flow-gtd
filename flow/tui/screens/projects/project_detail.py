@@ -21,7 +21,7 @@ from flow.tui.common.widgets.defer_dialog import DeferDialog
 class ProjectDetailScreen(FlowScreen):
     """Screen to work through a project's next actions. Complete or defer; Esc back to list."""
 
-    CSS_PATH = "projects.tcss"
+    CSS_PATH = ["../../common/ops_tokens.tcss", "projects.tcss"]
 
     BINDINGS = with_global_bindings(
         Binding("enter", "select_action", "Select", show=False),
@@ -37,6 +37,8 @@ class ProjectDetailScreen(FlowScreen):
 
     def compose(self) -> ComposeResult:
         yield Header()
+        with Container(id="ops-status-strip"):
+            yield Static("PROJECT DETAIL  |  Work one project at a time", id="ops-status-text")
         with Container(id="detail-header"):
             yield Static("", id="detail-title")
             yield Static("", id="detail-count")

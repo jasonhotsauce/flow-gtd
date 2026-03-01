@@ -64,3 +64,28 @@ def test_validation_handles_first_capture_result_and_exits() -> None:
 
     assert fake_app.first_capture_outcome == result
     assert fake_app.exit_calls == [True]
+
+
+def test_validation_resource_storage_reports_obsidian_cli_error(
+    monkeypatch,
+) -> None:
+    screen = ValidationScreen()
+
+    class _FakeStore:
+        def health_check(self):
+            return type("Health", (), {"ok": False, "message": "obsidian CLI not found"})()
+
+    monkeypatch.setattr(
+        "flow.tui.onboarding.screens.validation.create_resource_store",
+        lambda *_args, **_kwargs: _FakeStore(),
+    )
+
+    message = screen._validate_resource_storage(
+        resource_storage="obsidian-vault",
+        resource_settings={
+            "obsidian_vault_path": "/vault",
+            "obsidian_notes_dir": "flow/resources",
+        },
+    )
+
+    assert message == "obsidian CLI not found"

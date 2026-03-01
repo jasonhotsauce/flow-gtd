@@ -16,7 +16,7 @@ from flow.tui.common.keybindings import with_global_bindings
 class ReviewScreen(FlowScreen):
     """Weekly review: Stale (archive), Someday (resurface), Report."""
 
-    CSS_PATH = "review.tcss"
+    CSS_PATH = ["../../common/ops_tokens.tcss", "review.tcss"]
 
     BINDINGS = with_global_bindings(
         ("a", "archive", "Archive"),
@@ -38,6 +38,8 @@ class ReviewScreen(FlowScreen):
 
     def compose(self) -> ComposeResult:
         yield Header()
+        with Container(id="ops-status-strip"):
+            yield Static("REVIEW  |  Weekly maintenance and trend visibility", id="ops-status-text")
         with Container(id="review-header"):
             yield Static("📅 Weekly Review", id="review-main-title")
         with Horizontal(id="review-tabs"):
@@ -50,6 +52,11 @@ class ReviewScreen(FlowScreen):
         with Container(id="review-content"):
             yield OptionList(id="review-list")
             yield Static("", id="review-detail")
+        with Container(id="ops-keyhint"):
+            yield Static(
+                "1/2/3: Sections  |  Tab: Next  |  a/r: Mode action  |  i/P: Navigate  |  ?: Help",
+                id="ops-keyhint-text",
+            )
         yield Footer()
 
     def on_mount(self) -> None:

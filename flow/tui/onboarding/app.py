@@ -17,7 +17,7 @@ class OnboardingApp(App):
     3. Connection validation
     """
 
-    CSS_PATH = "../common/theme.tcss"
+    CSS_PATH = ["../common/ops_tokens.tcss", "../common/theme.tcss"]
     TITLE = "Flow GTD Setup"
     SUB_TITLE = "Welcome to Flow"
 
@@ -30,6 +30,11 @@ class OnboardingApp(App):
         # Shared state across screens
         self.selected_provider: str = "gemini"
         self.credentials: dict[str, str] = {}
+        self.resource_storage: str = "flow-library"
+        self.resource_settings: dict[str, str] = {
+            "obsidian_vault_path": "",
+            "obsidian_notes_dir": "flow/resources",
+        }
         self.first_capture_outcome: dict[str, str] | None = None
 
     def on_mount(self) -> None:

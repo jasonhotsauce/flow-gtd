@@ -6,6 +6,7 @@ from flow.tui.onboarding import keybindings
 from flow.tui.onboarding.screens.credentials import CredentialsScreen
 from flow.tui.onboarding.screens.first_capture import FirstCaptureScreen
 from flow.tui.onboarding.screens.provider import ProviderSelectScreen
+from flow.tui.onboarding.screens.resource_storage import ResourceStorageScreen
 from flow.tui.onboarding.screens.validation import ValidationScreen
 
 
@@ -37,6 +38,17 @@ def test_credentials_bindings_match_contract() -> None:
         keybindings.BACK_ESCAPE_BINDING,
         keybindings.BACK_CTRL_B_BINDING,
         keybindings.SUBMIT_ENTER_BINDING,
+    )
+
+
+def test_resource_storage_bindings_match_contract() -> None:
+    """Storage screen should use onboarding navigation binding contract."""
+    assert ResourceStorageScreen.BINDINGS == keybindings.compose_bindings(
+        keybindings.BACK_ESCAPE_BINDING,
+        keybindings.NAV_DOWN_J_BINDING,
+        keybindings.NAV_UP_K_BINDING,
+        keybindings.CONFIRM_ENTER_BINDING,
+        keybindings.CONFIRM_C_BINDING,
     )
 
 

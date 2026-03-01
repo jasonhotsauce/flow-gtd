@@ -20,10 +20,14 @@ from flow.tui.common.keybindings import with_global_bindings
 class ProjectsScreen(FlowScreen):
     """Screen showing active projects and next-action preview. Enter opens project detail."""
 
-    CSS_PATH = "projects.tcss"
+    CSS_PATH = ["../../common/ops_tokens.tcss", "projects.tcss"]
 
     BINDINGS = with_global_bindings(
         ("enter", "open_project", "Open"),
+        ("1", "focus_list_panel", "List"),
+        ("2", "focus_detail_panel", "Detail"),
+        ("l", "focus_list_panel", "List"),
+        ("d", "focus_detail_panel", "Detail"),
         Binding("a", "go_action", "Actions", show=False),
         Binding("i", "go_inbox", "Inbox", show=False),
         Binding("r", "go_review", "Review", show=False),
@@ -37,16 +41,18 @@ class ProjectsScreen(FlowScreen):
 
     def compose(self) -> ComposeResult:
         yield Header()
+        with Container(id="ops-status-strip"):
+            yield Static("PROJECTS  |  Active outcomes and next actions", id="ops-status-text")
         with Container(id="projects-header"):
             yield Static("Projects", id="projects-title")
             yield Static("", id="projects-count")
         with Horizontal(id="projects-content"):
             with Vertical(id="projects-left"):
-                yield Static("Project list", id="projects-list-title")
+                yield Static("[1] Project List (l)", id="projects-list-title")
                 with Container(id="projects-list-container"):
                     yield OptionList(id="projects-list")
             with Vertical(id="projects-right"):
-                yield Static("Project", id="projects-detail-section-project")
+                yield Static("[2] Project Detail (d)", id="projects-detail-section-project")
                 yield Static("", id="projects-detail-project-name")
                 yield Static("Suggested next action", id="projects-detail-section-next")
                 with ScrollableContainer(id="projects-detail-next-scroll"):
@@ -62,7 +68,7 @@ class ProjectsScreen(FlowScreen):
             )
         with Container(id="projects-help"):
             yield Static(
-                "j/k: Navigate │ Enter: Open project │ Esc: Back │ ?: Help",
+                "j/k: Navigate │ 1/2 or l/d: Panels │ Enter: Open project │ Esc: Back │ ?: Help",
                 id="projects-help-text",
             )
         yield Footer()
@@ -196,6 +202,14 @@ class ProjectsScreen(FlowScreen):
     def action_cursor_up(self) -> None:
         """Move cursor up."""
         self.query_one("#projects-list", OptionList).action_cursor_up()
+
+    def action_focus_list_panel(self) -> None:
+        """Focus the project list panel."""
+        self.query_one("#projects-list", OptionList).focus()
+
+    def action_focus_detail_panel(self) -> None:
+        """Focus the project detail panel."""
+        self.query_one("#projects-detail-next-scroll", ScrollableContainer).focus()
 
     def action_open_project(self) -> None:
         """Open selected project (push project detail screen)."""

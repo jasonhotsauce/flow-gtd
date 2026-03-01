@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Optional, Type, TypedDict
 import typer
 
 from flow.config import get_settings
+from flow.core.resources.factory import create_resource_store
+from flow.core.resources.models import ResourceRecord
 from flow.core.engine import Engine
 from flow.core.tagging import (
     extract_tags_from_file,
@@ -27,6 +29,12 @@ from flow.tui.screens.focus.focus import FocusScreen
 from flow.tui.screens.process import ProcessScreen
 from flow.tui.screens.projects.projects import ProjectsScreen
 from flow.tui.screens.review.review import ReviewScreen
+from flow.utils.llm.config import (
+    has_resource_storage_config,
+    is_onboarding_completed,
+    load_config,
+    set_resource_storage_config,
+)
 
 if TYPE_CHECKING:
     from textual.screen import Screen
@@ -114,7 +122,7 @@ def _build_startup_context_from_onboarding(
     }
 
 
-def _check_onboarding() -> tuple[bool, InboxStartupContext | None]:
+def _check_onboarding() -> tuple[bool, InboxStartupContext | None, bool]:
     """Check if onboarding is needed and run wizard if so.
 
     Returns:
@@ -131,7 +139,7 @@ def _check_onboarding() -> tuple[bool, InboxStartupContext | None]:
     from flow.utils.llm.config import is_onboarding_completed
 
     if is_onboarding_completed():
-        return True, None
+        return True, None, True
 
     # Lazy import: OnboardingApp has heavy TUI dependencies
     from flow.tui.onboarding.app import OnboardingApp
@@ -139,11 +147,48 @@ def _check_onboarding() -> tuple[bool, InboxStartupContext | None]:
     onboarding_app = OnboardingApp()
     result = onboarding_app.run()
     if result is not True:
-        return False, None
+        return False, None, False
 
     onboarding_result = onboarding_app.get_onboarding_result()
     startup_context = _build_startup_context_from_onboarding(onboarding_result)
-    return True, startup_context
+    return True, startup_context, False
+
+
+def _resolve_resource_store():
+    """Create resource store from current config."""
+    settings = get_settings()
+    cfg = load_config()
+    if cfg.resource_storage == "obsidian-vault":
+        return create_resource_store(
+            "obsidian-vault",
+            vault_path=cfg.obsidian_vault_path,
+            notes_dir=cfg.obsidian_notes_dir,
+        )
+    resource_db = ResourceDB(settings.db_path)
+    resource_db.init_db()
+    return create_resource_store("flow-library", resource_db=resource_db)
+
+
+def _ensure_resource_storage_selected() -> None:
+    """Prompt existing users to pick storage backend when unset."""
+    if not is_onboarding_completed():
+        return
+
+    if has_resource_storage_config():
+        return
+
+    typer.echo("\nChoose resource storage:")
+    typer.echo("  1. Flow Library")
+    typer.echo("  2. Obsidian Vault")
+    choice = typer.prompt("Selection", default="1")
+    if choice.strip() == "2":
+        vault = typer.prompt("Obsidian vault path")
+        set_resource_storage_config(
+            storage_provider="obsidian-vault",
+            obsidian_vault_path=vault.strip(),
+        )
+        return
+    set_resource_storage_config(storage_provider="flow-library")
 
 
 def _launch_tui(initial_screen: "Optional[Type[Screen]]" = None) -> None:
@@ -156,9 +201,11 @@ def _launch_tui(initial_screen: "Optional[Type[Screen]]" = None) -> None:
     Raises:
         typer.Exit: If user quits during onboarding.
     """
-    onboarding_completed, startup_context = _check_onboarding()
+    onboarding_completed, startup_context, already_onboarded = _check_onboarding()
     if not onboarding_completed:
         raise typer.Exit(0)
+    if already_onboarded:
+        _ensure_resource_storage_selected()
     FlowApp(initial_screen=initial_screen, startup_context=startup_context).run()
 
 
@@ -455,17 +502,20 @@ def save(
         flow save https://example.com --tags "api,backend"
     """
     settings = get_settings()
-    resource_db = ResourceDB(settings.db_path)
-    resource_db.init_db()
+    store = _resolve_resource_store()
 
     # Detect content type
     content_type = _detect_content_type(content)
 
     # Check for duplicate
-    existing = resource_db.get_resource_by_source(content)
-    if existing:
+    existing = None
+    for item in store.list_resources(limit=1000):
+        if item.source == content:
+            existing = item
+            break
+    if existing is not None:
         typer.echo(f"Resource already saved (updating tags): {content[:60]}...")
-        resource = existing
+        resource = existing.to_domain_model()
     else:
         resource = Resource(
             id=str(uuid.uuid4()),
@@ -507,7 +557,7 @@ def save(
         preview = content
 
     # Determine tags
-    existing_tags = resource_db.get_tag_names()
+    existing_tags = store.list_tags()
     final_tags: list[str] = []
 
     if tags:
@@ -535,21 +585,15 @@ def save(
             typer.echo("Could not extract tags automatically.")
 
     # Update resource tags (merge with existing if updating)
-    if existing:
+    if existing is not None:
         merged_tags = list(dict.fromkeys(resource.tags + final_tags))
         resource.tags = merged_tags
     else:
         resource.tags = final_tags
 
     # Save/update resource
-    if existing:
-        resource_db.update_resource(resource)
-    else:
-        resource_db.insert_resource(resource)
-
-    # Update tag usage counts
-    for tag in final_tags:
-        resource_db.increment_tag_usage(tag)
+    saved = store.save_resource(ResourceRecord.from_domain_model(resource))
+    resource = saved.to_domain_model()
 
     typer.echo(f"Saved: {resource.title or content[:50]}...")
     if resource.tags:
@@ -575,14 +619,12 @@ def resources(
     limit: int = typer.Option(20, "--limit", "-n", help="Maximum results"),
 ) -> None:
     """List saved resources."""
-    settings = get_settings()
-    resource_db = ResourceDB(settings.db_path)
-    resource_db.init_db()
+    store = _resolve_resource_store()
 
     if tag:
-        items = resource_db.find_resources_by_tags([tag])[:limit]
+        items = store.search_by_tags([tag], limit=limit)
     else:
-        items = resource_db.list_resources(limit=limit)
+        items = store.list_resources(limit=limit)
 
     if not items:
         typer.echo("No resources saved yet. Use 'flow save <url>' to add some.")
@@ -599,16 +641,13 @@ def resources(
 @app.command(name="tags")
 def list_tags() -> None:
     """List all tags with usage counts."""
-    settings = get_settings()
-    resource_db = ResourceDB(settings.db_path)
-    resource_db.init_db()
-
-    all_tags = resource_db.list_tags()
+    store = _resolve_resource_store()
+    all_tags = store.list_tags()
 
     if not all_tags:
         typer.echo("No tags yet. Save some resources to create tags.")
         return
 
     typer.echo(f"\nTags ({len(all_tags)}):\n")
-    for t in all_tags:
-        typer.echo(f"  {t.name} ({t.usage_count} uses)")
+    for tag_name in all_tags:
+        typer.echo(f"  {tag_name}")

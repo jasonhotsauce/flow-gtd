@@ -13,6 +13,7 @@ from typing import Literal, Mapping, Optional, cast
 
 # Provider type alias
 ProviderType = Literal["gemini", "openai", "ollama"]
+ResourceStorageType = Literal["flow-library", "obsidian-vault"]
 
 # Default config file location
 DEFAULT_CONFIG_PATH = Path.home() / ".flow" / "config.toml"
@@ -54,6 +55,9 @@ class LLMConfig:
     gemini: GeminiConfig = field(default_factory=GeminiConfig)
     openai: OpenAIConfig = field(default_factory=OpenAIConfig)
     ollama: OllamaConfig = field(default_factory=OllamaConfig)
+    resource_storage: ResourceStorageType = "flow-library"
+    obsidian_vault_path: str = ""
+    obsidian_notes_dir: str = "flow/resources"
 
 
 @dataclass
@@ -180,6 +184,21 @@ def load_config(config_path: Optional[Path] = None) -> LLMConfig:
         ),
     )
 
+    # Resource storage config
+    resources_section = file_config.get("resources", {})
+    config.resource_storage = _get_resource_storage_type(
+        os.environ.get("FLOW_RESOURCE_STORAGE")
+        or resources_section.get("storage", "flow-library")
+    )
+    config.obsidian_vault_path = str(
+        os.environ.get("FLOW_OBSIDIAN_VAULT_PATH")
+        or resources_section.get("obsidian_vault_path", "")
+    )
+    config.obsidian_notes_dir = str(
+        os.environ.get("FLOW_OBSIDIAN_NOTES_DIR")
+        or resources_section.get("obsidian_notes_dir", "flow/resources")
+    )
+
     return config
 
 
@@ -198,6 +217,14 @@ def _get_provider_type(value: str) -> ProviderType:
         return cast(ProviderType, value)
     # Default to gemini for invalid values
     return "gemini"
+
+
+def _get_resource_storage_type(value: str) -> ResourceStorageType:
+    """Validate and normalize resource storage type string."""
+    normalized = value.lower().strip()
+    if normalized in ("flow-library", "obsidian-vault"):
+        return cast(ResourceStorageType, normalized)
+    return "flow-library"
 
 
 def get_example_config() -> str:
@@ -256,6 +283,17 @@ def is_onboarding_completed(config_path: Optional[Path] = None) -> bool:
     return file_config.get("onboarding_completed", False)
 
 
+def has_resource_storage_config(config_path: Optional[Path] = None) -> bool:
+    """Return True when config includes an explicit resources.storage selection."""
+    path = config_path or DEFAULT_CONFIG_PATH
+    if not path.exists():
+        return False
+    file_config = _load_toml(path)
+    resources = file_config.get("resources", {})
+    storage = resources.get("storage")
+    return isinstance(storage, str) and bool(storage.strip())
+
+
 def save_config(
     provider: ProviderType,
     credentials: Mapping[str, str],
@@ -263,6 +301,9 @@ def save_config(
     onboarding_completed: bool = True,
     first_value_pending: bool = True,
     first_value_completed_at: str = "",
+    resource_storage: ResourceStorageType = "flow-library",
+    obsidian_vault_path: str = "",
+    obsidian_notes_dir: str = "flow/resources",
 ) -> None:
     """Write configuration to TOML file with secure permissions.
 
@@ -275,6 +316,9 @@ def save_config(
         onboarding_completed: Whether to mark onboarding as completed.
         first_value_pending: Whether first capture value is still pending.
         first_value_completed_at: ISO timestamp when first capture was completed.
+        resource_storage: Resource storage provider ID.
+        obsidian_vault_path: Obsidian vault path when using obsidian-vault.
+        obsidian_notes_dir: Note directory inside vault.
     """
     path = config_path or DEFAULT_CONFIG_PATH
 
@@ -333,6 +377,11 @@ def save_config(
             f'base_url = "{ollama_base_url}"',
             'default_model = "llama3.2"',
             "timeout = 120.0",
+            "",
+            "[resources]",
+            f'storage = "{resource_storage}"',
+            f'obsidian_vault_path = "{obsidian_vault_path}"',
+            f'obsidian_notes_dir = "{obsidian_notes_dir}"',
         ]
     )
 
@@ -400,4 +449,46 @@ def mark_first_value_completed(config_path: Optional[Path] = None) -> None:
         f'"{timestamp}"',
     )
     path.write_text(content)
+    os.chmod(path, 0o600)
+
+
+def set_resource_storage_config(
+    *,
+    storage_provider: ResourceStorageType,
+    config_path: Optional[Path] = None,
+    obsidian_vault_path: str = "",
+    obsidian_notes_dir: str = "flow/resources",
+) -> None:
+    """Set resource storage selection while preserving existing config content."""
+    path = config_path or DEFAULT_CONFIG_PATH
+    if not path.exists():
+        save_config(
+            provider="gemini",
+            credentials={},
+            config_path=path,
+            resource_storage=storage_provider,
+            obsidian_vault_path=obsidian_vault_path,
+            obsidian_notes_dir=obsidian_notes_dir,
+        )
+        return
+
+    content = path.read_text()
+    resources_lines = [
+        "[resources]",
+        f'storage = "{storage_provider}"',
+        f'obsidian_vault_path = "{obsidian_vault_path}"',
+        f'obsidian_notes_dir = "{obsidian_notes_dir}"',
+    ]
+    resources_block = "\n".join(resources_lines)
+
+    section_pattern = re.compile(
+        r"(?ms)^\[resources\]\n.*?(?=^\[|\Z)",
+    )
+    if section_pattern.search(content):
+        updated = section_pattern.sub(resources_block + "\n", content, count=1)
+    else:
+        suffix = "" if content.endswith("\n") else "\n"
+        updated = f"{content}{suffix}\n{resources_block}\n"
+
+    path.write_text(updated)
     os.chmod(path, 0o600)

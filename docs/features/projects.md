@@ -11,7 +11,8 @@ Projects are created in the **Process** funnel (Stage 2: Cluster), where the AI 
 - **Project list (GTD review)**  
   - See all active projects with a short “next action” preview per line.  
   - Two-panel layout: left = project list, right = selected project’s name, **suggested next action** (full text + tags), and **task list** (all actions with the first marked as `[next]`).  
-  - Navigate with j/k; Enter opens the project in the detail screen.
+  - Navigate with `j/k`; Enter opens the project in the detail screen.
+  - Switch panel focus with `1/2` or `l/d` (also shown in panel headers).
 
 - **Project detail (proceed)**  
   - List of active actions for one project with full task text and tags in a side panel.  

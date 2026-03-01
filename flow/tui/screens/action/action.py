@@ -21,13 +21,17 @@ from flow.tui.common.widgets.sidecar import ResourceContextPanel
 class ActionScreen(FlowScreen):
     """Split: 65% next-actions list, 35% Sidecar (resources by tags)."""
 
-    CSS_PATH = "action.tcss"
+    CSS_PATH = ["../../common/ops_tokens.tcss", "action.tcss"]
 
     BINDINGS = with_global_bindings(
         ("enter", "select_action", "Select"),
         ("c", "complete_action", "Complete"),
         ("f", "defer_action", "Defer"),
         ("tab", "focus_sidecar", "Sidecar"),
+        ("1", "focus_tasks_panel", "Tasks"),
+        ("2", "focus_resources_panel", "Resources"),
+        ("t", "focus_tasks_panel", "Tasks"),
+        ("r", "focus_resources_panel", "Resources"),
         Binding("i", "go_inbox", "Inbox", show=False),
         Binding("P", "go_projects", "Projects", show=False),
     )
@@ -41,19 +45,21 @@ class ActionScreen(FlowScreen):
 
     def compose(self) -> ComposeResult:
         yield Header()
+        with Container(id="ops-status-strip"):
+            yield Static("ACTIONS  |  Execute next actions with resource context", id="ops-status-text")
         with Container(id="action-header"):
             yield Static("⚡ Next Actions", id="action-title")
             yield Static("", id="action-count")
         with Horizontal(id="action-content"):
             with Vertical(id="action-left"):
-                yield Static("📋 Tasks", id="action-list-title")
+                yield Static("[1] 📋 Tasks (t)", id="action-list-title")
                 yield OptionList(id="action-list")
             with Vertical(id="action-right"):
-                yield Static("🔗 Related Resources", id="sidecar-title")
+                yield Static("[2] 🔗 Resources (r)", id="sidecar-title")
                 yield ResourceContextPanel(id="sidecar")
         with Container(id="action-help"):
             yield Static(
-                "j/k: Navigate │ Enter: Select │ c: Complete │ f: Defer │ Tab: Sidecar │ Esc: Back │ ?: Help",
+                "j/k: Navigate │ 1/2 or t/r: Panels │ Enter: Select │ c: Complete │ f: Defer │ Tab: Resources │ Esc: Back │ ?: Help",
                 id="action-help-text",
             )
         yield Footer()
@@ -213,8 +219,15 @@ class ActionScreen(FlowScreen):
 
     def action_focus_sidecar(self) -> None:
         """Focus the sidecar panel."""
-        sidecar = self.query_one("#sidecar", ResourceContextPanel)
-        sidecar.focus()
+        self.action_focus_resources_panel()
+
+    def action_focus_tasks_panel(self) -> None:
+        """Focus the tasks panel."""
+        self.query_one("#action-list", OptionList).focus()
+
+    def action_focus_resources_panel(self) -> None:
+        """Focus the resources panel."""
+        self.query_one("#sidecar", ResourceContextPanel).focus()
 
     def action_defer_action(self) -> None:
         """Defer the current action using the shared defer chooser."""

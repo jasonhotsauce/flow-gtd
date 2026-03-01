@@ -1,132 +1,74 @@
-/* Focus Screen Styles
- * Deep Focus Mode: centered task display with time-aware context
- */
-
-/* Theme variables */
-$primary: #7c3aed;
-$primary-light: #a78bfa;
-$success: #10b981;
-$warning: #f59e0b;
-$danger: #ef4444;
-$info: #3b82f6;
-$surface: #1e1e2e;
-$surface-light: #313244;
-$surface-lighter: #45475a;
-$text: #cdd6f4;
-$text-muted: #a6adc8;
-$text-dim: #6c7086;
-$border: #45475a;
+/* Focus - Professional Ops */
 
 FocusScreen {
     layout: vertical;
-    background: $surface;
+    background: #0d1117;
 }
 
-/* Focus header with mode indicator */
 #focus-header {
     dock: top;
     height: auto;
     padding: 1 2;
-    background: $surface-light;
-    border-bottom: solid $border;
+    background: #121922;
+    border-bottom: solid #253241;
     layout: horizontal;
-    align: center middle;
-}
-
-#focus-icon {
-    width: auto;
-    padding-right: 1;
 }
 
 #focus-title {
-    width: auto;
     text-style: bold;
-    color: $primary-light;
+    color: #7ad0de;
 }
 
-#focus-mode-badge {
-    width: auto;
-    padding-left: 2;
-    text-style: italic;
+#focus-mode-badge,
+#focus-time-text,
+#focus-tags {
+    color: #b8c6d8;
 }
 
-/* Time window info bar */
 #focus-time-info {
     dock: top;
-    height: auto;
-    padding: 1 2;
-    background: $surface;
-    border-bottom: solid $border;
-    content-align: center middle;
+    padding: 0 2 1 2;
+    border-bottom: solid #253241;
 }
 
-#focus-time-text {
-    text-align: center;
-    color: $text-muted;
-    width: 100%;
-}
-
-/* Main task display - centered and prominent */
 #focus-main {
     height: 1fr;
+    padding: 1 2;
+}
+
+#focus-task-container,
+#focus-resources {
     width: 100%;
-    align: center top;
-    content-align: center middle;
-    padding: 2;
+    background: #121922;
+    border: round #253241;
+    padding: 1 2;
 }
 
 #focus-task-container {
-    width: 80%;
-    height: auto;
-    max-height: 40vh;
-    padding: 3 4;
-    background: $surface-light;
-    border: round $primary;
-    content-align: center middle;
-    overflow-y: auto;
+    min-height: 6;
 }
 
 #focus-task-title {
-    text-align: center;
-    color: $text;
+    color: #e6eef7;
     text-style: bold;
-    width: 100%;
-    padding: 1;
 }
 
 #focus-task-meta {
-    width: 80%;
-    height: auto;
-    padding: 1 2;
+    width: 100%;
+    padding: 1 0;
     layout: horizontal;
-    content-align: center middle;
-    align: center middle;
 }
 
 #focus-duration-badge {
-    width: auto;
-    padding: 0 2;
-    text-align: center;
+    color: #7ad0de;
+    text-style: bold;
+    margin-right: 2;
 }
 
-#focus-tags {
-    width: auto;
-    padding: 0 2;
-    text-align: center;
-}
-
-/* Related resources panel - compact, scrollable */
 #focus-resources {
-    width: 80%;
-    height: auto;
-    max-height: 25vh;
-    background: $surface-light;
-    border: round $border;
-    padding: 1;
-    overflow-y: auto;
+    height: 1fr;
 }
 
-/* Empty state - when no tasks */
 #focus-empty {
     width: 100%;
     height: 1fr;
@@ -135,66 +77,14 @@ FocusScreen {
     display: none;
 }
 
-#focus-empty-icon {
+#focus-empty-icon,
+#focus-empty-hint {
+    color: #8ea2b7;
     text-align: center;
-    color: $success;
-    padding: 2;
 }
 
 #focus-empty-text {
+    color: #b8c6d8;
+    text-style: bold;
     text-align: center;
-    color: $success;
-    text-style: bold;
-    padding: 1;
-}
-
-#focus-empty-hint {
-    text-align: center;
-    color: $text-dim;
-    text-style: italic;
-    padding: 1;
-}
-
-/* Help bar at bottom */
-#focus-help {
-    dock: bottom;
-    height: 3;
-    padding: 0 2;
-    background: $surface-light;
-    border-top: solid $border;
-    content-align: center middle;
-}
-
-#focus-help-text {
-    color: $text-dim;
-    text-align: center;
-}
-
-/* Mode-specific styling */
-.mode-quick {
-    border: round $warning;
-}
-
-.mode-deep {
-    border: round $info;
-}
-
-.mode-standard {
-    border: round $primary;
-}
-
-/* Duration badges */
-.duration-short {
-    color: $success;
-    text-style: bold;
-}
-
-.duration-medium {
-    color: $warning;
-    text-style: bold;
-}
-
-.duration-long {
-    color: $info;
-    text-style: bold;
 }

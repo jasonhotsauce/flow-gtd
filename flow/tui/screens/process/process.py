@@ -21,7 +21,7 @@ from flow.utils.llm.config import mark_first_value_completed, read_first_run_sta
 class ProcessScreen(FlowScreen):
     """TUI Wizard for Process Funnel: Dedup -> Cluster -> 2-Min -> Coach."""
 
-    CSS_PATH = "process.tcss"
+    CSS_PATH = ["../../common/ops_tokens.tcss", "process.tcss"]
 
     BINDINGS = with_global_bindings(
         Binding("1", "stage1", "Dedup", show=False),
@@ -60,6 +60,8 @@ class ProcessScreen(FlowScreen):
 
     def compose(self) -> ComposeResult:
         yield Header()
+        with Container(id="ops-status-strip"):
+            yield Static("PROCESS FUNNEL  |  Dedup -> Cluster -> 2-Min -> Coach", id="ops-status-text")
         with Container(id="process-header"):
             yield Static("🔄 Process Funnel", id="process-main-title")
         with Horizontal(id="process-progress"):
