@@ -5,12 +5,14 @@ from typing import Optional
 
 from textual.app import ComposeResult
 from textual.containers import Container, Vertical
+from textual.events import Resize
 from textual.widgets import Footer, Header, Static
 
 from flow.core.focus import FocusDispatcher
 from flow.models import Item
 from flow.tui.common.base_screen import FlowScreen
 from flow.tui.common.keybindings import with_global_bindings
+from flow.tui.common.widgets.empty_state import EmptyStateRenderer
 from flow.tui.common.widgets.sidecar import ResourceContextPanel
 
 
@@ -30,6 +32,7 @@ class FocusScreen(FlowScreen):
         ("space", "complete_task", "Complete"),
         ("s", "skip_task", "Skip"),
         ("r", "refresh", "Refresh"),
+        ("n", "go_to_inbox_new_task", "New Inbox Task"),
     )
 
     def __init__(self) -> None:
@@ -37,6 +40,7 @@ class FocusScreen(FlowScreen):
         self._dispatcher = FocusDispatcher()
         self._current_task: Optional[Item] = None
         self._loading: bool = False
+        self._empty_state_renderer = EmptyStateRenderer()
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -66,16 +70,11 @@ class FocusScreen(FlowScreen):
 
         # Empty state
         with Vertical(id="focus-empty"):
-            yield Static("", id="focus-empty-icon")
-            yield Static("All caught up!", id="focus-empty-text")
-            yield Static(
-                "No tasks available for your current time window",
-                id="focus-empty-hint",
-            )
+            yield Static("", id="focus-empty-content")
 
         with Container(id="ops-keyhint"):
             yield Static(
-                "Space: Complete  |  s: Skip  |  r: Refresh  |  Esc: Back  |  ?: Help",
+                "Space: Complete  |  s: Skip  |  r: Refresh  |  n: New Inbox Task  |  Esc: Back  |  ?: Help",
                 id="ops-keyhint-text",
             )
 
@@ -84,6 +83,41 @@ class FocusScreen(FlowScreen):
     def on_mount(self) -> None:
         """Initialize focus mode on mount."""
         asyncio.create_task(self._refresh_task_async())
+
+    def on_resize(self, _event: Resize) -> None:
+        """Re-render empty state to maintain centered layout."""
+        if self.is_mounted and self._current_task is None:
+            self._render_empty_state()
+
+    def _empty_state_viewport(self) -> tuple[int, int]:
+        """Return available viewport for centered empty-state layout."""
+        container = self.query_one("#focus-empty", Vertical)
+        container_size = getattr(container, "size", None)
+        container_width = getattr(container_size, "width", 0) if container_size else 0
+        container_height = (
+            getattr(container_size, "height", 0) if container_size else 0
+        )
+        screen_width = max(getattr(self.size, "width", 0), 0)
+        screen_height = max(getattr(self.size, "height", 0), 0)
+        raw_width = (container_width or screen_width or 80) - 2
+        raw_height = (container_height or screen_height or 24) - 2
+        width = min(max(raw_width, 24), 240)
+        height = min(max(raw_height, 8), 80)
+        return width, height
+
+    def _render_empty_state(self) -> None:
+        """Render Focus empty state with dynamic center padding."""
+        content = self.query_one("#focus-empty-content", Static)
+        view_width, view_height = self._empty_state_viewport()
+        content.update(
+            self._empty_state_renderer.render(
+                view_width=view_width,
+                view_height=view_height,
+                status_header="No Active Tasks",
+                cta_key="N",
+                cta_action="Create New Inbox Task",
+            )
+        )
 
     async def _refresh_task_async(self) -> None:
         """Refresh the current task and UI asynchronously.
@@ -165,7 +199,6 @@ class FocusScreen(FlowScreen):
 
         main_container = self.query_one("#focus-main", Vertical)
         empty_container = self.query_one("#focus-empty", Vertical)
-        empty_icon = self.query_one("#focus-empty-icon", Static)
 
         # Update header info based on mode
         if "Quick" in mode:
@@ -184,7 +217,7 @@ class FocusScreen(FlowScreen):
             # Show empty state
             main_container.display = False
             empty_container.display = True
-            empty_icon.update("[dim]v[/]")
+            self._render_empty_state()
             resources_panel.display = False
             resources_panel.clear_resources()
             return
@@ -273,6 +306,12 @@ class FocusScreen(FlowScreen):
         asyncio.create_task(self._refresh_task_async())
         self.notify("Refreshed task selection", timeout=2)
 
+    def action_go_to_inbox_new_task(self) -> None:
+        """Navigate to Inbox and trigger startup quick-create."""
+        from flow.tui.screens.inbox.inbox import InboxScreen
+
+        self.app.push_screen(InboxScreen(startup_context={"start_new_task": True}))
+
     def action_go_back(self) -> None:
         """Return to previous screen."""
         self.app.pop_screen()
@@ -284,6 +323,7 @@ class FocusScreen(FlowScreen):
             "[Space] Complete current task\n"
             "[S] Skip task (won't show again this session)\n"
             "[R] Refresh selection\n"
+            "[N] Create new inbox task\n"
             "[Esc] Exit focus mode",
             title="Help",
             timeout=5,

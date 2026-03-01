@@ -79,3 +79,7 @@ def test_inbox_screen_focus_detail_panel_routes_to_detail(monkeypatch: Any) -> N
     monkeypatch.setattr(screen, "query_one", fake_query_one)
     screen.action_focus_detail_panel()
     assert focused["called"] is True
+
+def test_inbox_screen_has_new_task_binding() -> None:
+    """Inbox should expose `n` to create a new task from empty state."""
+    assert _has_binding(InboxScreen, "n", "new_task")

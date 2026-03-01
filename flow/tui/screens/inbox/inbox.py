@@ -9,6 +9,7 @@ from textual.binding import Binding
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical, ScrollableContainer
 from textual.css.query import NoMatches
+from textual.events import Resize
 from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
@@ -17,8 +18,13 @@ from flow.models import Item
 from flow.tui.common.base_screen import FlowScreen
 from flow.tui.common.keybindings import with_global_bindings
 from flow.tui.common.widgets.defer_dialog import DeferDialog
+from flow.tui.common.widgets.empty_state import EmptyStateRenderer
 from flow.tui.common.widgets.process_task_dialog import ProcessTaskDialog
 from flow.tui.common.widgets.project_picker_dialog import ProjectPickerDialog
+from flow.tui.common.widgets.quick_capture_dialog import (
+    QuickCaptureDialog,
+    QuickCaptureResult,
+)
 
 
 class InboxScreen(FlowScreen):
@@ -34,6 +40,7 @@ class InboxScreen(FlowScreen):
         ("2", "focus_detail_panel", "Detail"),
         ("l", "focus_list_panel", "List"),
         ("e", "focus_detail_panel", "Detail"),
+        ("n", "new_task", "New Task"),
         ("p", "go_process", "Process"),
         ("g", "go_projects", "Projects"),
         Binding("a", "go_action", "Actions", show=False),
@@ -46,6 +53,7 @@ class InboxScreen(FlowScreen):
         self._engine = Engine()
         self._items: list[Item] = []
         self._startup_context = startup_context
+        self._empty_state_renderer = EmptyStateRenderer()
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -67,14 +75,10 @@ class InboxScreen(FlowScreen):
                     yield Static("", id="inbox-detail-body")
                 yield Static("", id="inbox-detail-tags")
         with Vertical(id="inbox-empty"):
-            yield Static("📭", id="inbox-empty-icon")
-            yield Static("Your inbox is empty!", id="inbox-empty-text")
-            yield Static(
-                "Use 'flow c <text>' to capture new items", id="inbox-empty-hint"
-            )
+            yield Static("", id="inbox-empty-content")
         with Container(id="inbox-help"):
             yield Static(
-                "j/k: Navigate │ 1/2 or l/e: Panels │ Enter: Process Menu │ d: Delete │ f: Defer │ p: Process │ g: Projects │ ?: Help",
+                "j/k: Navigate │ 1/2 or l/e: Panels │ Enter: Process Menu │ d: Delete │ f: Defer │ n: New Task │ p: Process │ g: Projects │ ?: Help",
                 id="inbox-help-text",
             )
         yield Footer()
@@ -82,6 +86,41 @@ class InboxScreen(FlowScreen):
     def on_mount(self) -> None:
         """Load inbox items on mount."""
         asyncio.create_task(self._refresh_items_async())
+
+    def on_resize(self, _event: Resize) -> None:
+        """Re-render empty state to maintain centered layout on resize."""
+        if self.is_mounted and not self._items:
+            self._render_empty_state()
+
+    def _empty_state_viewport(self) -> tuple[int, int]:
+        """Return available viewport for centered empty-state layout."""
+        container = self.query_one("#inbox-empty", Vertical)
+        container_size = getattr(container, "size", None)
+        container_width = getattr(container_size, "width", 0) if container_size else 0
+        container_height = (
+            getattr(container_size, "height", 0) if container_size else 0
+        )
+        screen_width = max(getattr(self.size, "width", 0), 0)
+        screen_height = max(getattr(self.size, "height", 0), 0)
+        raw_width = (container_width or screen_width or 80) - 2
+        raw_height = (container_height or screen_height or 24) - 2
+        width = min(max(raw_width, 24), 240)
+        height = min(max(raw_height, 8), 80)
+        return width, height
+
+    def _render_empty_state(self) -> None:
+        """Render Inbox empty state with dynamic center padding."""
+        content = self.query_one("#inbox-empty-content", Static)
+        view_width, view_height = self._empty_state_viewport()
+        content.update(
+            self._empty_state_renderer.render(
+                view_width=view_width,
+                view_height=view_height,
+                status_header="Inbox Clear",
+                cta_key="N",
+                cta_action="Capture New Task",
+            )
+        )
 
     def _refresh_list(self) -> None:
         """Render inbox list from current in-memory items."""
@@ -96,6 +135,7 @@ class InboxScreen(FlowScreen):
         if not self._items:
             empty_container.display = True
             content_container.display = False
+            self._render_empty_state()
             count_widget.update("")
             stats_widget.update("")
             self._update_detail_panel(None)
@@ -232,11 +272,67 @@ class InboxScreen(FlowScreen):
         if not self._startup_context:
             return
 
+        if self._startup_context.get("start_new_task") is True:
+            self._open_startup_quick_capture()
+            self._startup_context = None
+            return
+
         if self._startup_context.get("show_first_value_hint") is True:
             self.notify(
                 "Captured your first inbox item. Start by clarifying the next action."
             )
         self._startup_context = None
+
+    def _open_startup_quick_capture(self) -> None:
+        """Open quick-capture modal for startup handoff."""
+        self.app.push_screen(
+            QuickCaptureDialog(),
+            callback=self._apply_startup_quick_capture_result,
+        )
+
+    def _apply_startup_quick_capture_result(
+        self, result: QuickCaptureResult | None
+    ) -> None:
+        """Apply startup quick-capture result asynchronously."""
+        asyncio.create_task(self._apply_startup_quick_capture_result_async(result))
+
+    async def _apply_startup_quick_capture_result_async(
+        self, result: QuickCaptureResult | None
+    ) -> None:
+        """Persist startup quick-capture result and refresh inbox list."""
+        if not result or result.get("action") != "submit":
+            return
+
+        text = result.get("text", "").strip()
+        if not text:
+            self.notify("Enter task text to create a new inbox task.", severity="warning", timeout=2)
+            return
+
+        try:
+            created = await asyncio.to_thread(self._engine.capture, text)
+        except Exception as exc:  # pragma: no cover - safety net for runtime failures
+            self.notify(f"Failed to create task: {exc}", severity="error", timeout=3)
+            return
+
+        await self._refresh_items_async()
+        self._highlight_item_by_id(created.id)
+        self.notify(f"Captured: {created.title[:40]}", timeout=2)
+
+    def _highlight_item_by_id(self, item_id: str) -> None:
+        """Highlight a specific item in the inbox list if present."""
+        opt_list = self.query_one("#inbox-list", OptionList)
+        for idx, item in enumerate(self._items):
+            if item.id == item_id:
+                opt_list.highlighted = idx
+                self._update_detail_panel(item)
+                break
+
+    def action_new_task(self) -> None:
+        """Open quick-capture dialog for creating a new inbox task."""
+        self.app.push_screen(
+            QuickCaptureDialog(),
+            callback=self._apply_startup_quick_capture_result,
+        )
 
     def action_process_item(self) -> None:
         """Back-compat action alias for process menu."""
@@ -488,7 +584,7 @@ class InboxScreen(FlowScreen):
     def action_show_help(self) -> None:
         """Show help toast."""
         self.notify(
-            "j/k: Navigate │ Enter: Process Menu │ d: Delete │ f: Defer │ p: Process │ g: Projects\n"
+            "j/k: Navigate │ Enter: Process Menu │ d: Delete │ f: Defer │ n: New Task │ p: Process │ g: Projects\n"
             "a: Actions │ r: Review │ q: Quit",
             title="Help",
             timeout=5,

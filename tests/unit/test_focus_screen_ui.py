@@ -46,7 +46,7 @@ def _query_widget_map() -> dict[str, Any]:
         "#focus-tags": _FakeStatic(),
         "#focus-main": _FakeContainer(),
         "#focus-empty": _FakeContainer(),
-        "#focus-empty-icon": _FakeStatic(),
+        "#focus-empty-content": _FakeStatic(),
         "#focus-resources": _FakeResourcesPanel(),
     }
 
@@ -95,3 +95,22 @@ def test_focus_screen_hides_resources_panel_when_no_task(
 
     assert widgets["#focus-resources"].display is False
     assert widgets["#focus-resources"].cleared is True
+
+
+def test_focus_screen_empty_state_shows_inbox_creation_guidance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Focus empty state should guide users to create a new inbox task."""
+    screen = FocusScreen()
+    screen._current_task = None
+
+    widgets = _query_widget_map()
+    monkeypatch.setattr(FocusScreen, "is_mounted", property(lambda self: True))
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+
+    screen._update_ui("Standard", "No window")
+
+    assert "No Active Tasks" in str(widgets["#focus-empty-content"].value)
+    assert "Create New Inbox Task" in str(widgets["#focus-empty-content"].value)

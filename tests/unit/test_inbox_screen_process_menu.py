@@ -42,6 +42,28 @@ def test_open_process_menu_pushes_process_dialog(monkeypatch: Any) -> None:
     assert isinstance(pushes[0][0], ProcessTaskDialog)
 
 
+def test_new_task_action_pushes_quick_capture_dialog(monkeypatch: Any) -> None:
+    """New-task action should open quick capture dialog."""
+    screen = InboxScreen()
+    pushes: list[tuple[object, object | None]] = []
+    monkeypatch.setattr(
+        InboxScreen,
+        "app",
+        property(
+            lambda _self: SimpleNamespace(
+                push_screen=lambda dialog, callback=None: pushes.append(
+                    (dialog, callback)
+                )
+            )
+        ),
+    )
+
+    screen.action_new_task()
+
+    assert len(pushes) == 1
+    assert pushes[0][0].__class__.__name__ == "QuickCaptureDialog"
+
+
 def test_apply_process_result_add_to_project_opens_picker(monkeypatch: Any) -> None:
     """Process result add_to_project should open project picker."""
     screen = InboxScreen()

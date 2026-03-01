@@ -91,6 +91,13 @@ If you choose Obsidian Vault, install Obsidian CLI and provide your vault path.
   - Panel abbreviations shown in panel headers (for example `l`, `d`, `t`, `r`, `e`)
 - `Tab` focus switching remains available on the Next Actions screen.
 
+## Focus + Inbox Empty States
+
+- Focus and Inbox use a centered minimalist empty state with an ASCII visual anchor, concise status header, and a high-contrast action hint.
+- Focus empty state keeps `n` as the fastest path to Inbox quick capture.
+- Inbox empty state also supports `n` to open quick capture immediately.
+- A randomized one-line productivity tip appears at the bottom of both empty states.
+
 ## Tech
 
 - **CLI**: Typer  
