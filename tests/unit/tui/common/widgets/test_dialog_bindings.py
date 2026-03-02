@@ -6,6 +6,7 @@ from flow.tui.common.base_screen import FlowModalScreen
 from flow.tui.common.widgets.defer_dialog import DeferDialog
 from flow.tui.common.widgets.process_task_dialog import ProcessTaskDialog
 from flow.tui.common.widgets.project_picker_dialog import ProjectPickerDialog
+from flow.tui.common.widgets.quick_capture_dialog import QuickCaptureDialog
 
 
 def test_defer_dialog_inherits_flow_modal_screen() -> None:
@@ -34,3 +35,8 @@ def test_project_picker_dialog_keeps_escape_cancel_binding() -> None:
         for binding in ProjectPickerDialog.BINDINGS
     }
     assert "escape" in keys
+
+
+def test_quick_capture_dialog_inherits_flow_modal_screen() -> None:
+    """Quick capture dialog should inherit shared modal keybinding base."""
+    assert issubclass(QuickCaptureDialog, FlowModalScreen)
