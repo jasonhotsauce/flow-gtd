@@ -109,12 +109,15 @@ Interaction model is a **TUI Wizard** (Textual App), fully keyboard-driven.
     2. Require the user to build:
         * `Top 3`
         * `Bonus`
+    3. Keep `Top 3 Draft` and `Bonus Draft` visible while planning, with same-screen editing for add, remove, promote, demote, and reorder actions.
+    4. Use stable pane shells and a terminal-native Material surface system rather than swapping between unrelated layouts.
 * **Focus Mode**:
-    * Show today's approved `Top 3` and `Bonus` items.
+    * Merge today's approved `Top 3` and `Bonus` items into one ordered `Today` execution surface while keeping detail and wrap panes in place.
     * Keep a persistent on-screen prompt after plan approval that tells the user how to review planned work and access completion / wrap actions.
     * Completion from this screen should update daily-wrap stats.
 * **Daily Wrap**:
     * Show `Top 3` and `Bonus` completion counts.
+    * Show deterministic accomplishments, carry-forward items, and coaching feedback even when AI insight is unavailable.
     * Treat finishing `Top 3` as the day's primary success condition.
     * Allow optional AI-generated insight from structured wrap data.
 * **Architecture Requirement**:

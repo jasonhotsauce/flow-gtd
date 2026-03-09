@@ -1,12 +1,129 @@
 """Unit tests for the daily workspace screen."""
 
 import asyncio
+from typing import Any
 
 import pytest
 from textual.app import App, ComposeResult
+from textual.widgets import Static
 
 from flow.models import Item
+from flow.tui.common.widgets.quick_capture_dialog import QuickCaptureDialog
 from flow.tui.screens.daily_workspace.daily_workspace import DailyWorkspaceScreen
+
+
+class _DummyStatic:
+    def __init__(self, selector: str) -> None:
+        self.selector = selector
+        self.value = ""
+
+    def update(self, value: object) -> None:
+        self.value = str(value)
+
+
+class _DummyOptionList:
+    def __init__(self) -> None:
+        self.highlighted: int | None = None
+        self.focused = False
+        self.options: list[Any] = []
+
+    @property
+    def option_count(self) -> int:
+        return len(self.options)
+
+    def clear_options(self) -> None:
+        self.options.clear()
+        self.highlighted = None
+
+    def add_option(self, option: Any) -> None:
+        self.options.append(option)
+
+    def action_first(self) -> None:
+        if self.options:
+            self.highlighted = 0
+
+    def focus(self) -> None:
+        self.focused = True
+
+    def action_cursor_down(self) -> None:
+        return
+
+    def action_cursor_up(self) -> None:
+        return
+
+    def get_option_at_index(self, index: int) -> Any:
+        return self.options[index]
+
+
+def _screen_widgets() -> dict[str, Any]:
+    selectors = [
+        "#ops-status-text",
+        "#daily-title",
+        "#daily-subtitle",
+        "#daily-section-title",
+        "#daily-summary",
+        "#daily-detail",
+        "#daily-wrap",
+        "#daily-insight",
+        "#daily-list",
+        "#candidates-pane-title",
+        "#candidates-pane-status",
+        "#top-draft-pane-title",
+        "#top-draft-pane-status",
+        "#top-draft-content",
+        "#bonus-draft-pane-title",
+        "#bonus-draft-pane-status",
+        "#bonus-draft-content",
+        "#today-pane-title",
+        "#today-pane-status",
+        "#today-content",
+        "#detail-pane-title",
+        "#detail-pane-status",
+        "#detail-content",
+        "#wrap-pane-title",
+        "#wrap-pane-status",
+        "#wrap-content",
+    ]
+    widgets: dict[str, Any] = {selector: _DummyStatic(selector) for selector in selectors}
+    widgets["#daily-list"] = _DummyOptionList()
+    return widgets
+
+
+def _state_with_candidates() -> dict[str, object]:
+    return {
+        "needs_plan": True,
+        "top_items": [
+            Item(id="cand-1", type="action", title="Draft launch brief", status="active"),
+            Item(id="cand-2", type="action", title="Review blockers", status="active"),
+        ],
+        "bonus_items": [
+            Item(id="cand-3", type="action", title="Tidy backlog", status="active")
+        ],
+        "candidates": {
+            "must_address": [
+                Item(
+                    id="cand-1",
+                    type="action",
+                    title="Draft launch brief",
+                    status="active",
+                )
+            ],
+            "inbox": [
+                Item(
+                    id="cand-2",
+                    type="inbox",
+                    title="Review blockers",
+                    status="active",
+                )
+            ],
+            "ready_actions": [
+                Item(id="cand-3", type="action", title="Tidy backlog", status="active")
+            ],
+            "suggested": [
+                Item(id="cand-4", type="action", title="Prep follow-up", status="active")
+            ],
+        },
+    }
 
 
 def _has_binding(screen: type[DailyWorkspaceScreen], key: str, action: str | None = None) -> bool:
@@ -28,6 +145,7 @@ def test_daily_workspace_screen_exposes_plan_focus_and_wrap_bindings() -> None:
     """Workspace should expose the primary planning and execution actions."""
     assert _has_binding(DailyWorkspaceScreen, "t", "add_to_top")
     assert _has_binding(DailyWorkspaceScreen, "b", "add_to_bonus")
+    assert _has_binding(DailyWorkspaceScreen, "n", "new_task")
     assert _has_binding(DailyWorkspaceScreen, "x", "confirm_plan")
     assert _has_binding(DailyWorkspaceScreen, "c", "complete_planned_item")
     assert _has_binding(DailyWorkspaceScreen, "w", "show_daily_wrap")
@@ -334,20 +452,298 @@ def test_build_candidate_lines_groups_items_for_planning() -> None:
     ]
 
 
-def test_build_plan_lines_lists_top_before_bonus() -> None:
-    """Focus list should show Top 3 before Bonus items."""
+def test_apply_workspace_state_renders_visible_top_and_bonus_drafts(monkeypatch) -> None:
+    """Planning mode should show explicit draft contents, not only counts."""
     screen = DailyWorkspaceScreen()
-    lines = screen._build_plan_lines(
-        top_items=[Item(id="top-1", type="action", title="Top", status="active")],
-        bonus_items=[Item(id="bonus-1", type="action", title="Bonus", status="active")],
+    widgets = _screen_widgets()
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
     )
 
-    assert lines == [
-        ("top:top-1", "[Top 1] Top"),
-        ("bonus:bonus-1", "[Bonus 1] Bonus"),
-    ]
+    screen._apply_workspace_state(_state_with_candidates())
+
+    assert "Draft launch brief" in widgets["#top-draft-content"].value
+    assert "Review blockers" in widgets["#top-draft-content"].value
+    assert "Tidy backlog" in widgets["#bonus-draft-content"].value
 
 
+def test_apply_workspace_state_empty_candidates_mentions_new_task(monkeypatch) -> None:
+    """Planning mode should surface new-task guidance when no candidates are available."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+
+    screen._apply_workspace_state(
+        {
+            "needs_plan": True,
+            "top_items": [],
+            "bonus_items": [],
+            "candidates": {
+                "must_address": [],
+                "inbox": [],
+                "ready_actions": [],
+                "suggested": [],
+            },
+        }
+    )
+
+    assert "n" in widgets["#candidates-pane-status"].value.lower()
+    assert "new task" in widgets["#detail-content"].value.lower()
+
+
+def test_daily_workspace_new_task_action_opens_quick_capture_dialog(monkeypatch) -> None:
+    """Daily workspace should always allow inline quick capture."""
+    screen = DailyWorkspaceScreen()
+    pushes: list[tuple[object, object | None]] = []
+
+    class _FakeApp:
+        def push_screen(self, dialog: object, callback: object | None = None) -> None:
+            pushes.append((dialog, callback))
+
+    monkeypatch.setattr(DailyWorkspaceScreen, "app", property(lambda self: _FakeApp()))
+
+    screen.action_new_task()
+
+    assert len(pushes) == 1
+    assert isinstance(pushes[0][0], QuickCaptureDialog)
+    assert callable(pushes[0][1])
+
+
+def test_apply_workspace_state_shows_focused_item_planning_status(monkeypatch) -> None:
+    """Planning detail pane should describe the focused item's current bucket."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    widgets["#daily-list"].highlighted = 0
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+
+    screen._apply_workspace_state(_state_with_candidates())
+
+    assert "Top 3 #1" in widgets["#detail-content"].value
+
+
+def test_remove_selected_top_item_updates_draft_content(monkeypatch) -> None:
+    """Removing from Top 3 should update both state and visible draft pane."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+
+    screen._apply_workspace_state(_state_with_candidates())
+    screen._draft_focus = "top"
+    widgets["#daily-list"].highlighted = 0
+
+    screen.action_remove_selected_draft_item()
+
+    assert [item.id for item in screen._top_items] == ["cand-2"]
+    assert "Draft launch brief" not in widgets["#top-draft-content"].value
+
+
+def test_remove_selected_bonus_item_updates_draft_content(monkeypatch) -> None:
+    """Removing from Bonus should update both state and visible draft pane."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+
+    screen._apply_workspace_state(_state_with_candidates())
+    screen._draft_focus = "bonus"
+    widgets["#daily-list"].highlighted = 0
+
+    screen.action_remove_selected_draft_item()
+
+    assert screen._bonus_items == []
+    assert "Tidy backlog" not in widgets["#bonus-draft-content"].value
+
+
+def test_promote_selected_bonus_item_into_top_draft(monkeypatch) -> None:
+    """Promoting Bonus work should move it into the ordered Top 3 draft."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+
+    screen._apply_workspace_state(_state_with_candidates())
+    screen._draft_focus = "bonus"
+    widgets["#daily-list"].highlighted = 0
+
+    screen.action_promote_bonus_item()
+
+    assert [item.id for item in screen._top_items] == ["cand-1", "cand-2", "cand-3"]
+    assert screen._bonus_items == []
+    assert "Tidy backlog" in widgets["#top-draft-content"].value
+
+
+def test_demote_selected_top_item_into_bonus_draft(monkeypatch) -> None:
+    """Demoting Top 3 work should move it into Bonus."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+
+    screen._apply_workspace_state(_state_with_candidates())
+    screen._draft_focus = "top"
+    widgets["#daily-list"].highlighted = 1
+
+    screen.action_demote_top_item()
+
+    assert [item.id for item in screen._top_items] == ["cand-1"]
+    assert [item.id for item in screen._bonus_items] == ["cand-3", "cand-2"]
+    assert "Review blockers" in widgets["#bonus-draft-content"].value
+
+
+def test_reorder_top_items_updates_visible_slot_order(monkeypatch) -> None:
+    """Reordering Top 3 should preserve slot semantics in the draft pane."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+
+    screen._apply_workspace_state(_state_with_candidates())
+    screen._draft_focus = "top"
+    widgets["#daily-list"].highlighted = 1
+
+    screen.action_move_top_item_up()
+
+    assert [item.id for item in screen._top_items] == ["cand-2", "cand-1"]
+    first_slot = widgets["#top-draft-content"].value.splitlines()[0]
+    assert "Review blockers" in first_slot
+
+
+def test_confirmed_state_keeps_panes_and_renders_merged_today_list(monkeypatch) -> None:
+    """Confirming should update pane titles in place and merge Top 3 plus Bonus into Today."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+
+    screen._apply_workspace_state(
+        {
+            "needs_plan": False,
+            "top_items": [
+                Item(id="top-1", type="action", title="Draft launch brief", status="active"),
+                Item(id="top-2", type="action", title="Review blockers", status="active"),
+            ],
+            "bonus_items": [
+                Item(id="bonus-1", type="action", title="Tidy backlog", status="active")
+            ],
+            "candidates": {
+                "must_address": [],
+                "inbox": [],
+                "ready_actions": [],
+                "suggested": [],
+            },
+        }
+    )
+
+    assert "Today" in widgets["#today-pane-title"].value
+    assert "Plan confirmed" in widgets["#detail-content"].value
+    today_text = widgets["#today-content"].value
+    assert "Top 3" in today_text
+    assert "Bonus" in today_text
+    assert today_text.index("Draft launch brief") < today_text.index("Tidy backlog")
+
+
+def test_wrap_pane_renders_headline_accomplishments_and_coaching(monkeypatch) -> None:
+    """Wrap pane should show deterministic feedback sections on screen refresh."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    screen._wrap_summary = {
+        "top_total": 2,
+        "top_completed": 1,
+        "bonus_total": 1,
+        "bonus_completed": 1,
+        "all_top_completed": False,
+        "headline": "Solid day",
+        "coaching_feedback": "Keep Bonus work lighter when the Top 3 is still open.",
+        "completed_top_items": [{"id": "top-1", "title": "Draft launch brief"}],
+        "completed_bonus_items": [{"id": "bonus-1", "title": "Tidy backlog"}],
+        "open_planned_items": [{"id": "top-2", "title": "Review blockers"}],
+    }
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+
+    screen._apply_workspace_state(
+        {
+            "needs_plan": False,
+            "top_items": [
+                Item(id="top-2", type="action", title="Review blockers", status="active")
+            ],
+            "bonus_items": [],
+            "candidates": {
+                "must_address": [],
+                "inbox": [],
+                "ready_actions": [],
+                "suggested": [],
+            },
+        }
+    )
+
+    wrap_text = widgets["#wrap-content"].value
+    assert "Solid day" in wrap_text
+    assert "Accomplishments" in wrap_text
+    assert "Draft launch brief" in wrap_text
+    assert "Review blockers" in wrap_text
+    assert "Coaching" in wrap_text
+
+
+@pytest.mark.asyncio
+async def test_refresh_async_updates_wrap_pane_without_ai_path() -> None:
+    """Regular refresh should update wrap content after completion without insight generation."""
+    screen = DailyWorkspaceScreen(plan_date="2026-03-08")
+
+    class FakeEngine:
+        def get_daily_workspace_state(self, _plan_date: str) -> dict[str, object]:
+            return {
+                "needs_plan": False,
+                "top_items": [],
+                "bonus_items": [],
+                "candidates": {
+                    "must_address": [],
+                    "inbox": [],
+                    "ready_actions": [],
+                    "suggested": [],
+                },
+            }
+
+        def get_daily_wrap_summary(self, _plan_date: str) -> dict[str, object]:
+            return {
+                "top_total": 1,
+                "top_completed": 1,
+                "bonus_total": 0,
+                "bonus_completed": 0,
+                "all_top_completed": True,
+                "headline": "Strong day",
+                "coaching_feedback": "You closed the Top 3 cleanly.",
+                "completed_top_items": [{"id": "top-1", "title": "Draft launch brief"}],
+                "completed_bonus_items": [],
+                "open_planned_items": [],
+            }
+
+    class DailyWorkspaceTestApp(App[None]):
+        def compose(self) -> ComposeResult:
+            yield screen
+
+    screen._engine = FakeEngine()
+
+    app = DailyWorkspaceTestApp()
+    async with app.run_test() as pilot:
+        app.push_screen(screen)
+        await pilot.pause()
+        await screen._refresh_async()
+        await pilot.pause()
+
+        assert "Strong day" in str(screen.query_one("#wrap-content", Static).renderable)
 def test_render_wrap_summary_celebrates_completed_top_three() -> None:
     """Wrap summary should celebrate finishing the Top 3."""
     screen = DailyWorkspaceScreen()

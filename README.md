@@ -89,10 +89,11 @@ If you choose Obsidian Vault, install Obsidian CLI and provide your vault path.
 
 - `flow` and `flow tui` now open the daily workspace instead of dropping directly into Inbox.
 - The daily workspace has three main jobs:
-  - `Plan`: build today's Top 3 and Bonus items from inbox, due work, and ready actions, then press `x` to confirm the plan
-  - `Focus`: work from today's approved plan
-  - `Daily Wrap`: review Top 3 / Bonus completion and optionally request a short AI insight
-- After you confirm a plan, the workspace keeps a persistent status-line prompt showing the next actions: review planned work in `[1]`, press `c` to complete the selected item, and `w` to open Daily Wrap.
+  - `Plan`: build today's Top 3 and Bonus items from visible draft panes fed by candidate buckets (`Must`, `Inbox`, `Ready`, `Suggested`), then press `x` to confirm the plan
+  - `Focus`: work from one merged `Today` view that keeps `Top 3` items first and `Bonus` items second
+  - `Daily Wrap`: keep a live wrap pane on screen with completion counts, accomplishments, carry-forward items, deterministic coaching feedback, and optional AI insight
+- Planning stays on one screen: you can add, remove, promote, demote, and reorder draft items without leaving the workspace.
+- After you confirm a plan, the same pane shells stay in place and the detail panel switches to explicit execution guidance: review planned work in `[1]`, press `c` to complete the selected item, and `w` to open Daily Wrap.
 - Inbox, Projects, Review, and Someday remain part of the TUI model; the workspace is the default entry point, not a replacement for GTD structure.
 
 ## TUI Panel Shortcuts

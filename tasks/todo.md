@@ -1,3 +1,70 @@
+# Daily Workspace UI Refresh Execution
+
+# Release Daily Workspace to Main
+
+- [x] Inspect branch status, release targets, and existing version/tags
+- [x] Run fresh targeted verification for touched daily-workspace paths
+- [x] Run fresh full unit-suite verification on the current working tree
+- [ ] Bump version for the release and commit remaining branch changes
+- [ ] Merge `feat/daily-workspace` into `main` and verify the merged result
+- [ ] Run the Make-based release workflow and capture exact output / blockers
+
+## Review / Results
+- Release verification evidence:
+  - `source .venv/bin/activate && poetry run pytest tests/unit/test_daily_workspace_screen.py tests/unit/test_daily_workspace.py tests/unit/tui/common/widgets/test_dialog_bindings.py -v` => `36 passed in 0.92s`
+  - `source .venv/bin/activate && poetry run pytest tests/unit -v` => `242 passed in 1.72s`
+- Mandatory Flow review checklist:
+  - No material issues found in security/privacy, architecture direction, typing, async safety, or test coverage.
+
+- [x] Review approved design, implementation plan, and required skills
+- [x] Verify clean branch baseline for daily workspace tests
+- [x] Record execution deviation: user requested implementation in current branch without a git worktree
+- [x] Task 1: Add failing screen tests for draft feedback, draft editing, and confirm transition
+- [x] Task 2: Implement multi-pane daily workspace layout, editing actions, and terminal-native Material styling
+- [x] Task 3: Add failing service tests and implement richer deterministic wrap feedback
+- [x] Task 4: Add failing screen tests and integrate richer wrap-pane rendering
+- [x] Task 5: Update docs, run verification commands, run Flow review, and capture evidence
+
+## Review / Results
+- Execution note:
+  - User explicitly requested development in the current branch instead of using a git worktree.
+- Baseline verification evidence:
+  - `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py tests/unit/test_daily_workspace.py -q` => `17 passed in 0.51s`
+- Implemented behavior:
+  - Daily workspace planning now shows persistent `Candidates`, `Top 3 Draft`, `Bonus Draft`, `Detail`, and live `Wrap` surfaces with the existing professional-ops palette and a more terminal-native material hierarchy.
+  - Planning supports same-screen draft editing for remove, promote, demote, and Top 3 reordering, then transitions in place to a merged `Today` execution view after confirmation.
+  - Daily wrap now derives deterministic accomplishments, carry-forward items, verdicts, and coaching feedback from persisted daily-plan entries without relying on AI.
+- Verification evidence:
+  - `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py -v` => `17 passed in 0.49s`
+  - `source .venv/bin/activate && pytest tests/unit/test_daily_workspace.py -v` => `9 passed in 0.08s`
+  - `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py tests/unit/test_daily_workspace.py -v` => `28 passed in 0.77s`
+  - `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py tests/unit/test_daily_workspace.py tests/unit/test_cli_main.py -v` => `37 passed in 1.20s`
+  - `source .venv/bin/activate && pytest tests/unit -v` => `239 passed in 1.98s`
+- Mandatory Flow review checklist:
+  - Security/privacy: no secrets added; no SQL changes; no new sensitive logging.
+  - Architecture: daily-wrap rules stay in `flow/core/services/daily_plan.py`; TUI remains in `flow/tui/screens/daily_workspace/`; no dependency-direction violations introduced.
+  - Typing: changed service and screen APIs keep explicit type hints.
+  - Async safety: screen refresh and AI insight generation still run engine work via `asyncio.to_thread`; no new blocking work added to Textual handlers.
+  - Tests: targeted screen and service TDD coverage added, plus targeted CLI verification and full unit-suite verification passed.
+
+### Follow-up: Daily Workspace Inline Quick Capture
+
+- [x] Add persistent `n` daily-workspace action for quick capture
+- [x] Show new-task guidance when planning candidates are empty
+- [x] Restyle shared quick-capture dialog to match updated ops/material shell
+- [x] Run targeted verification for daily workspace and shared quick-capture paths
+
+## Review / Results
+- Follow-up behavior:
+  - Daily workspace now exposes `n` as a persistent action in planning mode, not just an empty-state fallback.
+  - When no candidates exist, the candidates pane and detail pane both direct the user to create a new task with `n`.
+  - The shared quick-capture dialog now uses the same refreshed surface grammar and copy style as the updated daily workspace.
+- Follow-up verification evidence:
+  - `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py tests/unit/tui/common/widgets/test_dialog_bindings.py -v` => `27 passed in 0.81s`
+  - `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py tests/unit/tui/common/widgets/test_dialog_bindings.py tests/unit/test_inbox_screen_process_menu.py -v` => `33 passed in 0.79s`
+- Follow-up Flow review checklist:
+  - No material issues found in security/privacy, architecture, typing, async safety, or test coverage.
+
 # Daily Workspace Enter Confirm Regression
 
 - [x] Reproduce the no-response Enter bug on the focused daily list

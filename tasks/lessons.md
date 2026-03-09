@@ -43,3 +43,7 @@
 - Date: 2026-03-01
 - Pattern: I transformed user-supplied ASCII content by escaping bracket characters, which changed intended output.
 - Prevention rule: Treat user-provided ASCII/terminal art as immutable content; never mutate characters for styling. Apply color/style around raw lines only.
+
+- Date: 2026-03-09
+- Pattern: I treated a workflow skill requirement as mandatory even after the user explicitly told me to stay on the current branch and skip worktree setup.
+- Prevention rule: When the user explicitly overrides an implementation workflow preference such as worktree usage, follow the override, record the deviation in `tasks/todo.md`, and continue execution without re-arguing the default workflow.

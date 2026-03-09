@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from textual.app import App, ComposeResult
+from textual.widgets import Input, Static
+
 from flow.tui.common.base_screen import FlowModalScreen
 from flow.tui.common.widgets.defer_dialog import DeferDialog
 from flow.tui.common.widgets.process_task_dialog import ProcessTaskDialog
@@ -40,3 +43,27 @@ def test_project_picker_dialog_keeps_escape_cancel_binding() -> None:
 def test_quick_capture_dialog_inherits_flow_modal_screen() -> None:
     """Quick capture dialog should inherit shared modal keybinding base."""
     assert issubclass(QuickCaptureDialog, FlowModalScreen)
+
+
+async def test_quick_capture_dialog_uses_ops_style_copy() -> None:
+    """Quick capture dialog should match the refreshed ops/material language."""
+
+    dialog = QuickCaptureDialog(origin_label="Daily workspace")
+
+    class DialogApp(App[None]):
+        def compose(self) -> ComposeResult:
+            if False:
+                yield
+
+    app = DialogApp()
+    async with app.run_test() as pilot:
+        app.push_screen(dialog)
+        await pilot.pause()
+
+        title = str(dialog.query_one("#quick-capture-title", Static).renderable)
+        status = str(dialog.query_one("#quick-capture-status", Static).renderable)
+        placeholder = dialog.query_one("#quick-capture-input", Input).placeholder
+
+    assert "Quick Capture" in title
+    assert "Daily workspace" in status
+    assert placeholder is not None and "next concrete step" in placeholder

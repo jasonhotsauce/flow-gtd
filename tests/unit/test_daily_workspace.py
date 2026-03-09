@@ -102,8 +102,8 @@ def test_get_daily_workspace_candidates_groups_must_address_ready_and_inbox(
     assert [item.id for item in state["candidates"]["suggested"]] == ["project-task-1"]
 
 
-def test_get_daily_wrap_summary_uses_plan_completion_counts(temp_db_path: Path) -> None:
-    """Daily wrap should summarize completed Top 3 and Bonus items."""
+def test_get_daily_wrap_summary_returns_rich_structured_feedback(temp_db_path: Path) -> None:
+    """Daily wrap should include deterministic verdicts and planned-item lists."""
     engine = Engine(db_path=temp_db_path)
     top_done = Item(id="top-done", type="action", title="Top done", status="done")
     top_open = Item(id="top-open", type="action", title="Top open", status="active")
@@ -119,13 +119,78 @@ def test_get_daily_wrap_summary_uses_plan_completion_counts(temp_db_path: Path) 
 
     wrap = engine.get_daily_wrap_summary("2026-03-08")
 
-    assert wrap == {
-        "top_total": 2,
-        "top_completed": 1,
-        "bonus_total": 1,
-        "bonus_completed": 1,
-        "all_top_completed": False,
-    }
+    assert wrap["top_total"] == 2
+    assert wrap["top_completed"] == 1
+    assert wrap["bonus_total"] == 1
+    assert wrap["bonus_completed"] == 1
+    assert wrap["all_top_completed"] is False
+    assert wrap["completed_top_items"] == [{"id": "top-done", "title": "Top done"}]
+    assert wrap["completed_bonus_items"] == [{"id": "bonus-done", "title": "Bonus done"}]
+    assert wrap["open_planned_items"] == [{"id": "top-open", "title": "Top open"}]
+    assert wrap["headline"]
+    assert wrap["coaching_feedback"]
+
+
+def test_get_daily_wrap_summary_marks_all_top_complete_as_strong_day(
+    temp_db_path: Path,
+) -> None:
+    """Completing the full Top 3 should produce a positive verdict."""
+    engine = Engine(db_path=temp_db_path)
+    for index in range(1, 4):
+        engine._db.insert_inbox(  # type: ignore[attr-defined]
+            Item(
+                id=f"top-{index}",
+                type="action",
+                title=f"Top {index}",
+                status="done",
+            )
+        )
+
+    engine.save_daily_plan(
+        "2026-03-08",
+        top_item_ids=["top-1", "top-2", "top-3"],
+        bonus_item_ids=[],
+    )
+
+    wrap = engine.get_daily_wrap_summary("2026-03-08")
+
+    assert wrap["headline"] == "Strong day"
+    assert "Top 3" in wrap["coaching_feedback"]
+    assert wrap["open_planned_items"] == []
+
+
+def test_get_daily_wrap_summary_flags_overloaded_plan(
+    temp_db_path: Path,
+) -> None:
+    """Incomplete Top 3 plus many bonuses should trigger improvement coaching."""
+    engine = Engine(db_path=temp_db_path)
+    items = [
+        Item(id="top-1", type="action", title="Top 1", status="done"),
+        Item(id="top-2", type="action", title="Top 2", status="active"),
+        Item(id="top-3", type="action", title="Top 3", status="active"),
+        Item(id="bonus-1", type="action", title="Bonus 1", status="done"),
+        Item(id="bonus-2", type="action", title="Bonus 2", status="active"),
+        Item(id="bonus-3", type="action", title="Bonus 3", status="active"),
+    ]
+    for item in items:
+        engine._db.insert_inbox(item)  # type: ignore[attr-defined]
+
+    engine.save_daily_plan(
+        "2026-03-08",
+        top_item_ids=["top-1", "top-2", "top-3"],
+        bonus_item_ids=["bonus-1", "bonus-2", "bonus-3"],
+    )
+
+    wrap = engine.get_daily_wrap_summary("2026-03-08")
+
+    assert wrap["headline"] == "Plan was too ambitious"
+    assert "bonus" in wrap["coaching_feedback"].lower()
+    assert wrap["open_planned_items"] == [
+        {"id": "top-2", "title": "Top 2"},
+        {"id": "top-3", "title": "Top 3"},
+        {"id": "bonus-2", "title": "Bonus 2"},
+        {"id": "bonus-3", "title": "Bonus 3"},
+    ]
 
 
 def test_generate_daily_wrap_insight_returns_llm_summary_when_available(
