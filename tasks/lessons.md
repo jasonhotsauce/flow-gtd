@@ -14,7 +14,23 @@
 
 - Date: 2026-03-01
 - Pattern: Design/implementation plan docs were saved in repo docs by default when the user expects all new design docs in the Obsidian vault.
-- Prevention rule: For this user, save all new design and implementation plan artifacts under `/Users/wenbinzhang/Library/Mobile Documents/iCloud~md~obsidian/Documents/Personal/Projects/flow-gtd/` using stable `01-designs` and `02-implementation-plans` folders.
+- Prevention rule: For this user, save all new design and implementation plan artifacts under `/Users/wenbinzhang/Library/Mobile Documents/iCloud~md~obsidian/Documents/Personal/10 Projects/flow-gtd/` using stable `01-designs` and `02-implementation-plans` folders.
+
+- Date: 2026-03-08
+- Pattern: I created new Obsidian documents under `Personal/Projects/flow-gtd/` even though the existing vault structure already uses `Personal/10 Projects/flow-gtd/`.
+- Prevention rule: Before saving any new Obsidian artifact for this user, verify the existing project root and always prefer the established `Personal/10 Projects/flow-gtd/` path over creating parallel folder trees.
+
+- Date: 2026-03-08
+- Pattern: I shipped a new split-pane TUI screen without direct numeric pane shortcuts or initial list focus, which made navigation unusable.
+- Prevention rule: For every split-pane TUI screen in this project, provide explicit pane bindings (`1/2/3` as applicable), route `j/k` to the primary list, and focus the primary list after the screen populates.
+
+- Date: 2026-03-08
+- Pattern: I assumed a focused `OptionList` would make `Enter` work in a new TUI screen, but the list had no initial highlighted row and the screen did not handle `OptionList.OptionSelected`, so the primary action never fired.
+- Prevention rule: For every new Textual `OptionList` screen, initialize the first selection explicitly after populating the list and wire `OptionList.OptionSelected` to the intended primary action whenever the list owns `Enter`.
+
+- Date: 2026-03-08
+- Pattern: I told the user to use an advertised TUI key before proving the actual focused-widget key path worked in runtime.
+- Prevention rule: For any user-visible TUI shortcut, do not claim it works until a runtime test presses that exact key with the real focused widget state; if the widget contract is unreliable, change the shortcut and update all visible guidance in the same task.
 
 - Date: 2026-03-01
 - Pattern: After repeated UI rendering failures, I iterated on fixes without first isolating whether data was missing vs. present-but-not-painted.

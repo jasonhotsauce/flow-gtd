@@ -43,6 +43,7 @@ The system operates on a unidirectional data pipeline: **Ingest (Input) -> Refin
 | ID | Feature | Description | Technical Constraints |
 | ---- | ---- | ---- | ---- |
 | A.1 | **CLI Capture** | `flow c <text>` writes to the SQLite inbox with minimal friction. | Startup latency target < 100ms. |
+| A.1a | **Daily Workspace Entry** | Plain `flow` opens the main daily workspace. If today's plan is missing, start in planning mode; otherwise start in focus mode. | Must preserve direct power-user commands (`flow focus`, `flow process`, `flow projects`, `flow review`). |
 | A.2 | Context Hook | Capture metadata from the active App (Xcode File/Line, Browser URL, Git Branch). | Use NSWorkspace + AppleScript. Store as JSON Payload. |
 | A.3 | Apple Bridge | Background Daemon for bi-directional sync with Apple Reminders. | **Safety Rule**: Move imported Reminders to a "Flow-Imported" list. **NEVER physically delete**. |
 | A.4 | Auto-Index | Automatically download and vectorize content if the capture contains URLs/PDF paths. | Async processing; must not block CLI return. |
@@ -96,6 +97,28 @@ Interaction model is a **TUI Wizard** (Textual App), fully keyboard-driven.
     1. **Schema**: Add `estimated_duration` (integer, minutes) to `items` table.
     2. **Process Funnel**: The LLM must estimate duration during the "Coaching" phase if missing (e.g., "Review PR" -> 15m).
     3. **Real-time Hook**: `flow focus` triggers a synchronous `EventKit` read (cached for 5 mins) to determine the time window.
+
+**Module E.1: Daily Workspace (`flow`)**
+* **Concept**: One default TUI entry that covers start-of-day planning, during-day execution, and end-of-day closure.
+* **Planning Mode**:
+    1. Show candidate buckets for:
+        * must-address work (due/deferred/overdue)
+        * inbox items that need clarification
+        * ready actions
+        * suggested project-linked work
+    2. Require the user to build:
+        * `Top 3`
+        * `Bonus`
+* **Focus Mode**:
+    * Show today's approved `Top 3` and `Bonus` items.
+    * Keep a persistent on-screen prompt after plan approval that tells the user how to review planned work and access completion / wrap actions.
+    * Completion from this screen should update daily-wrap stats.
+* **Daily Wrap**:
+    * Show `Top 3` and `Bonus` completion counts.
+    * Treat finishing `Top 3` as the day's primary success condition.
+    * Allow optional AI-generated insight from structured wrap data.
+* **Architecture Requirement**:
+    * Daily-plan data must be stored in a first-class persistence layer, not hidden only in generic task metadata.
 
 **Module F: Onboarding Wizard (First Run Experience)**
 * **Goal**: Guide new users to configure LLM providers and validate credentials via an interactive TUI wizard.

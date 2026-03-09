@@ -146,3 +146,78 @@ def test_index_job_roundtrip(db: SqliteDB) -> None:
     done_jobs = db.list_index_jobs(status="done", limit=10)
     assert len(done_jobs) == 1
     assert done_jobs[0]["resource_id"] == "r1"
+
+
+def test_replace_and_list_daily_plan_orders_top_then_bonus(db: SqliteDB) -> None:
+    """Daily plan entries should round-trip in bucket/position order."""
+    for item_id in ("task-1", "task-2", "task-3"):
+        db.insert_inbox(Item(id=item_id, type="action", title=item_id, status="active"))
+
+    db.replace_daily_plan(
+        plan_date="2026-03-08",
+        entries=[
+            {"item_id": "task-2", "bucket": "bonus", "position": 1},
+            {"item_id": "task-1", "bucket": "top", "position": 2},
+            {"item_id": "task-3", "bucket": "top", "position": 1},
+        ],
+    )
+
+    entries = db.list_daily_plan("2026-03-08")
+
+    assert [(entry["bucket"], entry["position"], entry["item"].id) for entry in entries] == [
+        ("top", 1, "task-3"),
+        ("top", 2, "task-1"),
+        ("bonus", 1, "task-2"),
+    ]
+
+
+def test_replace_daily_plan_overwrites_existing_entries_for_date(db: SqliteDB) -> None:
+    """Replacing a plan should clear older entries for the same date first."""
+    for item_id in ("task-1", "task-2", "task-3"):
+        db.insert_inbox(Item(id=item_id, type="action", title=item_id, status="active"))
+
+    db.replace_daily_plan(
+        plan_date="2026-03-08",
+        entries=[
+            {"item_id": "task-1", "bucket": "top", "position": 1},
+            {"item_id": "task-2", "bucket": "bonus", "position": 1},
+        ],
+    )
+    db.replace_daily_plan(
+        plan_date="2026-03-08",
+        entries=[
+            {"item_id": "task-3", "bucket": "top", "position": 1},
+        ],
+    )
+
+    entries = db.list_daily_plan("2026-03-08")
+
+    assert len(entries) == 1
+    assert entries[0]["item"].id == "task-3"
+
+
+def test_get_daily_plan_summary_counts_done_and_open_items(db: SqliteDB) -> None:
+    """Daily plan summary should separate completed and open top/bonus items."""
+    db.insert_inbox(Item(id="top-done", type="action", title="Top done", status="done"))
+    db.insert_inbox(Item(id="top-open", type="action", title="Top open", status="active"))
+    db.insert_inbox(Item(id="bonus-done", type="action", title="Bonus done", status="done"))
+    db.insert_inbox(Item(id="bonus-open", type="action", title="Bonus open", status="active"))
+
+    db.replace_daily_plan(
+        plan_date="2026-03-08",
+        entries=[
+            {"item_id": "top-done", "bucket": "top", "position": 1},
+            {"item_id": "top-open", "bucket": "top", "position": 2},
+            {"item_id": "bonus-done", "bucket": "bonus", "position": 1},
+            {"item_id": "bonus-open", "bucket": "bonus", "position": 2},
+        ],
+    )
+
+    summary = db.get_daily_plan_summary("2026-03-08")
+
+    assert summary == {
+        "top_total": 2,
+        "top_completed": 1,
+        "bonus_total": 2,
+        "bonus_completed": 1,
+    }

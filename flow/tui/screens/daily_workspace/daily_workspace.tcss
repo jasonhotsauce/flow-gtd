@@ -1,0 +1,39 @@
+#daily-header {
+    height: auto;
+    padding: 1 2;
+}
+
+#daily-title {
+    text-style: bold;
+}
+
+#daily-content {
+    height: 1fr;
+}
+
+#daily-left,
+#daily-right {
+    width: 1fr;
+    padding: 1 2;
+}
+
+#daily-list {
+    height: 1fr;
+}
+
+#daily-detail-scroll,
+#daily-wrap-scroll {
+    height: 1fr;
+}
+
+#daily-summary,
+#daily-detail,
+#daily-wrap,
+#daily-insight {
+    margin-bottom: 1;
+}
+
+#daily-help {
+    height: auto;
+    padding: 0 2 1 2;
+}

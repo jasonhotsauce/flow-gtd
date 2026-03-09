@@ -25,6 +25,7 @@ from flow.models import ContentType, Resource
 from flow.sync.reminders import get_reminder_auth_status, sync_reminders_to_flow
 from flow.tui.app import FlowApp
 from flow.tui.screens.action.action import ActionScreen
+from flow.tui.screens.daily_workspace.daily_workspace import DailyWorkspaceScreen
 from flow.tui.screens.focus.focus import FocusScreen
 from flow.tui.screens.process import ProcessScreen
 from flow.tui.screens.projects.projects import ProjectsScreen
@@ -223,7 +224,7 @@ def main(
 ) -> None:
     """Launch TUI by default when no command is provided."""
     if ctx.invoked_subcommand is None:
-        _launch_tui()
+        _launch_tui(DailyWorkspaceScreen)
 
 
 def _do_capture(
@@ -303,8 +304,8 @@ def c(
 
 @app.command()
 def tui() -> None:
-    """Launch the interactive TUI for deep processing."""
-    _launch_tui()
+    """Launch the interactive daily workspace TUI."""
+    _launch_tui(DailyWorkspaceScreen)
 
 
 @app.command()

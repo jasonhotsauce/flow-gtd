@@ -3,7 +3,7 @@
 import logging
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal, Optional
 
@@ -11,7 +11,13 @@ from flow.config import get_settings
 from flow.core.resources.factory import create_resource_store
 from flow.core.resources.store import ResourceStore
 from flow.core.rag import RAGService
-from flow.core.services import ProcessService, ResourceService, ReviewService, TaskService
+from flow.core.services import (
+    DailyPlanService,
+    ProcessService,
+    ResourceService,
+    ReviewService,
+    TaskService,
+)
 from flow.core.tagging import extract_tags, extract_tags_async
 from flow.database.resources import ResourceDB
 from flow.database.sqlite import SqliteDB
@@ -37,6 +43,7 @@ class Engine:
         self._resource_storage = config.resource_storage
         self._resource_store = self._create_resource_store()
         self._task_service = TaskService(self._db)
+        self._daily_plan_service = DailyPlanService(self._db)
         self._review_service = ReviewService(self._db)
         self._process_service = ProcessService(self._db)
         self._resource_service = ResourceService(self._resource_store)
@@ -348,6 +355,79 @@ class Engine:
             actions = self.next_actions(parent_id=proj.id)
             result.append((proj, actions))
         return result
+
+    def save_daily_plan(
+        self, plan_date: str, top_item_ids: list[str], bonus_item_ids: list[str]
+    ) -> None:
+        """Persist today's approved Top 3 and Bonus plan."""
+        self._daily_plan_service.save_plan(plan_date, top_item_ids, bonus_item_ids)
+
+    def get_daily_workspace_state(self, plan_date: str) -> dict[str, object]:
+        """Return plan status and planning candidates for a given day."""
+        top_items, bonus_items = self._daily_plan_service.get_plan_items(plan_date)
+        candidates = self._build_daily_workspace_candidates(
+            date.fromisoformat(plan_date), planned_ids={item.id for item in top_items + bonus_items}
+        )
+        return {
+            "needs_plan": not top_items and not bonus_items,
+            "top_items": top_items,
+            "bonus_items": bonus_items,
+            "candidates": candidates,
+        }
+
+    def get_daily_wrap_summary(self, plan_date: str) -> dict[str, object]:
+        """Return completion summary for today's plan."""
+        return self._daily_plan_service.get_wrap_summary(plan_date)
+
+    def generate_daily_wrap_insight(self, plan_date: str) -> str | None:
+        """Generate an optional AI insight for today's wrap."""
+        return self._daily_plan_service.generate_wrap_insight(plan_date)
+
+    def _build_daily_workspace_candidates(
+        self, plan_day: date, planned_ids: set[str]
+    ) -> dict[str, list[Item]]:
+        """Group inbox/actions into planning buckets for the workspace."""
+        inbox_items = [
+            item for item in self.list_inbox() if item.id not in planned_ids
+        ]
+        active_actions = [
+            item
+            for item in self.next_actions()
+            if item.id not in planned_ids and item.type == "action"
+        ]
+
+        must_address = [
+            item
+            for item in active_actions
+            if self._daily_plan_service.is_due_on_or_before(item, plan_day)
+        ]
+        must_address_ids = {item.id for item in must_address}
+
+        ready_actions = [
+            item
+            for item in active_actions
+            if item.parent_id is None and item.id not in must_address_ids
+        ]
+
+        suggested: list[Item] = []
+        for _project, actions in self.list_projects_with_actions():
+            for action in actions:
+                if action.id in planned_ids or action.id in must_address_ids:
+                    continue
+                suggested.append(action)
+                break
+
+        suggested_ids = {item.id for item in suggested}
+        ready_actions = [
+            item for item in ready_actions if item.id not in suggested_ids
+        ]
+
+        return {
+            "must_address": must_address,
+            "inbox": inbox_items,
+            "ready_actions": ready_actions,
+            "suggested": suggested,
+        }
 
     def get_project_next_action(self, project_id: str) -> Optional[Item]:
         """Return the first active next action for a project (for GTD list preview)."""

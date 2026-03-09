@@ -1,3 +1,83 @@
+# Daily Workspace Enter Confirm Regression
+
+- [x] Reproduce the no-response Enter bug on the focused daily list
+- [x] Add failing runtime test for Enter-driven confirmation
+- [x] Route OptionList selection to the daily workspace primary action
+- [x] Run targeted verification and update lessons learned
+
+## Review / Results
+- Mandatory Flow review checklist run for security/privacy/architecture/typing/async safety/tests: no material issues found.
+- Verification evidence:
+  - `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py tests/unit/test_daily_workspace.py -q` => 17 passed, 0 failed.
+- Root cause:
+  - The focused `OptionList` consumed `Enter`, but the daily workspace did not handle `OptionList.OptionSelected`.
+  - The daily list also initialized with `highlighted=None`, so pressing `Enter` had nothing to select.
+- Implemented behavior:
+  - Daily workspace now initializes the first plan/focus row as selected after list population.
+  - Daily workspace no longer depends on `Enter` for plan confirmation.
+  - Plan confirmation uses `x`, which avoids `OptionList` key conflicts and matches the on-screen help/status guidance.
+
+# Daily Workspace UI Brainstorm
+
+- [x] Explore project context (current daily workspace UI, docs, recent commits)
+- [x] Ask clarifying questions (one at a time)
+- [x] Propose 2-3 approaches with trade-offs and recommendation
+- [x] Present design and get approval
+- [x] Write design doc in `docs/plans/`
+- [x] Transition to implementation planning (`writing-plans`)
+
+## Review / Results
+- Approved design saved to `docs/plans/2026-03-09-daily-workspace-ui-refresh-design.md`.
+- Implementation plan saved to `docs/plans/2026-03-09-daily-workspace-ui-refresh-implementation-plan.md`.
+- Ready for execution in a separate `executing-plans` session.
+
+# Daily Workspace Confirmed-Plan Guidance
+
+- [x] Explore current daily workspace status-strip behavior and existing tests
+- [x] Add failing test for persistent post-confirmation guidance
+- [x] Implement persistent status-strip guidance after plan confirmation
+- [x] Update relevant docs for the confirmed-plan guidance
+- [x] Run targeted verification and Flow review checklist
+
+## Review / Results
+- Mandatory Flow review checklist run for security/privacy/architecture/typing/async safety/tests: no material issues found.
+- Verification evidence:
+  - `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py tests/unit/test_daily_workspace.py -q` => 15 passed, 0 failed.
+- Implemented behavior:
+  - Daily workspace planning mode now keeps a persistent status strip that tells the user to confirm the plan with `x`.
+  - After plan approval, the status strip switches to persistent next-step guidance for `[1]` planned work, `c` completion, and `w` Daily Wrap.
+
+# Inbox vs Focus Brainstorm
+
+- [x] Explore project context (Inbox/Focus behavior, docs, recent commits)
+- [x] Ask clarifying questions (one at a time)
+- [x] Propose 2-3 approaches with trade-offs and recommendation
+- [x] Present design and get approval
+- [x] Write design doc in Obsidian vault
+- [x] Transition to implementation planning (`writing-plans`)
+- [x] Add failing tests for daily-plan persistence and engine APIs
+- [x] Implement daily-plan storage and engine/service layer
+- [x] Add failing tests for default `flow` routing and daily workspace screen
+- [x] Implement daily workspace TUI and default routing
+- [x] Update docs for `flow` daily workspace behavior
+- [x] Run targeted verification, full unit suite, and review checklist
+
+## Review / Results
+- Obsidian docs saved:
+  - `Personal/Projects/flow-gtd/01-designs/2026/2026-03-08-flow-daily-workspace-redesign-design.md`
+  - `Personal/Projects/flow-gtd/02-implementation-plans/2026/2026-03-08-flow-daily-workspace-redesign-implementation-plan.md`
+- Mandatory code review checklist run for security/privacy/architecture/typing/async safety/tests: no material issues found.
+- Verification evidence:
+  - `source .venv/bin/activate && pytest tests/unit/test_sqlite.py tests/unit/test_daily_workspace.py tests/unit/test_daily_workspace_screen.py tests/unit/test_cli_main.py -v` => 32 passed, 0 failed.
+  - `source .venv/bin/activate && pytest tests/unit -v` => 222 passed, 0 failed.
+- Implemented behavior:
+  - Plain `flow` and `flow tui` now open a new daily workspace screen instead of defaulting to Inbox.
+  - Added first-class daily-plan persistence for `Top 3` and `Bonus` entries.
+  - Added engine APIs for daily workspace candidate grouping, plan persistence, wrap summary, and optional AI wrap insight.
+  - Added a new daily workspace screen with planning, focus-list, and wrap summary states, while keeping Inbox/Projects/Review reachable.
+
+---
+
 # Resource Storage Migration Todo
 
 - [x] Explore project context (resource save/search, onboarding/setup, config)

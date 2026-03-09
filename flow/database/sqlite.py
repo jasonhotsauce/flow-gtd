@@ -5,9 +5,24 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional, TypedDict
 
 from flow.models import Item
+
+
+DailyPlanBucket = Literal["top", "bonus"]
+
+
+class DailyPlanEntryInput(TypedDict):
+    item_id: str
+    bucket: DailyPlanBucket
+    position: int
+
+
+class DailyPlanEntryRecord(TypedDict):
+    item: Item
+    bucket: DailyPlanBucket
+    position: int
 
 
 def _iso(dt: Optional[datetime]) -> Optional[str]:
@@ -60,6 +75,7 @@ class SqliteDB:
             # Migration: add updated_at column if missing
             self._migrate_add_updated_at(conn)
             self._init_index_jobs(conn)
+            self._init_daily_plan_entries(conn)
             conn.commit()
 
     def _migrate_add_estimated_duration(self, conn: sqlite3.Connection) -> None:
@@ -104,6 +120,29 @@ class SqliteDB:
             )
         except sqlite3.OperationalError:
             # Read-only databases (e.g., certain test harnesses) should still load.
+            return
+
+    def _init_daily_plan_entries(self, conn: sqlite3.Connection) -> None:
+        """Create daily plan table for Top 3 / Bonus selections."""
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS daily_plan_entries (
+                    plan_date TEXT NOT NULL,
+                    item_id TEXT NOT NULL,
+                    bucket TEXT NOT NULL,
+                    position INTEGER NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    PRIMARY KEY (plan_date, item_id),
+                    FOREIGN KEY (item_id) REFERENCES items(id)
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_daily_plan_date_bucket_position "
+                "ON daily_plan_entries(plan_date, bucket, position)"
+            )
+        except sqlite3.OperationalError:
             return
 
     def insert_inbox(self, item: Item) -> None:
@@ -279,6 +318,76 @@ class SqliteDB:
             query += " ORDER BY created_at ASC"
             rows = conn.execute(query, params).fetchall()
         return [_row_to_item(r) for r in rows]
+
+    def replace_daily_plan(
+        self, plan_date: str, entries: list[DailyPlanEntryInput]
+    ) -> None:
+        """Replace all daily-plan entries for a specific date."""
+        now = _iso(datetime.now(timezone.utc))
+        with sqlite3.connect(self._path) as conn:
+            conn.execute(
+                "DELETE FROM daily_plan_entries WHERE plan_date = ?",
+                (plan_date,),
+            )
+            for entry in entries:
+                conn.execute(
+                    """
+                    INSERT INTO daily_plan_entries (
+                        plan_date, item_id, bucket, position, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        plan_date,
+                        entry["item_id"],
+                        entry["bucket"],
+                        entry["position"],
+                        now,
+                    ),
+                )
+            conn.commit()
+
+    def list_daily_plan(self, plan_date: str) -> list[DailyPlanEntryRecord]:
+        """Return plan entries for a date ordered by bucket then position."""
+        with sqlite3.connect(self._path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT d.bucket, d.position, i.*
+                FROM daily_plan_entries d
+                JOIN items i ON i.id = d.item_id
+                WHERE d.plan_date = ?
+                ORDER BY
+                    CASE d.bucket WHEN 'top' THEN 0 ELSE 1 END,
+                    d.position ASC
+                """,
+                (plan_date,),
+            ).fetchall()
+        return [
+            {
+                "item": _row_to_item(row),
+                "bucket": row["bucket"],
+                "position": row["position"],
+            }
+            for row in rows
+        ]
+
+    def get_daily_plan_summary(self, plan_date: str) -> dict[str, int]:
+        """Return completion totals for top and bonus planned items."""
+        summary = {
+            "top_total": 0,
+            "top_completed": 0,
+            "bonus_total": 0,
+            "bonus_completed": 0,
+        }
+        for entry in self.list_daily_plan(plan_date):
+            bucket = entry["bucket"]
+            total_key = f"{bucket}_total"
+            completed_key = f"{bucket}_completed"
+            summary[total_key] += 1
+            if entry["item"].status == "done":
+                summary[completed_key] += 1
+        return summary
 
     def enqueue_index_job(
         self,

@@ -65,7 +65,8 @@ If you choose Obsidian Vault, install Obsidian CLI and provide your vault path.
 | `flow save <url\|file\|text>` | Save a resource with automatic LLM tagging to your selected storage backend |
 | `flow resources` | List saved resources (optional `--tag`, `--limit`) |
 | `flow tags` | List resource tags |
-| `flow tui` | Launch TUI (Inbox) |
+| `flow` | Launch the daily workspace TUI (plan today, focus, daily wrap) |
+| `flow tui` | Launch the daily workspace TUI |
 | `flow process` | Launch Process Funnel (Dedup → Cluster → 2-Min → Coach) |
 | `flow next` | Launch Action screen (next actions + Sidecar: resources matched by task tags) |
 | `flow projects` | Launch Projects screen (GTD project list and proceed) |
@@ -78,11 +79,21 @@ If you choose Obsidian Vault, install Obsidian CLI and provide your vault path.
 
 ## Workflow
 
-1. **Capture**: `flow c "task"` or Siri → Apple Reminders → `flow sync`
-2. **Save resources**: `flow save <url>`, `flow save <file>`, or `flow save "text"` — URLs, files, or text with automatic tagging for task matching
-3. **Process**: `flow process` — deduplicate, cluster into projects, 2-min drill, coach vague tasks
-4. **Projects** (GTD review): `flow projects` — list active projects, see suggested next action and full task list per project; open a project to complete or defer actions
-5. **Execute**: `flow next` — next actions list + Sidecar (resources matched by task tags)
+1. **Capture fast**: `flow c "task"` or Siri → Apple Reminders → `flow sync`
+2. **Open the day**: `flow` — if today's plan is missing, build it; otherwise open today's focus list
+3. **Process backlog**: `flow process` — deduplicate, cluster into projects, 2-min drill, coach vague tasks
+4. **Review projects**: `flow projects` — list active projects, see suggested next action and full task list per project; open a project to complete or defer actions
+5. **Execute outside the workspace when needed**: `flow next` or `flow focus` remain available as direct power-user entry points
+
+## Daily Workspace
+
+- `flow` and `flow tui` now open the daily workspace instead of dropping directly into Inbox.
+- The daily workspace has three main jobs:
+  - `Plan`: build today's Top 3 and Bonus items from inbox, due work, and ready actions, then press `x` to confirm the plan
+  - `Focus`: work from today's approved plan
+  - `Daily Wrap`: review Top 3 / Bonus completion and optionally request a short AI insight
+- After you confirm a plan, the workspace keeps a persistent status-line prompt showing the next actions: review planned work in `[1]`, press `c` to complete the selected item, and `w` to open Daily Wrap.
+- Inbox, Projects, Review, and Someday remain part of the TUI model; the workspace is the default entry point, not a replacement for GTD structure.
 
 ## TUI Panel Shortcuts
 

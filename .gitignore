@@ -84,6 +84,7 @@ secrets.json
 tmp/
 temp/
 *.tmp
+.worktrees/
 
 # Local Codex hook marker
 .codex/.env_setup_done

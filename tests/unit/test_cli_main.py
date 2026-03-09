@@ -10,10 +10,11 @@ import typer
 
 import flow.cli as cli
 from flow.cli import _launch_tui, main, save
+from flow.tui.screens.daily_workspace.daily_workspace import DailyWorkspaceScreen
 
 
 def test_main_without_subcommand_launches_default_tui(monkeypatch: Any) -> None:
-    """Bare `flow` should open TUI default screen (Inbox)."""
+    """Bare `flow` should open the daily workspace screen."""
     calls: list[object] = []
 
     def fake_launch_tui(initial_screen: object = None) -> None:
@@ -23,7 +24,7 @@ def test_main_without_subcommand_launches_default_tui(monkeypatch: Any) -> None:
 
     main(ctx=SimpleNamespace(invoked_subcommand=None), version=False)
 
-    assert calls == [None]
+    assert calls == [DailyWorkspaceScreen]
 
 
 def test_launch_tui_hands_off_onboarding_first_capture(monkeypatch: Any) -> None:
