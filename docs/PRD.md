@@ -43,7 +43,7 @@ The system operates on a unidirectional data pipeline: **Ingest (Input) -> Refin
 | ID | Feature | Description | Technical Constraints |
 | ---- | ---- | ---- | ---- |
 | A.1 | **CLI Capture** | `flow c <text>` writes to the SQLite inbox with minimal friction. | Startup latency target < 100ms. |
-| A.1a | **Daily Workspace Entry** | Plain `flow` opens the main daily workspace. If today's plan is missing, start in planning mode; otherwise start in focus mode. | Must preserve direct power-user commands (`flow focus`, `flow process`, `flow projects`, `flow review`). |
+| A.1a | **Daily Workspace Entry** | Plain `flow` opens the main daily workspace. If a prior day still needs wrap, open that explicit wrap first; otherwise, if today's plan is missing, start in planning mode, else start in confirmed execution mode. | Must preserve direct power-user commands (`flow focus`, `flow process`, `flow projects`, `flow review`). |
 | A.2 | Context Hook | Capture metadata from the active App (Xcode File/Line, Browser URL, Git Branch). | Use NSWorkspace + AppleScript. Store as JSON Payload. |
 | A.3 | Apple Bridge | Background Daemon for bi-directional sync with Apple Reminders. | **Safety Rule**: Move imported Reminders to a "Flow-Imported" list. **NEVER physically delete**. |
 | A.4 | Auto-Index | Automatically download and vectorize content if the capture contains URLs/PDF paths. | Async processing; must not block CLI return. |
@@ -112,14 +112,20 @@ Interaction model is a **TUI Wizard** (Textual App), fully keyboard-driven.
     3. Keep `Top 3 Draft` and `Bonus Draft` visible while planning, with same-screen editing for add, remove, promote, demote, and reorder actions.
     4. Use stable pane shells and a terminal-native Material surface system rather than swapping between unrelated layouts.
 * **Focus Mode**:
-    * Merge today's approved `Top 3` and `Bonus` items into one ordered `Today` execution surface while keeping detail and wrap panes in place.
-    * Keep a persistent on-screen prompt after plan approval that tells the user how to review planned work and access completion / wrap actions.
+    * Merge today's approved `Top 3` and `Bonus` items into one ordered `Today` execution surface while keeping the plan editable after confirmation.
+    * Keep `Task Detail` in the center and grouped `Unplanned Work` on the right by default (`Inbox`, `Next Actions`, `Project Tasks`).
+    * Allow confirmed-state editing: add unplanned work directly into `Top 3` or `Bonus`, remove planned work back to its original group, and keep promote/demote/reorder actions active after confirmation.
+    * If `Top 3` is full, opening a chooser to pick which current `Top 3` item should be demoted is required before admitting new unplanned work.
+    * Task detail should include concise tag-matched and semantic resources for the selected planned or unplanned item.
     * Completion from this screen should update daily-wrap stats.
 * **Daily Wrap**:
+    * Do not show wrap content live during confirmed execution.
+    * `w` explicitly opens wrap content when the user wants it.
     * Show `Top 3` and `Bonus` completion counts.
     * Show deterministic accomplishments, carry-forward items, and coaching feedback even when AI insight is unavailable.
     * Treat finishing `Top 3` as the day's primary success condition.
     * Allow optional AI-generated insight from structured wrap data.
+    * Persist wrap acknowledgement so the app can detect and gate on the latest prior unwrapped day at startup.
 * **Architecture Requirement**:
     * Daily-plan data must be stored in a first-class persistence layer, not hidden only in generic task metadata.
 

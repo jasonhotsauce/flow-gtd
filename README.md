@@ -65,7 +65,7 @@ If you choose Obsidian Vault, install Obsidian CLI and provide your vault path.
 | `flow save <url\|file\|text>` | Save a resource with automatic LLM tagging to your selected storage backend |
 | `flow resources` | List saved resources (optional `--tag`, `--limit`) |
 | `flow tags` | List resource tags |
-| `flow` | Launch the daily workspace TUI (plan today, focus, daily wrap) |
+| `flow` | Launch the daily workspace TUI (plan today, execute from editable confirmed state, explicit wrap) |
 | `flow tui` | Launch the daily workspace TUI |
 | `flow process` | Launch Process Funnel (Dedup → Cluster → 2-Min → Coach) |
 | `flow next` | Launch Action screen (next actions + Sidecar: resources matched by task tags) |
@@ -90,10 +90,18 @@ If you choose Obsidian Vault, install Obsidian CLI and provide your vault path.
 - `flow` and `flow tui` now open the daily workspace instead of dropping directly into Inbox.
 - The daily workspace has three main jobs:
   - `Plan`: build today's Top 3 and Bonus items from visible draft panes fed by candidate buckets (`Must`, `Inbox`, `Ready`, `Suggested`), then press `x` to confirm the plan
-  - `Focus`: work from one merged `Today` view that keeps `Top 3` items first and `Bonus` items second
-  - `Daily Wrap`: keep a live wrap pane on screen with completion counts, accomplishments, carry-forward items, deterministic coaching feedback, and optional AI insight
+  - `Confirmed execution`: keep editing today's Top 3 and Bonus after confirmation while the right side shows grouped unplanned work (`Inbox`, `Next Actions`, `Project Tasks`)
+  - `Daily Wrap`: open wrap explicitly with `w` when you want completion counts, accomplishments, carry-forward items, deterministic coaching feedback, and optional AI insight
 - Planning stays on one screen: you can add, remove, promote, demote, and reorder draft items without leaving the workspace.
-- After you confirm a plan, the same pane shells stay in place and the detail panel switches to explicit execution guidance: review planned work in `[1]`, press `c` to complete the selected item, and `w` to open Daily Wrap.
+- After you confirm a plan, the same workspace stays live:
+  - `[1]` focuses today's ordered plan
+  - `[3]` focuses grouped unplanned work on the right
+  - `t` / `b` pull selected unplanned work into Top 3 or Bonus
+  - `d` removes a planned item back to its original unplanned group
+  - `c` completes the selected planned item
+- If Top 3 is already full, adding unplanned work into Top 3 opens a chooser so you can demote one current Top 3 item into Bonus.
+- The detail pane now shows task metadata plus concise tag-matched and semantic resources for the selected planned or unplanned item.
+- If Flow detects a prior day with an unwrapped plan, startup routes you through that prior daily wrap before opening today's normal planning/execution flow.
 - Inbox, Projects, Review, and Someday remain part of the TUI model; the workspace is the default entry point, not a replacement for GTD structure.
 
 ## TUI Panel Shortcuts

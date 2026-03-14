@@ -278,7 +278,7 @@
 - [x] Task 4: Add failing tests for Top 3 full replacement chooser
 - [x] Task 5: Add failing tests for task detail resources
 - [x] Task 6: Add failing tests for explicit wrap and prior-day wrap gate
-- [ ] Task 7: Update docs, run review, and capture final verification evidence
+- [x] Task 7: Update docs, run review, and capture final verification evidence
 
 ## Review / Results
 - Worktree setup:
@@ -313,6 +313,22 @@
 - Task 6 TDD evidence:
   - RED: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py tests/unit/test_cli_main.py -v` => `2 failed, 37 passed`; failures were missing explicit wrap visibility state and missing prior-day wrap startup routing
   - GREEN: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py tests/unit/test_cli_main.py -v` => `39 passed in 0.82s`
+- Task 7 doc checklist:
+  - [x] Confirmed plan remains editable after confirmation
+  - [x] Unplanned work is grouped on the right
+  - [x] Wrap is explicit, not live by default
+  - [x] Prior-day unwrapped plan gates startup before today
+- Task 7 verification:
+  - `source .venv/bin/activate && pytest tests/unit/test_daily_workspace.py tests/unit/test_daily_workspace_screen.py tests/unit/test_cli_main.py -v` => `50 passed in 0.93s`
+  - `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py tests/unit/test_cli_main.py -v` => `39 passed in 0.82s`
+  - `source .venv/bin/activate && pytest tests/unit -v` => `253 passed in 8.52s`
+- Flow code review checklist:
+  - Security/privacy: no secrets added; no unsafe SQL or new sensitive logging introduced.
+  - Architecture: presentation changes stayed in `flow/tui/` and `flow/cli.py`; persistence stayed in `flow/core/` plus `flow/database/sqlite.py`; no dependency-direction violations introduced.
+  - Typing: new and changed helpers keep explicit type hints across engine, CLI, and TUI code.
+  - Async safety: detail-resource loading stays off the UI thread via `asyncio.to_thread`; wrap and list refresh flows remain non-blocking in normal app execution.
+  - Tests: targeted daily-workspace/CLI verification and the full unit suite both passed.
+  - Result: no material issues found.
   - `Personal/Projects/flow-gtd/02-implementation-plans/2026/2026-03-01-focus-empty-state-inbox-cta-implementation-plan.md`
 - Verification evidence:
   - `source .venv/bin/activate && pytest tests/unit/test_focus_screen_bindings.py tests/unit/test_focus_screen_ui.py tests/unit/test_inbox_startup_context.py tests/unit/tui/common/widgets/test_dialog_bindings.py -v` => 17 passed, 0 failed.
