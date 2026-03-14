@@ -102,6 +102,89 @@ def test_get_daily_workspace_candidates_groups_must_address_ready_and_inbox(
     assert [item.id for item in state["candidates"]["suggested"]] == ["project-task-1"]
 
 
+def test_confirmed_workspace_exposes_grouped_unplanned_work_and_readds_removed_items(
+    temp_db_path: Path,
+) -> None:
+    """Confirmed workspace should keep unplanned work grouped by original source."""
+    engine = Engine(db_path=temp_db_path)
+    inbox_item = Item(id="inbox-1", type="inbox", title="Inbox", status="active")
+    next_action = Item(
+        id="next-1",
+        type="action",
+        title="Next",
+        status="active",
+    )
+    project = Item(
+        id="project-1",
+        type="project",
+        title="Project",
+        status="active",
+    )
+    planned_project_task = Item(
+        id="project-task-1",
+        type="action",
+        title="Planned project task",
+        status="active",
+        parent_id="project-1",
+    )
+    remaining_project_task = Item(
+        id="project-task-2",
+        type="action",
+        title="Remaining project task",
+        status="active",
+        parent_id="project-1",
+    )
+    for item in (
+        inbox_item,
+        next_action,
+        project,
+        planned_project_task,
+        remaining_project_task,
+    ):
+        engine._db.insert_inbox(item)  # type: ignore[attr-defined]
+
+    engine.save_daily_plan(
+        "2026-03-08",
+        top_item_ids=["inbox-1"],
+        bonus_item_ids=["project-task-1"],
+    )
+
+    state = engine.get_daily_workspace_state("2026-03-08")
+
+    assert [item.id for item in state["unplanned_work"]["inbox"]] == []
+    assert [item.id for item in state["unplanned_work"]["next_actions"]] == ["next-1"]
+    assert [item.id for item in state["unplanned_work"]["project_tasks"]] == [
+        "project-task-2"
+    ]
+
+    engine.save_daily_plan(
+        "2026-03-08",
+        top_item_ids=["inbox-1"],
+        bonus_item_ids=[],
+    )
+
+    updated_state = engine.get_daily_workspace_state("2026-03-08")
+
+    assert [item.id for item in updated_state["unplanned_work"]["project_tasks"]] == [
+        "project-task-1",
+        "project-task-2",
+    ]
+
+
+def test_engine_finds_latest_prior_unwrapped_plan_date(temp_db_path: Path) -> None:
+    """Engine should expose the most recent prior plan that still needs wrap."""
+    engine = Engine(db_path=temp_db_path)
+    item = Item(id="task-1", type="action", title="Task", status="active")
+    engine._db.insert_inbox(item)  # type: ignore[attr-defined]
+
+    engine.save_daily_plan("2026-03-07", top_item_ids=["task-1"], bonus_item_ids=[])
+    engine.save_daily_plan("2026-03-08", top_item_ids=["task-1"], bonus_item_ids=[])
+    engine.mark_daily_plan_wrapped("2026-03-07")
+
+    assert engine.get_latest_unwrapped_plan_date("2026-03-08") is None
+    assert engine.get_latest_unwrapped_plan_date("2026-03-09") == "2026-03-08"
+
+
 def test_get_daily_wrap_summary_returns_rich_structured_feedback(temp_db_path: Path) -> None:
     """Daily wrap should include deterministic verdicts and planned-item lists."""
     engine = Engine(db_path=temp_db_path)

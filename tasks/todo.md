@@ -238,6 +238,66 @@
 ## Review / Results
 - Obsidian docs saved:
   - `Personal/Projects/flow-gtd/01-designs/2026/2026-03-01-focus-empty-state-inbox-cta-design.md`
+
+# Today's Plan Confirmed-State Redesign Brainstorm
+
+- [x] Explore project context (daily workspace screen, docs, tests, recent commits)
+- [x] Ask clarifying questions (one at a time)
+- [x] Propose 2-3 approaches with trade-offs and recommendation
+- [x] Present design and get approval
+- [x] Write design doc in Obsidian vault
+- [x] Transition to implementation planning (`writing-plans`)
+
+## Review / Results
+- Context gathered:
+  - Current confirmed-plan view reuses planning/wrap panes and still renders live wrap copy before the day is actually done.
+  - Existing actions for add/remove/promote/demote/reorder already exist, but they are gated to planning mode only.
+  - Engine already exposes daily-plan state and wrap summary; resource retrieval APIs exist via `flow.core.focus.FocusService`.
+- Approved behavior:
+  - Confirmed plan remains editable all day.
+  - Adding from unplanned work requires explicit placement into Top 3 or Bonus.
+  - If Top 3 is full, adding into Top 3 opens a chooser so the user can select which current Top 3 task to demote.
+  - Removing a planned task returns it to its original open grouping, not always Inbox.
+  - Right side shows all open unplanned actionable work across inbox, next actions, and project tasks, with a small-screen grouped fallback.
+  - No live wrap pane during execution; wrap appears only when explicitly opened.
+  - If the prior day was never wrapped, the next day must surface that wrap before today's planning flow.
+- Artifacts:
+  - Design: `/Users/wenbinzhang/Library/Mobile Documents/iCloud~md~obsidian/Documents/Personal/10 Projects/flow-gtd/01-designs/2026/2026-03-13-todays-plan-confirmed-state-redesign-design.md`
+  - Implementation plan: `/Users/wenbinzhang/Library/Mobile Documents/iCloud~md~obsidian/Documents/Personal/10 Projects/flow-gtd/02-implementation-plans/2026/2026-03-13-todays-plan-confirmed-state-redesign-implementation-plan.md`
+
+# Today's Plan Confirmed-State Redesign Execution
+
+- [x] Load required skills and review the approved implementation plan
+- [x] Create sibling git worktree at `../worktree/confirmed-state-redesign`
+- [x] Inspect `.gitignore` and inventory only task-relevant ignored local assets
+- [x] Verify copied `.venv` usability and recreate it in the worktree when reuse fails
+- [x] Run clean baseline verification in the worktree before coding
+- [x] Task 1: Add failing engine tests for confirmed-state workspace data
+- [ ] Task 2: Add failing screen tests for confirmed-state layout and editing
+- [ ] Task 3: Add failing tests for confirmed-state add/remove/promote/demote flows
+- [ ] Task 4: Add failing tests for Top 3 full replacement chooser
+- [ ] Task 5: Add failing tests for task detail resources
+- [ ] Task 6: Add failing tests for explicit wrap and prior-day wrap gate
+- [ ] Task 7: Update docs, run review, and capture final verification evidence
+
+## Review / Results
+- Worktree setup:
+  - Worktree path: `/Users/wenbinzhang/Documents/worktree/confirmed-state-redesign`
+  - `.gitignore` inspected for development/test relevance: `.venv/`, `data/`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `.textual/`, `.cache/`, `models/`, `logs/`, `tmp/`, `temp/`, `.codex/.env_setup_done`
+  - Copied into worktree:
+    - `.venv/`: copied first because it is the only ignored asset required to quickly validate the Python/Poetry/test toolchain for this task
+  - Skipped from copy:
+    - `data/`: present locally, but not required for these unit tests or the planned code paths
+    - `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `.textual/`, `.cache/`, `models/`, `logs/`, `tmp/`, `temp/`, `.codex/.env_setup_done`: absent locally or not needed to develop and run the targeted tests
+  - `.venv` outcome:
+    - Copied `.venv` was not reusable because activating it still resolved `python` to `/Users/wenbinzhang/Documents/flow-gtd/.venv/bin/python`
+    - Preserved the copied directory as `.venv.copied-from-main`
+    - Recreated `.venv` in the worktree with `python3.11 -m venv .venv`, then installed Poetry and project dependencies there
+- Baseline verification:
+  - `source .venv/bin/activate && python -V && which python && poetry --version && pytest tests/unit/test_daily_workspace.py tests/unit/test_daily_workspace_screen.py tests/unit/test_cli_main.py -q` => `Python 3.11.15`, worktree-local interpreter path, `Poetry 2.3.2`, `39 passed in 2.75s`
+- Task 1 TDD evidence:
+  - RED: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace.py -v` => `2 failed, 9 passed`; failures were missing `unplanned_work` data and missing `mark_daily_plan_wrapped`
+  - GREEN: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace.py -v` => `11 passed in 0.09s`
   - `Personal/Projects/flow-gtd/02-implementation-plans/2026/2026-03-01-focus-empty-state-inbox-cta-implementation-plan.md`
 - Verification evidence:
   - `source .venv/bin/activate && pytest tests/unit/test_focus_screen_bindings.py tests/unit/test_focus_screen_ui.py tests/unit/test_inbox_startup_context.py tests/unit/tui/common/widgets/test_dialog_bindings.py -v` => 17 passed, 0 failed.

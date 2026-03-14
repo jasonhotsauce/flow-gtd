@@ -24,6 +24,12 @@ class DailyWorkspaceState(TypedDict):
     candidates: DailyWorkspaceCandidates
 
 
+class DailyWorkspaceUnplannedWork(TypedDict):
+    inbox: list[Item]
+    next_actions: list[Item]
+    project_tasks: list[Item]
+
+
 class DailyWrapSummary(TypedDict):
     top_total: int
     top_completed: int
@@ -118,6 +124,14 @@ class DailyPlanService:
         if result is None:
             return None
         return result.strip() or None
+
+    def mark_plan_wrapped(self, plan_date: str) -> None:
+        """Record that wrap was explicitly completed for the given day."""
+        self._db.mark_daily_plan_wrapped(plan_date)
+
+    def get_latest_unwrapped_plan_date(self, before_date: str) -> str | None:
+        """Return the newest prior plan date that still needs wrap."""
+        return self._db.get_latest_unwrapped_plan_date(before_date)
 
     @staticmethod
     def _evaluate_wrap(

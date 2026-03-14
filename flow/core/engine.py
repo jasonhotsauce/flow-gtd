@@ -365,14 +365,16 @@ class Engine:
     def get_daily_workspace_state(self, plan_date: str) -> dict[str, object]:
         """Return plan status and planning candidates for a given day."""
         top_items, bonus_items = self._daily_plan_service.get_plan_items(plan_date)
+        planned_ids = {item.id for item in top_items + bonus_items}
         candidates = self._build_daily_workspace_candidates(
-            date.fromisoformat(plan_date), planned_ids={item.id for item in top_items + bonus_items}
+            date.fromisoformat(plan_date), planned_ids=planned_ids
         )
         return {
             "needs_plan": not top_items and not bonus_items,
             "top_items": top_items,
             "bonus_items": bonus_items,
             "candidates": candidates,
+            "unplanned_work": self._build_daily_unplanned_work(planned_ids),
         }
 
     def get_daily_wrap_summary(self, plan_date: str) -> dict[str, object]:
@@ -382,6 +384,14 @@ class Engine:
     def generate_daily_wrap_insight(self, plan_date: str) -> str | None:
         """Generate an optional AI insight for today's wrap."""
         return self._daily_plan_service.generate_wrap_insight(plan_date)
+
+    def mark_daily_plan_wrapped(self, plan_date: str) -> None:
+        """Persist explicit wrap completion for a plan date."""
+        self._daily_plan_service.mark_plan_wrapped(plan_date)
+
+    def get_latest_unwrapped_plan_date(self, before_date: str) -> str | None:
+        """Return the newest earlier plan date that still needs wrap."""
+        return self._daily_plan_service.get_latest_unwrapped_plan_date(before_date)
 
     def _build_daily_workspace_candidates(
         self, plan_day: date, planned_ids: set[str]
@@ -427,6 +437,31 @@ class Engine:
             "inbox": inbox_items,
             "ready_actions": ready_actions,
             "suggested": suggested,
+        }
+
+    def _build_daily_unplanned_work(self, planned_ids: set[str]) -> dict[str, list[Item]]:
+        """Group open unplanned work for the confirmed workspace state."""
+        inbox_items = [
+            item for item in self.list_inbox() if item.id not in planned_ids
+        ]
+        next_actions = [
+            item
+            for item in self.next_actions()
+            if item.id not in planned_ids
+            and item.type == "action"
+            and item.parent_id is None
+        ]
+        project_tasks = [
+            item
+            for item in self.next_actions()
+            if item.id not in planned_ids
+            and item.type == "action"
+            and item.parent_id is not None
+        ]
+        return {
+            "inbox": inbox_items,
+            "next_actions": next_actions,
+            "project_tasks": project_tasks,
         }
 
     def get_project_next_action(self, project_id: str) -> Optional[Item]:
