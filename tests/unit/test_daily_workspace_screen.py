@@ -9,6 +9,9 @@ from textual.widgets import Static
 
 from flow.models import Item
 from flow.tui.common.widgets.quick_capture_dialog import QuickCaptureDialog
+from flow.tui.common.widgets.top_three_replacement_dialog import (
+    TopThreeReplacementDialog,
+)
 from flow.tui.screens.daily_workspace.daily_workspace import DailyWorkspaceScreen
 
 
@@ -810,6 +813,81 @@ def test_confirmed_state_preserves_reorder_promote_demote_and_complete(
 
     assert completed == ["top-2"]
     assert refresh_called["called"] is True
+
+
+def test_confirmed_add_to_top_opens_replacement_chooser_when_top_three_is_full(
+    monkeypatch,
+) -> None:
+    """Confirmed unplanned add should open a chooser when Top 3 is already full."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    pushes: list[tuple[object, object | None]] = []
+
+    class _FakeApp:
+        def push_screen(self, dialog: object, callback: object | None = None) -> None:
+            pushes.append((dialog, callback))
+
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+    monkeypatch.setattr(DailyWorkspaceScreen, "app", property(lambda self: _FakeApp()))
+
+    state = _confirmed_state()
+    state["top_items"] = [
+        Item(id="top-1", type="action", title="Draft launch brief", status="active"),
+        Item(id="top-2", type="action", title="Review blockers", status="active"),
+        Item(id="top-3", type="action", title="Ship release notes", status="active"),
+    ]
+    state["bonus_items"] = []
+    screen._apply_workspace_state(state)
+
+    screen._draft_focus = "wrap"
+    screen._refresh_supporting_panes()
+    widgets["#daily-list"].highlighted = 0
+    screen.action_add_to_top()
+
+    assert len(pushes) == 1
+    assert isinstance(pushes[0][0], TopThreeReplacementDialog)
+    assert callable(pushes[0][1])
+
+
+def test_top_three_replacement_chooser_demotes_selected_item_into_bonus(
+    monkeypatch,
+) -> None:
+    """Chooser result should replace the selected Top 3 slot deterministically."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    pushes: list[tuple[object, object | None]] = []
+
+    class _FakeApp:
+        def push_screen(self, dialog: object, callback: object | None = None) -> None:
+            pushes.append((dialog, callback))
+
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+    monkeypatch.setattr(DailyWorkspaceScreen, "app", property(lambda self: _FakeApp()))
+
+    state = _confirmed_state()
+    state["top_items"] = [
+        Item(id="top-1", type="action", title="Draft launch brief", status="active"),
+        Item(id="top-2", type="action", title="Review blockers", status="active"),
+        Item(id="top-3", type="action", title="Ship release notes", status="active"),
+    ]
+    state["bonus_items"] = []
+    screen._apply_workspace_state(state)
+
+    screen._draft_focus = "wrap"
+    screen._refresh_supporting_panes()
+    widgets["#daily-list"].highlighted = 0
+    screen.action_add_to_top()
+
+    callback = pushes[0][1]
+    assert callable(callback)
+    callback({"demote_item_id": "top-2"})
+
+    assert [item.id for item in screen._top_items] == ["top-1", "inbox-1", "top-3"]
+    assert [item.id for item in screen._bonus_items] == ["top-2"]
 
 
 def test_confirmed_state_keeps_unplanned_groups_visible_even_with_wrap_summary(

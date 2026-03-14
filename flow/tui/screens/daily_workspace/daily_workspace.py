@@ -16,6 +16,9 @@ from flow.core.engine import Engine
 from flow.models import Item
 from flow.tui.common.base_screen import FlowScreen
 from flow.tui.common.widgets.quick_capture_dialog import QuickCaptureDialog, QuickCaptureResult
+from flow.tui.common.widgets.top_three_replacement_dialog import (
+    TopThreeReplacementDialog,
+)
 from flow.tui.common.keybindings import with_global_bindings
 
 
@@ -64,6 +67,7 @@ class DailyWorkspaceScreen(FlowScreen):
         self._top_selected_index = 0
         self._bonus_selected_index = 0
         self._wrap_summary: dict[str, object] | None = None
+        self._pending_top_replacement_item: Item | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -535,6 +539,36 @@ class DailyWorkspaceScreen(FlowScreen):
         self._unplanned_lookup.pop(option_id, None)
         return item
 
+    def _remove_from_unplanned_groups(self, item_id: str) -> None:
+        """Remove an item from all unplanned groups by id."""
+        for bucket in self._unplanned_groups:
+            self._unplanned_groups[bucket] = [
+                item for item in self._unplanned_groups[bucket] if item.id != item_id
+            ]
+            self._unplanned_lookup.pop(f"{bucket}:{item_id}", None)
+
+    def _apply_top_three_replacement_choice(
+        self, result: dict[str, str] | None
+    ) -> None:
+        """Replace a selected Top 3 slot with the pending unplanned item."""
+        pending_item = self._pending_top_replacement_item
+        self._pending_top_replacement_item = None
+        if pending_item is None or not result:
+            return
+        demote_item_id = result.get("demote_item_id")
+        if not demote_item_id:
+            return
+        for index, item in enumerate(self._top_items):
+            if item.id != demote_item_id:
+                continue
+            demoted_item = self._top_items[index]
+            self._top_items[index] = pending_item
+            self._bonus_items.append(demoted_item)
+            self._remove_from_unplanned_groups(pending_item.id)
+            self._draft_focus = "today"
+            self._refresh_supporting_panes()
+            return
+
     def _refresh_supporting_panes(self) -> None:
         self._set_text(
             "#top-draft-pane-status",
@@ -672,16 +706,25 @@ class DailyWorkspaceScreen(FlowScreen):
         if self._mode == "plan":
             option = self._selected_candidate()
         elif self._mode == "focus" and self._draft_focus == "wrap":
-            option = self._consume_selected_unplanned_item()
+            option = self._selected_unplanned_item()
         else:
             return
         if option is None or option in self._top_items:
             return
         if len(self._top_items) >= 3:
-            self.notify("Top 3 is full. Remove or demote an item first.", timeout=2)
             if self._mode == "focus":
-                self._restore_to_unplanned(option)
+                self._pending_top_replacement_item = option
+                self.app.push_screen(
+                    TopThreeReplacementDialog(self._top_items, option),
+                    callback=self._apply_top_three_replacement_choice,
+                )
+                return
+            self.notify("Top 3 is full. Remove or demote an item first.", timeout=2)
             return
+        if self._mode == "focus":
+            option = self._consume_selected_unplanned_item()
+            if option is None:
+                return
         self._top_items.append(option)
         if self._mode == "plan":
             self._draft_focus = "top"
