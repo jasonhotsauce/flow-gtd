@@ -254,6 +254,15 @@ class Engine:
             for hit in hits
         ]
 
+    def get_task_detail_resources(
+        self, task_id: str, task_title: str
+    ) -> dict[str, list[Resource | VectorHit]]:
+        """Return both tag-matched and semantic resources for a task detail view."""
+        return {
+            "tag_resources": self.get_resources_for_task(task_id)[:2],
+            "semantic_resources": self.get_semantic_resources(task_title, top_k=2),
+        }
+
     def enqueue_resource_index(
         self,
         *,

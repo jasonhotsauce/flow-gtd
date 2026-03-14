@@ -276,7 +276,7 @@
 - [x] Task 2: Add failing screen tests for confirmed-state layout and editing
 - [x] Task 3: Add failing tests for confirmed-state add/remove/promote/demote flows
 - [x] Task 4: Add failing tests for Top 3 full replacement chooser
-- [ ] Task 5: Add failing tests for task detail resources
+- [x] Task 5: Add failing tests for task detail resources
 - [ ] Task 6: Add failing tests for explicit wrap and prior-day wrap gate
 - [ ] Task 7: Update docs, run review, and capture final verification evidence
 
@@ -307,6 +307,9 @@
 - Task 4 TDD evidence:
   - RED: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py -v` => collection failed with `ModuleNotFoundError` for `top_three_replacement_dialog`, confirming the chooser path did not exist yet
   - GREEN: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py -v` => `26 passed in 0.79s`
+- Task 5 TDD evidence:
+  - RED: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py -v` => `2 failed, 26 passed`; failures were missing detail metadata/resources and missing concise resource rendering for unplanned items
+  - GREEN: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py -v` => `28 passed in 0.76s`
   - `Personal/Projects/flow-gtd/02-implementation-plans/2026/2026-03-01-focus-empty-state-inbox-cta-implementation-plan.md`
 - Verification evidence:
   - `source .venv/bin/activate && pytest tests/unit/test_focus_screen_bindings.py tests/unit/test_focus_screen_ui.py tests/unit/test_inbox_startup_context.py tests/unit/tui/common/widgets/test_dialog_bindings.py -v` => 17 passed, 0 failed.

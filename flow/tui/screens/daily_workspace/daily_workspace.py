@@ -13,7 +13,9 @@ from textual.widgets import Footer, Header, OptionList, Static
 from textual.widgets.option_list import Option
 
 from flow.core.engine import Engine
+from flow.database.vector_store import VectorHit
 from flow.models import Item
+from flow.models import Resource
 from flow.tui.common.base_screen import FlowScreen
 from flow.tui.common.widgets.quick_capture_dialog import QuickCaptureDialog, QuickCaptureResult
 from flow.tui.common.widgets.top_three_replacement_dialog import (
@@ -68,6 +70,7 @@ class DailyWorkspaceScreen(FlowScreen):
         self._bonus_selected_index = 0
         self._wrap_summary: dict[str, object] | None = None
         self._pending_top_replacement_item: Item | None = None
+        self._detail_resource_cache: dict[str, dict[str, list[Resource | VectorHit]]] = {}
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -394,6 +397,18 @@ class DailyWorkspaceScreen(FlowScreen):
             return None
         return self._unplanned_lookup.get(str(option.id))
 
+    def _current_detail_item(self) -> Item | None:
+        """Return the item currently driving the detail pane."""
+        if self._mode == "plan":
+            if self._draft_focus == "top":
+                return self._selected_top_item()
+            if self._draft_focus == "bonus":
+                return self._selected_bonus_item()
+            return self._selected_candidate()
+        if self._draft_focus == "wrap":
+            return self._selected_unplanned_item()
+        return self._selected_today_item()
+
     def _sync_draft_index_from_primary_list(self) -> None:
         options = self._current_list_widget()
         if options is None:
@@ -464,19 +479,79 @@ class DailyWorkspaceScreen(FlowScreen):
                 source = "Project Tasks"
             elif selected_unplanned.type == "action":
                 source = "Next Actions"
-            return (
+            detail = (
                 f"{selected_unplanned.title}\n"
                 f"Unplanned source: {source}\n"
                 "Hint: t adds this to Top 3. b adds this to Bonus."
             )
+            resources = self._render_detail_resources(selected_unplanned)
+            if resources:
+                detail = f"{detail}\n{resources}"
+            return detail
         if selected is None:
             return "Plan confirmed. Today list is now active."
-        return (
+        detail = (
             "Plan confirmed. Today list is now active.\n"
             f"{selected.title}\n"
             f"Current bucket: {self._draft_bucket_status(selected)}\n"
             "Hint: c marks this item complete. d removes it back to unplanned work."
         )
+        if selected.context_tags:
+            detail = f"{detail}\nTags: {', '.join(selected.context_tags)}"
+        resources = self._render_detail_resources(selected)
+        if resources:
+            detail = f"{detail}\n{resources}"
+        return detail
+
+    @staticmethod
+    def _truncate_detail_text(value: str, limit: int = 72) -> str:
+        """Keep resource copy compact for the narrow detail pane."""
+        if len(value) <= limit:
+            return value
+        return f"{value[: limit - 3].rstrip()}..."
+
+    def _render_detail_resources(self, item: Item) -> str:
+        """Render cached detail resources for the selected item."""
+        payload = self._detail_resource_cache.get(item.id)
+        if not payload:
+            return ""
+        lines = ["", "Resources"]
+        tag_resources = payload.get("tag_resources", [])
+        semantic_resources = payload.get("semantic_resources", [])
+        for resource in tag_resources:
+            if not isinstance(resource, Resource):
+                continue
+            title = resource.title or resource.source
+            summary = resource.summary or resource.source
+            lines.append(f"  [Tag] {title}")
+            lines.append(f"    {self._truncate_detail_text(summary)}")
+        for hit in semantic_resources:
+            if not isinstance(hit, VectorHit):
+                continue
+            lines.append(f"  [Semantic] {hit.title or hit.source}")
+            lines.append(f"    {self._truncate_detail_text(hit.snippet or hit.source)}")
+        return "\n".join(lines)
+
+    def _schedule_detail_resource_load(self) -> None:
+        """Load detail resources asynchronously for the currently selected item."""
+        item = self._current_detail_item()
+        if item is None or item.id in self._detail_resource_cache:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        loop.create_task(self._load_detail_resources_async(item))
+
+    async def _load_detail_resources_async(self, item: Item) -> None:
+        """Fetch detail resources off the UI thread and refresh the pane if still selected."""
+        payload = await asyncio.to_thread(
+            self._engine.get_task_detail_resources, item.id, item.title
+        )
+        self._detail_resource_cache[item.id] = payload
+        current_item = self._current_detail_item()
+        if self.is_mounted and current_item is not None and current_item.id == item.id:
+            self._set_text("#detail-content", self._render_detail_content())
 
     def _refresh_confirmed_list(self) -> None:
         """Refresh the shared OptionList based on the active confirmed-state pane."""
@@ -585,6 +660,7 @@ class DailyWorkspaceScreen(FlowScreen):
             self._refresh_confirmed_list()
         self._set_text("#detail-pane-status", self._pane_hint())
         self._set_text("#detail-content", self._render_detail_content())
+        self._schedule_detail_resource_load()
         if self._mode == "focus":
             self._set_text("#wrap-pane-status", "Inbox, Next Actions, Project Tasks")
             self._set_text("#wrap-content", self._render_unplanned_content())

@@ -7,7 +7,8 @@ import pytest
 from textual.app import App, ComposeResult
 from textual.widgets import Static
 
-from flow.models import Item
+from flow.database.vector_store import VectorHit
+from flow.models import Item, Resource
 from flow.tui.common.widgets.quick_capture_dialog import QuickCaptureDialog
 from flow.tui.common.widgets.top_three_replacement_dialog import (
     TopThreeReplacementDialog,
@@ -888,6 +889,104 @@ def test_top_three_replacement_chooser_demotes_selected_item_into_bonus(
 
     assert [item.id for item in screen._top_items] == ["top-1", "inbox-1", "top-3"]
     assert [item.id for item in screen._bonus_items] == ["top-2"]
+
+
+def test_detail_pane_shows_metadata_and_resources_for_planned_selection(
+    monkeypatch,
+) -> None:
+    """Planned detail should show concise task metadata plus related resources."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+
+    state = _confirmed_state()
+    state["top_items"] = [
+        Item(
+            id="top-1",
+            type="action",
+            title="Draft launch brief",
+            status="active",
+            context_tags=["launch", "docs"],
+        )
+    ]
+    state["bonus_items"] = []
+    screen._detail_resource_cache = {
+        "top-1": {
+            "tag_resources": [
+                Resource(
+                    id="resource-1",
+                    content_type="text",
+                    source="Launch runbook",
+                    title="Launch runbook",
+                    summary="Checklist for the release window and rollback plan.",
+                    tags=["launch"],
+                )
+            ],
+            "semantic_resources": [
+                VectorHit(
+                    resource_id="semantic-1",
+                    score=0.92,
+                    title="Release notes template",
+                    snippet="Template for concise release notes and validation steps.",
+                    source="notes/release-notes.md",
+                )
+            ],
+        }
+    }
+
+    screen._apply_workspace_state(state)
+
+    detail = widgets["#detail-content"].value
+    assert "Current bucket: Top 3 #1" in detail
+    assert "Tags: launch, docs" in detail
+    assert "Resources" in detail
+    assert "Launch runbook" in detail
+    assert "Release notes template" in detail
+
+
+def test_detail_pane_shows_concise_resources_for_unplanned_selection(
+    monkeypatch,
+) -> None:
+    """Unplanned detail should show source metadata and concise resource snippets."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+
+    long_summary = (
+        "This is a deliberately long summary that should be trimmed so the detail pane "
+        "stays readable in the confirmed workspace."
+    )
+    screen._detail_resource_cache = {
+        "inbox-1": {
+            "tag_resources": [
+                Resource(
+                    id="resource-2",
+                    content_type="text",
+                    source="Inbox note",
+                    title="Inbox note",
+                    summary=long_summary,
+                    tags=["ops"],
+                )
+            ],
+            "semantic_resources": [],
+        }
+    }
+
+    screen._apply_workspace_state(_confirmed_state())
+    screen._draft_focus = "wrap"
+    screen._refresh_supporting_panes()
+    widgets["#daily-list"].highlighted = 0
+    screen._refresh_supporting_panes()
+
+    detail = widgets["#detail-content"].value
+    assert "Inbox follow-up" in detail
+    assert "Unplanned source: Inbox" in detail
+    assert "Inbox note" in detail
+    assert "..." in detail
 
 
 def test_confirmed_state_keeps_unplanned_groups_visible_even_with_wrap_summary(
