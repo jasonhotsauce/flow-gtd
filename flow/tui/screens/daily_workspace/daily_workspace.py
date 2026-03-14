@@ -332,6 +332,19 @@ class DailyWorkspaceScreen(FlowScreen):
             return None
         return self._candidate_lookup.get(str(option.id))
 
+    def _selected_option_id(self) -> str | None:
+        options = self._current_list_widget()
+        if options is None:
+            return None
+        idx = options.highlighted
+        if idx is None or not hasattr(options, "get_option_at_index"):
+            return None
+        try:
+            option = options.get_option_at_index(idx)
+        except IndexError:
+            return None
+        return str(option.id)
+
     def _selected_today_item(self) -> Item | None:
         options = self._current_list_widget()
         if options is None:
@@ -346,6 +359,21 @@ class DailyWorkspaceScreen(FlowScreen):
         except IndexError:
             return None
         return self._today_lookup.get(str(option.id))
+
+    def _selected_today_bucket_and_index(self) -> tuple[str, int] | None:
+        option_id = self._selected_option_id()
+        if option_id is None:
+            return None
+        bucket, _, item_id = option_id.partition(":")
+        if bucket == "top":
+            for index, item in enumerate(self._top_items):
+                if item.id == item_id:
+                    return ("top", index)
+        if bucket == "bonus":
+            for index, item in enumerate(self._bonus_items):
+                if item.id == item_id:
+                    return ("bonus", index)
+        return None
 
     def _selected_unplanned_item(self) -> Item | None:
         options = self._current_list_widget()
@@ -451,6 +479,20 @@ class DailyWorkspaceScreen(FlowScreen):
         options = self._current_list_widget()
         if options is None:
             return
+        self._today_lookup = {
+            f"top:{item.id}": item for item in self._top_items
+        } | {
+            f"bonus:{item.id}": item for item in self._bonus_items
+        }
+        self._unplanned_lookup = {
+            f"inbox:{item.id}": item for item in self._unplanned_groups["inbox"]
+        } | {
+            f"next_actions:{item.id}": item
+            for item in self._unplanned_groups["next_actions"]
+        } | {
+            f"project_tasks:{item.id}": item
+            for item in self._unplanned_groups["project_tasks"]
+        }
         options.clear_options()
         if self._draft_focus == "wrap":
             for option_id, label in self._build_unplanned_lines(self._unplanned_groups):
@@ -464,6 +506,34 @@ class DailyWorkspaceScreen(FlowScreen):
         if options.option_count:
             options.action_first()
             options.focus()
+
+    def _restore_to_unplanned(self, item: Item) -> None:
+        """Return a removed planned item to its original open-work group."""
+        if item.parent_id is not None:
+            bucket = "project_tasks"
+        elif item.type == "action":
+            bucket = "next_actions"
+        else:
+            bucket = "inbox"
+        if any(existing.id == item.id for existing in self._unplanned_groups[bucket]):
+            return
+        self._unplanned_groups[bucket].append(item)
+        self._unplanned_lookup[f"{bucket}:{item.id}"] = item
+
+    def _consume_selected_unplanned_item(self) -> Item | None:
+        """Remove the selected unplanned item from its source group and return it."""
+        item = self._selected_unplanned_item()
+        option_id = self._selected_option_id()
+        if item is None or option_id is None:
+            return None
+        bucket, _, _item_id = option_id.partition(":")
+        if bucket not in self._unplanned_groups:
+            return None
+        self._unplanned_groups[bucket] = [
+            existing for existing in self._unplanned_groups[bucket] if existing.id != item.id
+        ]
+        self._unplanned_lookup.pop(option_id, None)
+        return item
 
     def _refresh_supporting_panes(self) -> None:
         self._set_text(
@@ -599,33 +669,56 @@ class DailyWorkspaceScreen(FlowScreen):
 
     def action_add_to_top(self) -> None:
         """Add the selected candidate to Top 3 in planning mode."""
-        if self._mode != "plan":
+        if self._mode == "plan":
+            option = self._selected_candidate()
+        elif self._mode == "focus" and self._draft_focus == "wrap":
+            option = self._consume_selected_unplanned_item()
+        else:
             return
-        option = self._selected_candidate()
         if option is None or option in self._top_items:
             return
         if len(self._top_items) >= 3:
             self.notify("Top 3 is full. Remove or demote an item first.", timeout=2)
+            if self._mode == "focus":
+                self._restore_to_unplanned(option)
             return
         self._top_items.append(option)
-        self._draft_focus = "top"
-        self._top_selected_index = len(self._top_items) - 1
+        if self._mode == "plan":
+            self._draft_focus = "top"
+            self._top_selected_index = len(self._top_items) - 1
         self._refresh_supporting_panes()
 
     def action_add_to_bonus(self) -> None:
         """Add the selected candidate to Bonus in planning mode."""
-        if self._mode != "plan":
+        if self._mode == "plan":
+            option = self._selected_candidate()
+        elif self._mode == "focus" and self._draft_focus == "wrap":
+            option = self._consume_selected_unplanned_item()
+        else:
             return
-        option = self._selected_candidate()
         if option is None or option in self._bonus_items:
             return
         self._bonus_items.append(option)
-        self._draft_focus = "bonus"
-        self._bonus_selected_index = len(self._bonus_items) - 1
+        if self._mode == "plan":
+            self._draft_focus = "bonus"
+            self._bonus_selected_index = len(self._bonus_items) - 1
         self._refresh_supporting_panes()
 
     def action_remove_selected_draft_item(self) -> None:
         """Remove the selected item from the active draft pane."""
+        if self._mode == "focus" and self._draft_focus != "wrap":
+            selected = self._selected_today_item()
+            bucket_and_index = self._selected_today_bucket_and_index()
+            if selected is None or bucket_and_index is None:
+                return
+            bucket, _index = bucket_and_index
+            if bucket == "top":
+                self._top_items = [item for item in self._top_items if item.id != selected.id]
+            else:
+                self._bonus_items = [item for item in self._bonus_items if item.id != selected.id]
+            self._restore_to_unplanned(selected)
+            self._refresh_supporting_panes()
+            return
         if self._mode != "plan":
             return
         if self._draft_focus == "top":
@@ -646,38 +739,64 @@ class DailyWorkspaceScreen(FlowScreen):
 
     def action_promote_bonus_item(self) -> None:
         """Promote the selected Bonus item into Top 3."""
-        if self._mode != "plan":
+        if self._mode == "plan":
+            selected = self._selected_bonus_item()
+            if selected is None or len(self._top_items) >= 3:
+                return
+            self._bonus_items = [item for item in self._bonus_items if item.id != selected.id]
+            self._top_items.append(selected)
+            self._draft_focus = "top"
+            self._top_selected_index = len(self._top_items) - 1
+            self._bonus_selected_index = max(0, min(self._bonus_selected_index, len(self._bonus_items) - 1))
+            self._refresh_supporting_panes()
             return
-        selected = self._selected_bonus_item()
-        if selected is None or len(self._top_items) >= 3:
+        if self._mode != "focus":
             return
-        self._bonus_items = [item for item in self._bonus_items if item.id != selected.id]
+        bucket_and_index = self._selected_today_bucket_and_index()
+        if bucket_and_index is None or bucket_and_index[0] != "bonus" or len(self._top_items) >= 3:
+            return
+        _bucket, index = bucket_and_index
+        selected = self._bonus_items.pop(index)
         self._top_items.append(selected)
-        self._draft_focus = "top"
-        self._top_selected_index = len(self._top_items) - 1
-        self._bonus_selected_index = max(0, min(self._bonus_selected_index, len(self._bonus_items) - 1))
         self._refresh_supporting_panes()
 
     def action_demote_top_item(self) -> None:
         """Demote the selected Top 3 item into Bonus."""
-        if self._mode != "plan":
+        if self._mode == "plan":
+            selected = self._selected_top_item()
+            if selected is None:
+                return
+            self._top_items = [item for item in self._top_items if item.id != selected.id]
+            self._bonus_items.append(selected)
+            self._draft_focus = "bonus"
+            self._bonus_selected_index = len(self._bonus_items) - 1
+            self._top_selected_index = max(0, min(self._top_selected_index, len(self._top_items) - 1))
+            self._refresh_supporting_panes()
             return
-        selected = self._selected_top_item()
-        if selected is None:
+        if self._mode != "focus":
             return
-        self._top_items = [item for item in self._top_items if item.id != selected.id]
+        bucket_and_index = self._selected_today_bucket_and_index()
+        if bucket_and_index is None or bucket_and_index[0] != "top":
+            return
+        _bucket, index = bucket_and_index
+        selected = self._top_items.pop(index)
         self._bonus_items.append(selected)
-        self._draft_focus = "bonus"
-        self._bonus_selected_index = len(self._bonus_items) - 1
-        self._top_selected_index = max(0, min(self._top_selected_index, len(self._top_items) - 1))
         self._refresh_supporting_panes()
 
     def action_move_top_item_up(self) -> None:
         """Move the selected Top 3 item up."""
-        if self._mode != "plan" or len(self._top_items) < 2:
+        if len(self._top_items) < 2:
             return
-        self._sync_draft_index_from_primary_list()
-        index = max(0, min(self._top_selected_index, len(self._top_items) - 1))
+        if self._mode == "plan":
+            self._sync_draft_index_from_primary_list()
+            index = max(0, min(self._top_selected_index, len(self._top_items) - 1))
+        elif self._mode == "focus":
+            bucket_and_index = self._selected_today_bucket_and_index()
+            if bucket_and_index is None or bucket_and_index[0] != "top":
+                return
+            index = bucket_and_index[1]
+        else:
+            return
         if index == 0:
             return
         self._top_items[index - 1], self._top_items[index] = (
@@ -690,10 +809,18 @@ class DailyWorkspaceScreen(FlowScreen):
 
     def action_move_top_item_down(self) -> None:
         """Move the selected Top 3 item down."""
-        if self._mode != "plan" or len(self._top_items) < 2:
+        if len(self._top_items) < 2:
             return
-        self._sync_draft_index_from_primary_list()
-        index = max(0, min(self._top_selected_index, len(self._top_items) - 1))
+        if self._mode == "plan":
+            self._sync_draft_index_from_primary_list()
+            index = max(0, min(self._top_selected_index, len(self._top_items) - 1))
+        elif self._mode == "focus":
+            bucket_and_index = self._selected_today_bucket_and_index()
+            if bucket_and_index is None or bucket_and_index[0] != "top":
+                return
+            index = bucket_and_index[1]
+        else:
+            return
         if index >= len(self._top_items) - 1:
             return
         self._top_items[index + 1], self._top_items[index] = (
@@ -807,7 +934,12 @@ class DailyWorkspaceScreen(FlowScreen):
         if item is None:
             return
         self._engine.complete_item(item.id)
-        asyncio.create_task(self._refresh_async())
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(self._refresh_async())
+            return
+        loop.create_task(self._refresh_async())
 
     def on_option_list_option_selected(
         self, event: OptionList.OptionSelected

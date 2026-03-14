@@ -715,6 +715,103 @@ def test_confirmed_state_detail_follows_planned_and_unplanned_selection(
     assert "Unplanned source: Inbox" in widgets["#detail-content"].value
 
 
+def test_confirmed_state_adds_and_removes_items_without_reentering_planning(
+    monkeypatch,
+) -> None:
+    """Confirmed state should let users pull unplanned work in and remove planned work out."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+
+    state = _confirmed_state()
+    state["top_items"] = [
+        Item(id="top-1", type="action", title="Draft launch brief", status="active")
+    ]
+    state["bonus_items"] = []
+    screen._apply_workspace_state(state)
+
+    screen._draft_focus = "wrap"
+    screen._refresh_supporting_panes()
+    widgets["#daily-list"].highlighted = 0
+    screen.action_add_to_top()
+
+    assert [item.id for item in screen._top_items] == ["top-1", "inbox-1"]
+    assert screen._unplanned_groups["inbox"] == []
+
+    widgets["#daily-list"].highlighted = 0
+    screen.action_add_to_bonus()
+
+    assert [item.id for item in screen._bonus_items] == ["next-1"]
+    assert screen._unplanned_groups["next_actions"] == []
+
+    screen._draft_focus = "today"
+    screen._refresh_supporting_panes()
+    widgets["#daily-list"].highlighted = 1
+    screen.action_remove_selected_draft_item()
+
+    assert [item.id for item in screen._top_items] == ["top-1"]
+    assert [item.id for item in screen._unplanned_groups["inbox"]] == ["inbox-1"]
+
+
+def test_confirmed_state_preserves_reorder_promote_demote_and_complete(
+    monkeypatch,
+) -> None:
+    """Confirmed state should keep core plan-editing and completion actions active."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    completed: list[str] = []
+    refresh_called = {"called": False}
+
+    class FakeEngine:
+        def complete_item(self, item_id: str) -> None:
+            completed.append(item_id)
+
+    async def fake_refresh_async() -> None:
+        refresh_called["called"] = True
+
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+    screen._engine = FakeEngine()
+    screen._refresh_async = fake_refresh_async  # type: ignore[method-assign]
+
+    state = _confirmed_state()
+    state["top_items"] = [
+        Item(id="top-1", type="action", title="Draft launch brief", status="active"),
+        Item(id="top-2", type="action", title="Review blockers", status="active"),
+    ]
+    state["bonus_items"] = [
+        Item(id="bonus-1", type="action", title="Tidy backlog", status="active")
+    ]
+    screen._apply_workspace_state(state)
+
+    widgets["#daily-list"].highlighted = 1
+    screen.action_move_top_item_up()
+    assert [item.id for item in screen._top_items] == ["top-2", "top-1"]
+
+    widgets["#daily-list"].highlighted = 0
+    screen.action_move_top_item_down()
+    assert [item.id for item in screen._top_items] == ["top-1", "top-2"]
+
+    widgets["#daily-list"].highlighted = 0
+    screen.action_demote_top_item()
+    assert [item.id for item in screen._top_items] == ["top-2"]
+    assert [item.id for item in screen._bonus_items] == ["bonus-1", "top-1"]
+
+    widgets["#daily-list"].highlighted = 1
+    screen.action_promote_bonus_item()
+    assert [item.id for item in screen._top_items] == ["top-2", "bonus-1"]
+    assert [item.id for item in screen._bonus_items] == ["top-1"]
+
+    widgets["#daily-list"].highlighted = 0
+    screen.action_complete_planned_item()
+
+    assert completed == ["top-2"]
+    assert refresh_called["called"] is True
+
+
 def test_confirmed_state_keeps_unplanned_groups_visible_even_with_wrap_summary(
     monkeypatch,
 ) -> None:

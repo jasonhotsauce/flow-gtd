@@ -274,7 +274,7 @@
 - [x] Run clean baseline verification in the worktree before coding
 - [x] Task 1: Add failing engine tests for confirmed-state workspace data
 - [x] Task 2: Add failing screen tests for confirmed-state layout and editing
-- [ ] Task 3: Add failing tests for confirmed-state add/remove/promote/demote flows
+- [x] Task 3: Add failing tests for confirmed-state add/remove/promote/demote flows
 - [ ] Task 4: Add failing tests for Top 3 full replacement chooser
 - [ ] Task 5: Add failing tests for task detail resources
 - [ ] Task 6: Add failing tests for explicit wrap and prior-day wrap gate
@@ -301,6 +301,9 @@
 - Task 2 TDD evidence:
   - RED: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py -v` => `2 failed, 20 passed`; failures were stale confirmed-state pane titles and missing unplanned-selection detail behavior
   - GREEN: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py -v` => `22 passed in 0.71s`
+- Task 3 TDD evidence:
+  - RED: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py -v` => `2 failed, 22 passed`; failures were confirmed-state action guards still blocking add/remove/reorder flows
+  - GREEN: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py -v` => `24 passed in 0.74s`
   - `Personal/Projects/flow-gtd/02-implementation-plans/2026/2026-03-01-focus-empty-state-inbox-cta-implementation-plan.md`
 - Verification evidence:
   - `source .venv/bin/activate && pytest tests/unit/test_focus_screen_bindings.py tests/unit/test_focus_screen_ui.py tests/unit/test_inbox_startup_context.py tests/unit/tui/common/widgets/test_dialog_bindings.py -v` => 17 passed, 0 failed.
