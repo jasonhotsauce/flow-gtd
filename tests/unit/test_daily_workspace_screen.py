@@ -989,6 +989,47 @@ def test_detail_pane_shows_concise_resources_for_unplanned_selection(
     assert "..." in detail
 
 
+def test_show_daily_wrap_explicitly_replaces_unplanned_pane_content(
+    monkeypatch,
+) -> None:
+    """Confirmed state should only show wrap after the user explicitly asks for it."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+
+    class FakeEngine:
+        def get_daily_wrap_summary(self, _plan_date: str) -> dict[str, object]:
+            return {
+                "top_total": 2,
+                "top_completed": 1,
+                "bonus_total": 1,
+                "bonus_completed": 0,
+                "all_top_completed": False,
+                "headline": "Solid day",
+                "coaching_feedback": "Tighten the Top 3 tomorrow.",
+                "completed_top_items": [{"id": "top-1", "title": "Draft launch brief"}],
+                "completed_bonus_items": [],
+                "open_planned_items": [{"id": "top-2", "title": "Review blockers"}],
+            }
+
+        def mark_daily_plan_wrapped(self, _plan_date: str) -> None:
+            return
+
+    screen._engine = FakeEngine()
+
+    screen._apply_workspace_state(_confirmed_state())
+
+    assert "Solid day" not in widgets["#wrap-content"].value
+
+    screen.action_show_daily_wrap()
+
+    assert widgets["#wrap-pane-title"].value == "[3] Daily Wrap"
+    assert "Solid day" in widgets["#wrap-content"].value
+    assert "Coaching" in widgets["#wrap-content"].value
+
+
 def test_confirmed_state_keeps_unplanned_groups_visible_even_with_wrap_summary(
     monkeypatch,
 ) -> None:

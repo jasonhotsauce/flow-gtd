@@ -277,7 +277,7 @@
 - [x] Task 3: Add failing tests for confirmed-state add/remove/promote/demote flows
 - [x] Task 4: Add failing tests for Top 3 full replacement chooser
 - [x] Task 5: Add failing tests for task detail resources
-- [ ] Task 6: Add failing tests for explicit wrap and prior-day wrap gate
+- [x] Task 6: Add failing tests for explicit wrap and prior-day wrap gate
 - [ ] Task 7: Update docs, run review, and capture final verification evidence
 
 ## Review / Results
@@ -310,6 +310,9 @@
 - Task 5 TDD evidence:
   - RED: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py -v` => `2 failed, 26 passed`; failures were missing detail metadata/resources and missing concise resource rendering for unplanned items
   - GREEN: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py -v` => `28 passed in 0.76s`
+- Task 6 TDD evidence:
+  - RED: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py tests/unit/test_cli_main.py -v` => `2 failed, 37 passed`; failures were missing explicit wrap visibility state and missing prior-day wrap startup routing
+  - GREEN: `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py tests/unit/test_cli_main.py -v` => `39 passed in 0.82s`
   - `Personal/Projects/flow-gtd/02-implementation-plans/2026/2026-03-01-focus-empty-state-inbox-cta-implementation-plan.md`
 - Verification evidence:
   - `source .venv/bin/activate && pytest tests/unit/test_focus_screen_bindings.py tests/unit/test_focus_screen_ui.py tests/unit/test_inbox_startup_context.py tests/unit/tui/common/widgets/test_dialog_bindings.py -v` => 17 passed, 0 failed.

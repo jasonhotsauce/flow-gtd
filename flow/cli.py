@@ -3,6 +3,7 @@
 import re
 import multiprocessing
 import uuid
+from datetime import date
 from importlib.metadata import PackageNotFoundError, version as get_package_version
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Type, TypedDict
@@ -207,7 +208,20 @@ def _launch_tui(initial_screen: "Optional[Type[Screen]]" = None) -> None:
         raise typer.Exit(0)
     if already_onboarded:
         _ensure_resource_storage_selected()
-    FlowApp(initial_screen=initial_screen, startup_context=startup_context).run()
+    resolved_initial_screen = initial_screen
+    if initial_screen is DailyWorkspaceScreen:
+        try:
+            prior_wrap_date = Engine().get_latest_unwrapped_plan_date(
+                date.today().isoformat()
+            )
+        except Exception:
+            prior_wrap_date = None
+        if prior_wrap_date:
+            resolved_initial_screen = DailyWorkspaceScreen(
+                plan_date=prior_wrap_date,
+                start_in_wrap=True,
+            )
+    FlowApp(initial_screen=resolved_initial_screen, startup_context=startup_context).run()
 
 
 @app.callback(invoke_without_command=True)

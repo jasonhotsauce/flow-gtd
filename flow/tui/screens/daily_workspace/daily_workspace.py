@@ -50,7 +50,9 @@ class DailyWorkspaceScreen(FlowScreen):
         Binding("r", "go_review", "Review", show=False),
     )
 
-    def __init__(self, plan_date: str | None = None) -> None:
+    def __init__(
+        self, plan_date: str | None = None, start_in_wrap: bool = False
+    ) -> None:
         super().__init__()
         self._engine = Engine()
         self._plan_date = plan_date or date.today().isoformat()
@@ -71,6 +73,7 @@ class DailyWorkspaceScreen(FlowScreen):
         self._wrap_summary: dict[str, object] | None = None
         self._pending_top_replacement_item: Item | None = None
         self._detail_resource_cache: dict[str, dict[str, list[Resource | VectorHit]]] = {}
+        self._show_wrap_summary = start_in_wrap
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -662,9 +665,32 @@ class DailyWorkspaceScreen(FlowScreen):
         self._set_text("#detail-content", self._render_detail_content())
         self._schedule_detail_resource_load()
         if self._mode == "focus":
-            self._set_text("#wrap-pane-status", "Inbox, Next Actions, Project Tasks")
-            self._set_text("#wrap-content", self._render_unplanned_content())
-            self._set_text("#daily-wrap", "")
+            if self._show_wrap_summary:
+                if self._wrap_summary is None:
+                    self._wrap_summary = {
+                        "top_total": len(self._top_items),
+                        "top_completed": 0,
+                        "bonus_total": len(self._bonus_items),
+                        "bonus_completed": 0,
+                        "headline": "Daily Wrap",
+                        "coaching_feedback": "Wrap will fill in as you complete planned work.",
+                        "completed_top_items": [],
+                        "completed_bonus_items": [],
+                        "open_planned_items": [
+                            {"id": item.id, "title": item.title}
+                            for item in self._top_items + self._bonus_items
+                        ],
+                    }
+                wrap_text = self._render_wrap_summary(self._wrap_summary)
+                self._set_text("#wrap-pane-title", "[3] Daily Wrap")
+                self._set_text("#wrap-pane-status", "Explicit wrap summary")
+                self._set_text("#wrap-content", wrap_text)
+                self._set_text("#daily-wrap", wrap_text)
+            else:
+                self._set_text("#wrap-pane-title", "[3] Unplanned Work")
+                self._set_text("#wrap-pane-status", "Inbox, Next Actions, Project Tasks")
+                self._set_text("#wrap-content", self._render_unplanned_content())
+                self._set_text("#daily-wrap", "")
             return
         if self._wrap_summary is None:
             self._wrap_summary = {
@@ -756,7 +782,10 @@ class DailyWorkspaceScreen(FlowScreen):
         self._set_text("#candidates-pane-title", "[1] Today")
         self._set_text("#candidates-pane-status", "Top 3 first, Bonus second")
         self._set_text("#detail-pane-title", "[2] Task Detail")
-        self._set_text("#wrap-pane-title", "[3] Unplanned Work")
+        self._set_text(
+            "#wrap-pane-title",
+            "[3] Daily Wrap" if self._show_wrap_summary else "[3] Unplanned Work",
+        )
         self._set_classes("#top-draft-pane", "-hidden", True)
         self._set_classes("#bonus-draft-pane", "-hidden", True)
         self._set_classes("#today-pane", "-hidden", True)
@@ -1081,8 +1110,11 @@ class DailyWorkspaceScreen(FlowScreen):
 
     def action_show_daily_wrap(self) -> None:
         """Render wrap summary for the current plan."""
+        self._show_wrap_summary = True
         self._wrap_summary = self._engine.get_daily_wrap_summary(self._plan_date)
+        self._engine.mark_daily_plan_wrapped(self._plan_date)
         wrap_text = self._render_wrap_summary(self._wrap_summary)
+        self._set_text("#wrap-pane-title", "[3] Daily Wrap")
         self._set_text("#wrap-content", wrap_text)
         self._set_text("#daily-wrap", wrap_text)
         self._refresh_supporting_panes()
