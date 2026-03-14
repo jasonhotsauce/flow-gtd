@@ -126,6 +126,47 @@ def _state_with_candidates() -> dict[str, object]:
     }
 
 
+def _confirmed_state() -> dict[str, object]:
+    return {
+        "needs_plan": False,
+        "top_items": [
+            Item(id="top-1", type="action", title="Draft launch brief", status="active"),
+            Item(id="top-2", type="action", title="Review blockers", status="active"),
+        ],
+        "bonus_items": [
+            Item(id="bonus-1", type="action", title="Tidy backlog", status="active")
+        ],
+        "candidates": {
+            "must_address": [],
+            "inbox": [],
+            "ready_actions": [],
+            "suggested": [],
+        },
+        "unplanned_work": {
+            "inbox": [
+                Item(id="inbox-1", type="inbox", title="Inbox follow-up", status="active")
+            ],
+            "next_actions": [
+                Item(
+                    id="next-1",
+                    type="action",
+                    title="Ping designer",
+                    status="active",
+                )
+            ],
+            "project_tasks": [
+                Item(
+                    id="project-task-1",
+                    type="action",
+                    title="Prep rollout notes",
+                    status="active",
+                    parent_id="project-1",
+                )
+            ],
+        },
+    }
+
+
 def _has_binding(screen: type[DailyWorkspaceScreen], key: str, action: str | None = None) -> bool:
     for binding in screen.BINDINGS:
         if isinstance(binding, tuple):
@@ -618,43 +659,66 @@ def test_reorder_top_items_updates_visible_slot_order(monkeypatch) -> None:
     assert "Review blockers" in first_slot
 
 
-def test_confirmed_state_keeps_panes_and_renders_merged_today_list(monkeypatch) -> None:
-    """Confirming should update pane titles in place and merge Top 3 plus Bonus into Today."""
+def test_confirmed_state_renders_today_detail_and_grouped_unplanned_work(
+    monkeypatch,
+) -> None:
+    """Confirmed state should hide planning panes and show grouped unplanned work."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    class_calls: list[tuple[str, str, bool]] = []
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+    monkeypatch.setattr(
+        screen,
+        "_set_classes",
+        lambda selector, class_name, enabled: class_calls.append(
+            (selector, class_name, enabled)
+        ),
+    )
+
+    screen._apply_workspace_state(_confirmed_state())
+
+    assert widgets["#candidates-pane-title"].value == "[1] Today"
+    assert widgets["#detail-pane-title"].value == "[2] Task Detail"
+    assert widgets["#wrap-pane-title"].value == "[3] Unplanned Work"
+    assert "t" in widgets["#ops-status-text"].value.lower()
+    assert "b" in widgets["#ops-status-text"].value.lower()
+    assert "d" in widgets["#ops-status-text"].value.lower()
+    assert ("#top-draft-pane", "-hidden", True) in class_calls
+    assert ("#bonus-draft-pane", "-hidden", True) in class_calls
+    assert ("#today-pane", "-hidden", True) in class_calls
+    assert "Inbox" in widgets["#wrap-content"].value
+    assert "Project Tasks" in widgets["#wrap-content"].value
+    assert "Daily Wrap" not in widgets["#wrap-pane-status"].value
+
+
+def test_confirmed_state_detail_follows_planned_and_unplanned_selection(
+    monkeypatch,
+) -> None:
+    """Confirmed detail should update when switching between planned and unplanned work."""
     screen = DailyWorkspaceScreen()
     widgets = _screen_widgets()
     monkeypatch.setattr(
         screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
     )
 
-    screen._apply_workspace_state(
-        {
-            "needs_plan": False,
-            "top_items": [
-                Item(id="top-1", type="action", title="Draft launch brief", status="active"),
-                Item(id="top-2", type="action", title="Review blockers", status="active"),
-            ],
-            "bonus_items": [
-                Item(id="bonus-1", type="action", title="Tidy backlog", status="active")
-            ],
-            "candidates": {
-                "must_address": [],
-                "inbox": [],
-                "ready_actions": [],
-                "suggested": [],
-            },
-        }
-    )
+    screen._apply_workspace_state(_confirmed_state())
 
-    assert "Today" in widgets["#today-pane-title"].value
-    assert "Plan confirmed" in widgets["#detail-content"].value
-    today_text = widgets["#today-content"].value
-    assert "Top 3" in today_text
-    assert "Bonus" in today_text
-    assert today_text.index("Draft launch brief") < today_text.index("Tidy backlog")
+    assert "Current bucket: Top 3 #1" in widgets["#detail-content"].value
+
+    screen._draft_focus = "wrap"
+    widgets["#daily-list"].highlighted = 0
+    screen._refresh_supporting_panes()
+
+    assert "Inbox follow-up" in widgets["#detail-content"].value
+    assert "Unplanned source: Inbox" in widgets["#detail-content"].value
 
 
-def test_wrap_pane_renders_headline_accomplishments_and_coaching(monkeypatch) -> None:
-    """Wrap pane should show deterministic feedback sections on screen refresh."""
+def test_confirmed_state_keeps_unplanned_groups_visible_even_with_wrap_summary(
+    monkeypatch,
+) -> None:
+    """Confirmed state should not render live wrap content by default."""
     screen = DailyWorkspaceScreen()
     widgets = _screen_widgets()
     screen._wrap_summary = {
@@ -686,20 +750,31 @@ def test_wrap_pane_renders_headline_accomplishments_and_coaching(monkeypatch) ->
                 "ready_actions": [],
                 "suggested": [],
             },
+            "unplanned_work": {
+                "inbox": [
+                    Item(
+                        id="inbox-1",
+                        type="inbox",
+                        title="Inbox follow-up",
+                        status="active",
+                    )
+                ],
+                "next_actions": [],
+                "project_tasks": [],
+            },
         }
     )
 
     wrap_text = widgets["#wrap-content"].value
-    assert "Solid day" in wrap_text
-    assert "Accomplishments" in wrap_text
-    assert "Draft launch brief" in wrap_text
-    assert "Review blockers" in wrap_text
-    assert "Coaching" in wrap_text
+    assert "Inbox" in wrap_text
+    assert "Inbox follow-up" in wrap_text
+    assert "Solid day" not in wrap_text
+    assert "Coaching" not in wrap_text
 
 
 @pytest.mark.asyncio
 async def test_refresh_async_updates_wrap_pane_without_ai_path() -> None:
-    """Regular refresh should update wrap content after completion without insight generation."""
+    """Regular refresh should keep confirmed state on grouped unplanned work."""
     screen = DailyWorkspaceScreen(plan_date="2026-03-08")
 
     class FakeEngine:
@@ -713,6 +788,18 @@ async def test_refresh_async_updates_wrap_pane_without_ai_path() -> None:
                     "inbox": [],
                     "ready_actions": [],
                     "suggested": [],
+                },
+                "unplanned_work": {
+                    "inbox": [],
+                    "next_actions": [
+                        Item(
+                            id="next-1",
+                            type="action",
+                            title="Ping designer",
+                            status="active",
+                        )
+                    ],
+                    "project_tasks": [],
                 },
             }
 
@@ -743,7 +830,10 @@ async def test_refresh_async_updates_wrap_pane_without_ai_path() -> None:
         await screen._refresh_async()
         await pilot.pause()
 
-        assert "Strong day" in str(screen.query_one("#wrap-content", Static).renderable)
+        wrap_content = str(screen.query_one("#wrap-content", Static).renderable)
+        assert "Next Actions" in wrap_content
+        assert "Ping designer" in wrap_content
+        assert "Strong day" not in wrap_content
 def test_render_wrap_summary_celebrates_completed_top_three() -> None:
     """Wrap summary should celebrate finishing the Top 3."""
     screen = DailyWorkspaceScreen()
