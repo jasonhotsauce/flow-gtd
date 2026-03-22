@@ -1,4 +1,4 @@
-"""Unit tests for daily workspace planning and wrap behavior."""
+"""Unit tests for daily workspace planning and recap behavior."""
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -195,24 +195,24 @@ def test_confirmed_workspace_exposes_grouped_unplanned_work_and_readds_removed_i
     ]
 
 
-def test_engine_finds_latest_prior_unwrapped_plan_date(temp_db_path: Path) -> None:
-    """Engine should expose the most recent prior plan that still needs wrap."""
+def test_engine_finds_latest_prior_unrecapped_plan_date(temp_db_path: Path) -> None:
+    """Engine should expose the most recent prior plan that still needs recap."""
     engine = Engine(db_path=temp_db_path)
     item = Item(id="task-1", type="action", title="Task", status="active")
     engine._db.insert_inbox(item)  # type: ignore[attr-defined]
 
     engine.save_daily_plan("2026-03-07", top_item_ids=["task-1"], bonus_item_ids=[])
     engine.save_daily_plan("2026-03-08", top_item_ids=["task-1"], bonus_item_ids=[])
-    engine.mark_daily_plan_wrapped("2026-03-07")
+    engine.mark_daily_plan_recapped("2026-03-07")
 
-    assert engine.get_latest_unwrapped_plan_date("2026-03-08") is None
-    assert engine.get_latest_unwrapped_plan_date("2026-03-09") == "2026-03-08"
+    assert engine.get_latest_unrecapped_plan_date("2026-03-08") is None
+    assert engine.get_latest_unrecapped_plan_date("2026-03-09") == "2026-03-08"
 
 
-def test_completed_saved_plan_still_blocks_wrap_gate_until_wrapped(
+def test_completed_saved_plan_still_blocks_recap_gate_until_recapped(
     temp_db_path: Path,
 ) -> None:
-    """A completed saved plan should remain a wrap target instead of reverting to planning."""
+    """A completed saved plan should remain a recap target instead of reverting to planning."""
     engine = Engine(db_path=temp_db_path)
     completed = Item(id="top-done", type="action", title="Top done", status="done")
     engine._db.insert_inbox(completed)  # type: ignore[attr-defined]
@@ -224,13 +224,13 @@ def test_completed_saved_plan_still_blocks_wrap_gate_until_wrapped(
     assert state["needs_plan"] is False
     assert state["top_items"] == []
     assert state["bonus_items"] == []
-    assert engine.get_daily_wrap_summary("2026-03-08")["completed_top_items"] == [
+    assert engine.get_daily_recap_summary("2026-03-08")["completed_top_items"] == [
         {"id": "top-done", "title": "Top done"}
     ]
 
 
-def test_get_daily_wrap_summary_returns_rich_structured_feedback(temp_db_path: Path) -> None:
-    """Daily wrap should include deterministic verdicts and planned-item lists."""
+def test_get_daily_recap_summary_returns_rich_structured_feedback(temp_db_path: Path) -> None:
+    """Daily recap should include deterministic verdicts and planned-item lists."""
     engine = Engine(db_path=temp_db_path)
     top_done = Item(id="top-done", type="action", title="Top done", status="done")
     top_open = Item(id="top-open", type="action", title="Top open", status="active")
@@ -244,21 +244,21 @@ def test_get_daily_wrap_summary_returns_rich_structured_feedback(temp_db_path: P
         bonus_item_ids=["bonus-done"],
     )
 
-    wrap = engine.get_daily_wrap_summary("2026-03-08")
+    recap = engine.get_daily_recap_summary("2026-03-08")
 
-    assert wrap["top_total"] == 2
-    assert wrap["top_completed"] == 1
-    assert wrap["bonus_total"] == 1
-    assert wrap["bonus_completed"] == 1
-    assert wrap["all_top_completed"] is False
-    assert wrap["completed_top_items"] == [{"id": "top-done", "title": "Top done"}]
-    assert wrap["completed_bonus_items"] == [{"id": "bonus-done", "title": "Bonus done"}]
-    assert wrap["open_planned_items"] == [{"id": "top-open", "title": "Top open"}]
-    assert wrap["headline"]
-    assert wrap["coaching_feedback"]
+    assert recap["top_total"] == 2
+    assert recap["top_completed"] == 1
+    assert recap["bonus_total"] == 1
+    assert recap["bonus_completed"] == 1
+    assert recap["all_top_completed"] is False
+    assert recap["completed_top_items"] == [{"id": "top-done", "title": "Top done"}]
+    assert recap["completed_bonus_items"] == [{"id": "bonus-done", "title": "Bonus done"}]
+    assert recap["open_planned_items"] == [{"id": "top-open", "title": "Top open"}]
+    assert recap["headline"]
+    assert recap["coaching_feedback"]
 
 
-def test_get_daily_wrap_summary_marks_all_top_complete_as_strong_day(
+def test_get_daily_recap_summary_marks_all_top_complete_as_strong_day(
     temp_db_path: Path,
 ) -> None:
     """Completing the full Top 3 should produce a positive verdict."""
@@ -279,14 +279,14 @@ def test_get_daily_wrap_summary_marks_all_top_complete_as_strong_day(
         bonus_item_ids=[],
     )
 
-    wrap = engine.get_daily_wrap_summary("2026-03-08")
+    recap = engine.get_daily_recap_summary("2026-03-08")
 
-    assert wrap["headline"] == "Strong day"
-    assert "Top 3" in wrap["coaching_feedback"]
-    assert wrap["open_planned_items"] == []
+    assert recap["headline"] == "Strong day"
+    assert "Top 3" in recap["coaching_feedback"]
+    assert recap["open_planned_items"] == []
 
 
-def test_get_daily_wrap_summary_flags_overloaded_plan(
+def test_get_daily_recap_summary_flags_overloaded_plan(
     temp_db_path: Path,
 ) -> None:
     """Incomplete Top 3 plus many bonuses should trigger improvement coaching."""
@@ -308,11 +308,11 @@ def test_get_daily_wrap_summary_flags_overloaded_plan(
         bonus_item_ids=["bonus-1", "bonus-2", "bonus-3"],
     )
 
-    wrap = engine.get_daily_wrap_summary("2026-03-08")
+    recap = engine.get_daily_recap_summary("2026-03-08")
 
-    assert wrap["headline"] == "Plan was too ambitious"
-    assert "bonus" in wrap["coaching_feedback"].lower()
-    assert wrap["open_planned_items"] == [
+    assert recap["headline"] == "Plan was too ambitious"
+    assert "bonus" in recap["coaching_feedback"].lower()
+    assert recap["open_planned_items"] == [
         {"id": "top-2", "title": "Top 2"},
         {"id": "top-3", "title": "Top 3"},
         {"id": "bonus-2", "title": "Bonus 2"},
@@ -320,10 +320,10 @@ def test_get_daily_wrap_summary_flags_overloaded_plan(
     ]
 
 
-def test_generate_daily_wrap_insight_returns_llm_summary_when_available(
+def test_generate_daily_recap_insight_returns_llm_summary_when_available(
     monkeypatch, temp_db_path: Path
 ) -> None:
-    """Daily wrap insight should return the provider output when available."""
+    """Daily recap insight should return the provider output when available."""
     engine = Engine(db_path=temp_db_path)
     engine._db.insert_inbox(  # type: ignore[attr-defined]
         Item(id="top-done", type="action", title="Top done", status="done")
@@ -335,15 +335,15 @@ def test_generate_daily_wrap_insight_returns_llm_summary_when_available(
         lambda prompt, **_kwargs: "You finished the important work first.",
     )
 
-    insight = engine.generate_daily_wrap_insight("2026-03-08")
+    insight = engine.generate_daily_recap_insight("2026-03-08")
 
     assert insight == "You finished the important work first."
 
 
-def test_generate_daily_wrap_insight_returns_none_without_provider(
+def test_generate_daily_recap_insight_returns_none_without_provider(
     monkeypatch, temp_db_path: Path
 ) -> None:
-    """Daily wrap insight should fall back cleanly when no provider responds."""
+    """Daily recap insight should fall back cleanly when no provider responds."""
     engine = Engine(db_path=temp_db_path)
     engine._db.insert_inbox(  # type: ignore[attr-defined]
         Item(id="top-open", type="action", title="Top open", status="active")
@@ -355,7 +355,7 @@ def test_generate_daily_wrap_insight_returns_none_without_provider(
         lambda prompt, **_kwargs: None,
     )
 
-    assert engine.generate_daily_wrap_insight("2026-03-08") is None
+    assert engine.generate_daily_recap_insight("2026-03-08") is None
 
 
 def test_engine_get_calendar_availability_exposes_compact_summary(

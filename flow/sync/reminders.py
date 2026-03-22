@@ -20,10 +20,20 @@ _EK_AUTH_RESTRICTED = 1
 _EK_AUTH_DENIED = 2
 _EK_AUTH_FULL_ACCESS = 3  # macOS 14+ (was "Authorized" = 3 pre-Sonoma)
 _EK_AUTH_WRITE_ONLY = 4  # macOS 14+
+_RECENTLY_DELETED_CALENDAR = "recently deleted"
 
 
 def _reminders_available() -> bool:
     return sys.platform == "darwin" and EventKit is not None
+
+
+def _calendar_title(reminder: object) -> str:
+    """Return the normalized title for a reminder calendar, if available."""
+    calendar = getattr(reminder, "calendar", lambda: None)()
+    if calendar is None:
+        return ""
+    raw_title = getattr(calendar, "title", lambda: "")()
+    return str(raw_title).strip().casefold()
 
 
 def get_reminder_auth_status() -> tuple[int, str]:
@@ -147,11 +157,16 @@ def sync_reminders_to_flow(db_path: Path) -> tuple[int, str]:
     db.init_db()
     count = 0
     for rem in reminder_list:  # pylint: disable=not-an-iterable
-        # Only import incomplete reminders (skip completed ones)
-        if rem.isCompleted():
-            continue
         ek_id = rem.calendarItemIdentifier()
         if not ek_id:
+            continue
+        if _calendar_title(rem) == _RECENTLY_DELETED_CALENDAR:
+            continue
+        # Keep Flow aligned with active Reminders only.
+        if rem.isCompleted():
+            existing = db.get_item_by_ek_id(ek_id)
+            if existing and existing.status not in {"done", "archived"}:
+                db.update_item(existing.model_copy(update={"status": "archived"}))
             continue
         title = rem.title() or ""
         existing = db.get_item_by_ek_id(ek_id)

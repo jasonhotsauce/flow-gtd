@@ -29,14 +29,14 @@ from flow.tui.common.keybindings import with_global_bindings
 
 
 class DailyWorkspaceScreen(FlowScreen):
-    """Primary daily workspace for planning, focus, and wrap-up."""
+    """Primary daily workspace for planning, focus, and recap."""
 
     CSS_PATH = ["../../common/ops_tokens.tcss", "daily_workspace.tcss"]
 
     BINDINGS = with_global_bindings(
         ("1", "focus_list_panel", "Primary"),
         ("2", "focus_detail_panel", "Detail"),
-        ("3", "focus_wrap_panel", "Wrap"),
+        ("3", "focus_recap_panel", "Recap"),
         ("t", "add_to_top", "Top 3"),
         ("b", "add_to_bonus", "Bonus"),
         ("f", "recommend_focus_item", "Focus"),
@@ -48,15 +48,15 @@ class DailyWorkspaceScreen(FlowScreen):
         ("J", "move_top_item_down", "Move Down"),
         ("x", "confirm_plan", "Confirm"),
         ("c", "complete_planned_item", "Complete"),
-        ("w", "show_daily_wrap", "Daily Wrap"),
-        ("I", "generate_wrap_insight", "Insight"),
+        ("w", "show_daily_recap", "Daily Recap"),
+        ("I", "generate_recap_insight", "Insight"),
         Binding("i", "go_inbox", "Inbox", show=False),
         Binding("P", "go_projects", "Projects", show=False),
         Binding("r", "go_review", "Review", show=False),
     )
 
     def __init__(
-        self, plan_date: str | None = None, start_in_wrap: bool = False
+        self, plan_date: str | None = None, start_in_recap: bool = False
     ) -> None:
         super().__init__()
         self._engine = Engine()
@@ -75,14 +75,14 @@ class DailyWorkspaceScreen(FlowScreen):
         self._draft_focus = "candidates"
         self._top_selected_index = 0
         self._bonus_selected_index = 0
-        self._wrap_summary: dict[str, object] | None = None
+        self._recap_summary: dict[str, object] | None = None
         self._pending_top_replacement_item: Item | None = None
         self._pending_plan_bucket_item: Item | None = None
         self._detail_resource_cache: dict[str, dict[str, list[Resource | VectorHit]]] = {}
         self._detail_status_override: str | None = None
         self._preserve_detail_status_on_next_highlight = False
-        self._show_wrap_summary = start_in_wrap
-        self._startup_wrap_gate = start_in_wrap
+        self._show_recap_summary = start_in_recap
+        self._startup_recap_gate = start_in_recap
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -118,18 +118,18 @@ class DailyWorkspaceScreen(FlowScreen):
                     yield Static("", id="bonus-draft-pane-status", classes="daily-pane-status")
                     with ScrollableContainer(id="bonus-draft-pane-scroll", classes="daily-pane-scroll"):
                         yield Static("", id="bonus-draft-content")
-                with Container(classes="daily-pane", id="wrap-pane"):
-                    yield Static("[3] Wrap", id="wrap-pane-title", classes="daily-pane-title")
-                    yield Static("", id="wrap-pane-status", classes="daily-pane-status")
-                    with ScrollableContainer(id="wrap-pane-scroll", classes="daily-pane-scroll"):
+                with Container(classes="daily-pane", id="recap-pane"):
+                    yield Static("[3] Recap", id="recap-pane-title", classes="daily-pane-title")
+                    yield Static("", id="recap-pane-status", classes="daily-pane-status")
+                    with ScrollableContainer(id="recap-pane-scroll", classes="daily-pane-scroll"):
                         yield OptionList(id="unplanned-list")
-                        yield Static("", id="wrap-content")
-                        yield Static("", id="daily-wrap")
+                        yield Static("", id="recap-content")
+                        yield Static("", id="daily-recap")
                         yield Static("", id="daily-insight")
-                        yield Static("", id="daily-wrap-legacy", classes="-hidden")
+                        yield Static("", id="daily-recap-legacy", classes="-hidden")
         with Container(id="daily-help"):
             yield Static(
-                "1/2/3: Primary, Detail, Wrap  |  f: Recommend focus  |  n: New task  |  Enter/t/b: Add to plan  |  d: Remove  |  p/m: Promote or demote  |  Shift+J/K: Reorder Top 3  |  x: Confirm  |  c: Complete",
+                "1/2/3: Primary, Detail, Recap  |  f: Recommend focus  |  n: New task  |  Enter/t/b: Add to plan  |  d: Remove  |  p/m: Promote or demote  |  Shift+J/K: Reorder Top 3  |  x: Confirm  |  c: Complete",
                 id="daily-help-text",
             )
         yield Footer()
@@ -154,11 +154,11 @@ class DailyWorkspaceScreen(FlowScreen):
         state = await asyncio.to_thread(
             self._engine.get_daily_workspace_state, self._plan_date
         )
-        wrap_summary = await asyncio.to_thread(
-            self._engine.get_daily_wrap_summary, self._plan_date
+        recap_summary = await asyncio.to_thread(
+            self._engine.get_daily_recap_summary, self._plan_date
         )
         if self.is_mounted:
-            self._wrap_summary = wrap_summary
+            self._recap_summary = recap_summary
             self._apply_workspace_state(state)
 
     def _safe_query_one(self, selector: str, widget_type: type[Any]) -> Any | None:
@@ -184,8 +184,8 @@ class DailyWorkspaceScreen(FlowScreen):
     def _pane_hint(self) -> str:
         if self._mode == "plan":
             return "Planning mode. n captures new work. t/b add from Candidates. d removes from the active draft."
-        if self._draft_focus == "wrap":
-            return "Confirmed state. Review unplanned work here, then press Enter, t, or b to choose Top 3 or Bonus."
+        if self._draft_focus == "recap":
+            return "Confirmed state. Review unplanned work here, then press Enter, t, or b to choose Top 3 or Bonus. Press d to archive it."
         return "Confirmed state. Review today's plan here, complete work with c, or remove it with d."
 
     def _draft_bucket_status(self, item: Item) -> str:
@@ -349,19 +349,19 @@ class DailyWorkspaceScreen(FlowScreen):
                 lines.append("  - None")
         return "\n".join(lines)
 
-    def _render_wrap_summary(self, wrap_summary: dict[str, object]) -> str:
-        """Format daily wrap summary for display."""
-        headline = str(wrap_summary.get("headline") or "Daily Wrap")
-        if headline == "Daily Wrap" and wrap_summary.get("all_top_completed"):
+    def _render_recap_summary(self, recap_summary: dict[str, object]) -> str:
+        """Format daily recap summary for display."""
+        headline = str(recap_summary.get("headline") or "Daily Recap")
+        if headline == "Daily Recap" and recap_summary.get("all_top_completed"):
             headline = "Top 3 complete. Today counted."
-        top_status = f"Top 3 completed: {wrap_summary['top_completed']}/{wrap_summary['top_total']}"
-        bonus_status = f"Bonus: {wrap_summary['bonus_completed']}/{wrap_summary['bonus_total']}"
+        top_status = f"Top 3 completed: {recap_summary['top_completed']}/{recap_summary['top_total']}"
+        bonus_status = f"Bonus: {recap_summary['bonus_completed']}/{recap_summary['bonus_total']}"
         lines = [headline, top_status, bonus_status]
 
-        completed_top = wrap_summary.get("completed_top_items", [])
-        completed_bonus = wrap_summary.get("completed_bonus_items", [])
-        open_items = wrap_summary.get("open_planned_items", [])
-        coaching = wrap_summary.get("coaching_feedback")
+        completed_top = recap_summary.get("completed_top_items", [])
+        completed_bonus = recap_summary.get("completed_bonus_items", [])
+        open_items = recap_summary.get("open_planned_items", [])
+        coaching = recap_summary.get("coaching_feedback")
 
         if completed_top or completed_bonus:
             lines.append("")
@@ -386,7 +386,7 @@ class DailyWorkspaceScreen(FlowScreen):
 
         return "\n".join(lines)
 
-    def _render_wrap_insight(self, insight: Optional[str]) -> str:
+    def _render_recap_insight(self, insight: Optional[str]) -> str:
         """Render AI insight or a stable fallback."""
         if not insight:
             return "AI insight unavailable."
@@ -401,25 +401,25 @@ class DailyWorkspaceScreen(FlowScreen):
 
     def _focus_status_text(self) -> str:
         """Return persistent next-step guidance after plan approval."""
-        if self._startup_wrap_gate and self._show_wrap_summary:
+        if self._startup_recap_gate and self._show_recap_summary:
             return (
-                "WRAP GATE  |  [1] Carry Forward  [3] Daily Wrap  |  "
-                "review prior-day carry forward, then acknowledge wrap to continue"
+                "WRAP GATE  |  [1] Carry Forward  [3] Daily Recap  |  "
+                "review prior-day carry forward, then acknowledge recap to continue"
             )
         return (
             "PLAN CONFIRMED  |  [1] Today  [3] Unplanned Work  |  "
-            "f recommend, Enter/t/b add, d remove, c complete, w wrap"
+            "f recommend, Enter/t/b add, d remove, c complete, w recap"
         )
 
     def _confirmed_list_title(self) -> str:
         """Return the active label for the shared confirmed-state list."""
-        if self._startup_wrap_gate and self._show_wrap_summary:
+        if self._startup_recap_gate and self._show_recap_summary:
             return "[1] Carry Forward"
         return "[1] Today"
 
     def _confirmed_list_status(self) -> str:
         """Return visible guidance for the shared confirmed-state list."""
-        if self._startup_wrap_gate and self._show_wrap_summary:
+        if self._startup_recap_gate and self._show_recap_summary:
             return "Open planned items that still need a next move"
         return "Top 3 first, Bonus second"
 
@@ -523,7 +523,7 @@ class DailyWorkspaceScreen(FlowScreen):
             if self._draft_focus == "bonus":
                 return self._selected_bonus_item()
             return self._selected_candidate()
-        if self._draft_focus == "wrap":
+        if self._draft_focus == "recap":
             return self._selected_unplanned_item()
         return self._selected_today_item()
 
@@ -588,7 +588,7 @@ class DailyWorkspaceScreen(FlowScreen):
             )
 
         selected = self._selected_today_item()
-        if self._draft_focus == "wrap":
+        if self._draft_focus == "recap":
             selected_unplanned = self._selected_unplanned_item()
             if selected_unplanned is None:
                 return "Select unplanned work to review it here, then use t or b to add it back into today's plan."
@@ -600,7 +600,7 @@ class DailyWorkspaceScreen(FlowScreen):
             detail = (
                 f"{selected_unplanned.title}\n"
                 f"Unplanned source: {source}\n"
-                "Hint: Enter, t, or b asks whether this should go to Top 3 or Bonus."
+                "Hint: Enter, t, or b asks whether this should go to Top 3 or Bonus. d archives it."
             )
             resources = self._render_detail_resources(selected_unplanned)
             if resources:
@@ -709,7 +709,7 @@ class DailyWorkspaceScreen(FlowScreen):
                         today_options.action_first()
                 else:
                     today_options.action_first()
-                if self._draft_focus != "wrap":
+                if self._draft_focus != "recap":
                     today_options.focus()
 
         if unplanned_options is not None:
@@ -726,7 +726,7 @@ class DailyWorkspaceScreen(FlowScreen):
                     selected_index = self._first_enabled_option_index(unplanned_options)
                 if selected_index is not None:
                     unplanned_options.highlighted = selected_index
-                if self._draft_focus == "wrap":
+                if self._draft_focus == "recap":
                     unplanned_options.focus()
 
     def _restore_to_unplanned(self, item: Item) -> None:
@@ -756,6 +756,15 @@ class DailyWorkspaceScreen(FlowScreen):
         ]
         self._unplanned_lookup.pop(option_id, None)
         return item
+
+    def _archive_selected_unplanned_item(self) -> None:
+        """Archive the selected unplanned item using Process-screen delete semantics."""
+        item = self._consume_selected_unplanned_item()
+        if item is None:
+            return
+        self._engine.two_min_delete(item.id)
+        self._draft_focus = "recap"
+        self._refresh_supporting_panes()
 
     def _remove_from_unplanned_groups(self, item_id: str) -> None:
         """Remove an item from all unplanned groups by id."""
@@ -808,7 +817,7 @@ class DailyWorkspaceScreen(FlowScreen):
         if option is None:
             return
         self._top_items.append(option)
-        self._draft_focus = "wrap"
+        self._draft_focus = "recap"
         self._persist_confirmed_plan()
         self._refresh_supporting_panes()
 
@@ -818,7 +827,7 @@ class DailyWorkspaceScreen(FlowScreen):
         if option is None or self._has_planned_item_id(option.id):
             return
         self._bonus_items.append(option)
-        self._draft_focus = "wrap"
+        self._draft_focus = "recap"
         self._persist_confirmed_plan()
         self._refresh_supporting_panes()
 
@@ -874,15 +883,15 @@ class DailyWorkspaceScreen(FlowScreen):
             self._refresh_confirmed_list()
         self._refresh_detail_pane()
         if self._mode == "focus":
-            if self._show_wrap_summary:
-                if self._wrap_summary is None:
-                    self._wrap_summary = {
+            if self._show_recap_summary:
+                if self._recap_summary is None:
+                    self._recap_summary = {
                         "top_total": len(self._top_items),
                         "top_completed": 0,
                         "bonus_total": len(self._bonus_items),
                         "bonus_completed": 0,
-                        "headline": "Daily Wrap",
-                        "coaching_feedback": "Wrap will fill in as you complete planned work.",
+                        "headline": "Daily Recap",
+                        "coaching_feedback": "Recap will fill in as you complete planned work.",
                         "completed_top_items": [],
                         "completed_bonus_items": [],
                         "open_planned_items": [
@@ -890,35 +899,35 @@ class DailyWorkspaceScreen(FlowScreen):
                             for item in self._top_items + self._bonus_items
                         ],
                     }
-                wrap_text = self._render_wrap_summary(self._wrap_summary)
-                self._set_text("#wrap-pane-title", "[3] Daily Wrap")
-                self._set_text("#wrap-pane-status", "Explicit wrap summary")
-                self._set_text("#wrap-content", wrap_text)
-                self._set_text("#daily-wrap", "")
+                recap_text = self._render_recap_summary(self._recap_summary)
+                self._set_text("#recap-pane-title", "[3] Daily Recap")
+                self._set_text("#recap-pane-status", "Explicit recap summary")
+                self._set_text("#recap-content", recap_text)
+                self._set_text("#daily-recap", "")
             else:
-                self._set_text("#wrap-pane-title", "[3] Unplanned Work")
-                self._set_text("#wrap-pane-status", "j/k move  |  Enter, t, or b chooses Top 3 or Bonus")
-                self._set_text("#wrap-content", "")
-                self._set_text("#daily-wrap", "")
+                self._set_text("#recap-pane-title", "[3] Unplanned Work")
+                self._set_text("#recap-pane-status", "j/k move  |  Enter, t, or b chooses Top 3 or Bonus")
+                self._set_text("#recap-content", "")
+                self._set_text("#daily-recap", "")
             return
-        if self._wrap_summary is None:
-            self._wrap_summary = {
+        if self._recap_summary is None:
+            self._recap_summary = {
                 "top_total": len(self._top_items),
                 "top_completed": 0,
                 "bonus_total": len(self._bonus_items),
                 "bonus_completed": 0,
-                "headline": "Daily Wrap",
-                "coaching_feedback": "Wrap will fill in as you complete planned work.",
+                "headline": "Daily Recap",
+                "coaching_feedback": "Recap will fill in as you complete planned work.",
                 "completed_top_items": [],
                 "completed_bonus_items": [],
                 "open_planned_items": [
                     {"id": item.id, "title": item.title} for item in self._top_items + self._bonus_items
                 ],
             }
-        wrap_text = self._render_wrap_summary(self._wrap_summary)
-        self._set_text("#wrap-pane-status", "Live daily wrap feedback")
-        self._set_text("#wrap-content", wrap_text)
-        self._set_text("#daily-wrap", "")
+        recap_text = self._render_recap_summary(self._recap_summary)
+        self._set_text("#recap-pane-status", "Live daily recap feedback")
+        self._set_text("#recap-content", recap_text)
+        self._set_text("#daily-recap", "")
 
     def _refresh_detail_pane(self) -> None:
         """Refresh only the detail pane for the current selection."""
@@ -990,14 +999,14 @@ class DailyWorkspaceScreen(FlowScreen):
             return
 
         self._mode = "focus"
-        if self._draft_focus not in {"today", "detail", "wrap"}:
+        if self._draft_focus not in {"today", "detail", "recap"}:
             self._draft_focus = "today"
         self._set_text("#ops-status-text", self._focus_status_text())
-        if self._startup_wrap_gate and self._show_wrap_summary:
-            self._set_text("#daily-title", "Daily Wrap")
+        if self._startup_recap_gate and self._show_recap_summary:
+            self._set_text("#daily-title", "Daily Recap")
             self._set_text(
                 "#daily-subtitle",
-                f"Prior day wrap required for {self._plan_date} before opening today",
+                f"Prior day recap required for {self._plan_date} before opening today",
             )
         else:
             self._set_text("#daily-title", "Today's Focus")
@@ -1008,8 +1017,8 @@ class DailyWorkspaceScreen(FlowScreen):
         self._set_text("#candidates-pane-title", self._confirmed_list_title())
         self._set_text("#candidates-pane-status", self._confirmed_list_status())
         self._set_text(
-            "#wrap-pane-title",
-            "[3] Daily Wrap" if self._show_wrap_summary else "[3] Unplanned Work",
+            "#recap-pane-title",
+            "[3] Daily Recap" if self._show_recap_summary else "[3] Unplanned Work",
         )
         self._set_classes("#top-draft-pane", "-hidden", True)
         self._set_classes("#bonus-draft-pane", "-hidden", True)
@@ -1035,7 +1044,7 @@ class DailyWorkspaceScreen(FlowScreen):
         """Add the selected candidate to Top 3 in planning mode."""
         if self._mode == "plan":
             option = self._selected_candidate()
-        elif self._mode == "focus" and self._draft_focus == "wrap":
+        elif self._mode == "focus" and self._draft_focus == "recap":
             self._queue_selected_unplanned_for_plan_choice()
             return
         else:
@@ -1067,7 +1076,7 @@ class DailyWorkspaceScreen(FlowScreen):
         """Add the selected candidate to Bonus in planning mode."""
         if self._mode == "plan":
             option = self._selected_candidate()
-        elif self._mode == "focus" and self._draft_focus == "wrap":
+        elif self._mode == "focus" and self._draft_focus == "recap":
             self._queue_selected_unplanned_for_plan_choice()
             return
         else:
@@ -1083,7 +1092,10 @@ class DailyWorkspaceScreen(FlowScreen):
 
     def action_remove_selected_draft_item(self) -> None:
         """Remove the selected item from the active draft pane."""
-        if self._mode == "focus" and self._draft_focus != "wrap":
+        if self._mode == "focus" and self._draft_focus == "recap":
+            self._archive_selected_unplanned_item()
+            return
+        if self._mode == "focus" and self._draft_focus != "recap":
             selected = self._selected_today_item()
             bucket_and_index = self._selected_today_bucket_and_index()
             if selected is None or bucket_and_index is None:
@@ -1225,9 +1237,9 @@ class DailyWorkspaceScreen(FlowScreen):
                 self._bonus_selected_index = min(self._bonus_selected_index + 1, len(self._bonus_items) - 1)
                 self._refresh_supporting_panes()
             return
-        options = self._current_unplanned_list_widget() if self._mode == "focus" and self._draft_focus == "wrap" else self._current_list_widget()
+        options = self._current_unplanned_list_widget() if self._mode == "focus" and self._draft_focus == "recap" else self._current_list_widget()
         if options is not None:
-            if self._mode == "focus" and self._draft_focus == "wrap":
+            if self._mode == "focus" and self._draft_focus == "recap":
                 self._move_option_highlight(options, 1)
                 return
             options.action_cursor_down()
@@ -1244,9 +1256,9 @@ class DailyWorkspaceScreen(FlowScreen):
                 self._bonus_selected_index = max(self._bonus_selected_index - 1, 0)
                 self._refresh_supporting_panes()
             return
-        options = self._current_unplanned_list_widget() if self._mode == "focus" and self._draft_focus == "wrap" else self._current_list_widget()
+        options = self._current_unplanned_list_widget() if self._mode == "focus" and self._draft_focus == "recap" else self._current_list_widget()
         if options is not None:
-            if self._mode == "focus" and self._draft_focus == "wrap":
+            if self._mode == "focus" and self._draft_focus == "recap":
                 self._move_option_highlight(options, -1)
                 return
             options.action_cursor_up()
@@ -1269,16 +1281,16 @@ class DailyWorkspaceScreen(FlowScreen):
             widget.focus()
         self._refresh_supporting_panes()
 
-    def action_focus_wrap_panel(self) -> None:
-        """Focus the wrap-related pane."""
-        self._draft_focus = "bonus" if self._mode == "plan" else "wrap"
+    def action_focus_recap_panel(self) -> None:
+        """Focus the recap-related pane."""
+        self._draft_focus = "bonus" if self._mode == "plan" else "recap"
         self._detail_status_override = None
         if self._mode == "focus":
             options = self._current_unplanned_list_widget()
             if options is not None:
                 options.focus()
         else:
-            widget = self._safe_query_one("#wrap-pane-scroll", ScrollableContainer)
+            widget = self._safe_query_one("#recap-pane-scroll", ScrollableContainer)
             if widget is not None:
                 widget.focus()
         self._refresh_supporting_panes()
@@ -1385,7 +1397,7 @@ class DailyWorkspaceScreen(FlowScreen):
                 return
             self.action_complete_planned_item()
             return
-        if event.option_list.id == "unplanned-list" and self._mode == "focus" and not self._show_wrap_summary:
+        if event.option_list.id == "unplanned-list" and self._mode == "focus" and not self._show_recap_summary:
             self._queue_selected_unplanned_for_plan_choice()
 
     def on_option_list_option_highlighted(
@@ -1401,24 +1413,24 @@ class DailyWorkspaceScreen(FlowScreen):
         self._detail_status_override = None
         self._refresh_detail_pane()
 
-    def action_show_daily_wrap(self) -> None:
-        """Render wrap summary for the current plan."""
-        self._show_wrap_summary = True
-        self._wrap_summary = self._engine.get_daily_wrap_summary(self._plan_date)
-        self._engine.mark_daily_plan_wrapped(self._plan_date)
-        wrap_text = self._render_wrap_summary(self._wrap_summary)
-        self._set_text("#wrap-pane-title", "[3] Daily Wrap")
-        self._set_text("#wrap-content", wrap_text)
-        self._set_text("#daily-wrap", "")
+    def action_show_daily_recap(self) -> None:
+        """Render recap summary for the current plan."""
+        self._show_recap_summary = True
+        self._recap_summary = self._engine.get_daily_recap_summary(self._plan_date)
+        self._engine.mark_daily_plan_recapped(self._plan_date)
+        recap_text = self._render_recap_summary(self._recap_summary)
+        self._set_text("#recap-pane-title", "[3] Daily Recap")
+        self._set_text("#recap-content", recap_text)
+        self._set_text("#daily-recap", "")
         self._refresh_supporting_panes()
 
-    def action_generate_wrap_insight(self) -> None:
-        """Generate optional AI insight for the current daily wrap."""
-        asyncio.create_task(self._generate_wrap_insight_async())
+    def action_generate_recap_insight(self) -> None:
+        """Generate optional AI insight for the current daily recap."""
+        asyncio.create_task(self._generate_recap_insight_async())
 
-    async def _generate_wrap_insight_async(self) -> None:
+    async def _generate_recap_insight_async(self) -> None:
         insight = await asyncio.to_thread(
-            self._engine.generate_daily_wrap_insight, self._plan_date
+            self._engine.generate_daily_recap_insight, self._plan_date
         )
         if self.is_mounted:
-            self._set_text("#daily-insight", self._render_wrap_insight(insight))
+            self._set_text("#daily-insight", self._render_recap_insight(insight))

@@ -30,7 +30,7 @@ class DailyWorkspaceUnplannedWork(TypedDict):
     project_tasks: list[Item]
 
 
-class DailyWrapSummary(TypedDict):
+class DailyRecapSummary(TypedDict):
     top_total: int
     top_completed: int
     bonus_total: int
@@ -89,7 +89,7 @@ class DailyPlanService:
         summary = self._db.get_daily_plan_summary(plan_date)
         return (summary["top_total"] + summary["bonus_total"]) > 0
 
-    def get_wrap_summary(self, plan_date: str) -> DailyWrapSummary:
+    def get_recap_summary(self, plan_date: str) -> DailyRecapSummary:
         entries = self._db.list_daily_plan(plan_date)
         summary = self._db.get_daily_plan_summary(plan_date)
         completed_top_items: list[dict[str, str]] = []
@@ -106,7 +106,7 @@ class DailyPlanService:
             else:
                 open_planned_items.append(item_summary)
 
-        headline, coaching_feedback = self._evaluate_wrap(
+        headline, coaching_feedback = self._evaluate_recap(
             top_total=summary["top_total"],
             top_completed=summary["top_completed"],
             bonus_total=summary["bonus_total"],
@@ -123,9 +123,9 @@ class DailyPlanService:
             "open_planned_items": open_planned_items,
         }
 
-    def generate_wrap_insight(self, plan_date: str) -> str | None:
-        """Generate a short AI wrap insight from today's structured summary."""
-        summary = self.get_wrap_summary(plan_date)
+    def generate_recap_insight(self, plan_date: str) -> str | None:
+        """Generate a short AI recap insight from today's structured summary."""
+        summary = self.get_recap_summary(plan_date)
         prompt = (
             "You are summarizing one workday for a GTD app user.\n"
             "Write one concise insight sentence. Stay factual, grounded, and non-judgmental.\n"
@@ -143,16 +143,16 @@ class DailyPlanService:
             return None
         return result.strip() or None
 
-    def mark_plan_wrapped(self, plan_date: str) -> None:
-        """Record that wrap was explicitly completed for the given day."""
-        self._db.mark_daily_plan_wrapped(plan_date)
+    def mark_plan_recapped(self, plan_date: str) -> None:
+        """Record that recap was explicitly completed for the given day."""
+        self._db.mark_daily_plan_recapped(plan_date)
 
-    def get_latest_unwrapped_plan_date(self, before_date: str) -> str | None:
-        """Return the newest prior plan date that still needs wrap."""
-        return self._db.get_latest_unwrapped_plan_date(before_date)
+    def get_latest_unrecapped_plan_date(self, before_date: str) -> str | None:
+        """Return the newest prior plan date that still needs recap."""
+        return self._db.get_latest_unrecapped_plan_date(before_date)
 
     @staticmethod
-    def _evaluate_wrap(
+    def _evaluate_recap(
         *,
         top_total: int,
         top_completed: int,

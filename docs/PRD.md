@@ -43,7 +43,7 @@ The system operates on a unidirectional data pipeline: **Ingest (Input) -> Refin
 | ID | Feature | Description | Technical Constraints |
 | ---- | ---- | ---- | ---- |
 | A.1 | **CLI Capture** | `flow c <text>` writes to the SQLite inbox with minimal friction. | Startup latency target < 100ms. |
-| A.1a | **Daily Workspace Entry** | Plain `flow` opens the main daily workspace. If a prior day still needs wrap, open that explicit wrap first; otherwise, if today's plan is missing, start in planning mode, else start in confirmed execution mode. | Must preserve direct power-user commands (`flow process`, `flow projects`, `flow review`) while keeping Daily Workspace as the only planned-work execution surface. |
+| A.1a | **Daily Workspace Entry** | Plain `flow` opens the main daily workspace. If a prior day still needs recap, open that explicit recap first; otherwise, if today's plan is missing, start in planning mode, else start in confirmed execution mode. | Must preserve direct power-user commands (`flow process`, `flow projects`, `flow review`) while keeping Daily Workspace as the only planned-work execution surface. |
 | A.2 | Context Hook | Capture metadata from the active App (Xcode File/Line, Browser URL, Git Branch). | Use NSWorkspace + AppleScript. Store as JSON Payload. |
 | A.3 | Apple Bridge | Background Daemon for bi-directional sync with Apple Reminders. | **Safety Rule**: Move imported Reminders to a "Flow-Imported" list. **NEVER physically delete**. |
 | A.4 | Auto-Index | Automatically download and vectorize content if the capture contains URLs/PDF paths. | Async processing; must not block CLI return. |
@@ -99,17 +99,17 @@ Interaction model is a **TUI Wizard** (Textual App), fully keyboard-driven.
     * Allow confirmed-state editing: focus a dedicated unplanned-work list on the right, navigate it with `j/k`, choose whether the selected task should return to `Top 3` or `Bonus`, remove planned work back to its original group, and keep promote/demote/reorder actions active after confirmation.
     * If `Top 3` is full, opening a chooser to pick which current `Top 3` item should be demoted is required before admitting new unplanned work.
     * Task detail should include concise tag-matched and semantic resources for the selected planned or unplanned item.
-    * Completion from this screen should update daily-wrap stats.
+    * Completion from this screen should update daily-recap stats.
     * A focus recommendation action may highlight only active confirmed-plan items, prioritizing `Top 3` before `Bonus`; it must never recommend unplanned work.
     * That recommendation may reuse a compact calendar-availability signal as an advisory heuristic for confirmed-mode `f`, but it must remain task-first: no calendar pane, no auto-scheduling, and deterministic saved-plan fallback when calendar data or duration metadata is missing.
-* **Daily Wrap**:
-    * Do not show wrap content live during confirmed execution.
-    * `w` explicitly opens wrap content when the user wants it.
+* **Daily Recap**:
+    * Do not show recap content live during confirmed execution.
+    * `w` explicitly opens recap content when the user wants it.
     * Show `Top 3` and `Bonus` completion counts.
     * Show deterministic accomplishments, carry-forward items, and coaching feedback even when AI insight is unavailable.
     * Treat finishing `Top 3` as the day's primary success condition.
-    * Allow optional AI-generated insight from structured wrap data.
-    * Persist wrap acknowledgement so the app can detect and gate on the latest prior unwrapped day at startup.
+    * Allow optional AI-generated insight from structured recap data.
+    * Persist recap acknowledgement so the app can detect and gate on the latest prior unrecapped day at startup.
 * **Architecture Requirement**:
     * Daily-plan data must be stored in a first-class persistence layer, not hidden only in generic task metadata.
 

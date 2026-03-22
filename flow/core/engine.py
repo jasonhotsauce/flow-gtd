@@ -390,9 +390,9 @@ class Engine:
             "unplanned_work": self._build_daily_unplanned_work(planned_ids),
         }
 
-    def get_daily_wrap_summary(self, plan_date: str) -> dict[str, object]:
+    def get_daily_recap_summary(self, plan_date: str) -> dict[str, object]:
         """Return completion summary for today's plan."""
-        return self._daily_plan_service.get_wrap_summary(plan_date)
+        return self._daily_plan_service.get_recap_summary(plan_date)
 
     def get_calendar_availability(self) -> CalendarAvailability:
         """Return a compact calendar summary for Daily Workspace heuristics."""
@@ -405,17 +405,17 @@ class Engine:
                 minutes_until_next_event=None,
             )
 
-    def generate_daily_wrap_insight(self, plan_date: str) -> str | None:
-        """Generate an optional AI insight for today's wrap."""
-        return self._daily_plan_service.generate_wrap_insight(plan_date)
+    def generate_daily_recap_insight(self, plan_date: str) -> str | None:
+        """Generate an optional AI insight for today's recap."""
+        return self._daily_plan_service.generate_recap_insight(plan_date)
 
-    def mark_daily_plan_wrapped(self, plan_date: str) -> None:
-        """Persist explicit wrap completion for a plan date."""
-        self._daily_plan_service.mark_plan_wrapped(plan_date)
+    def mark_daily_plan_recapped(self, plan_date: str) -> None:
+        """Persist explicit recap completion for a plan date."""
+        self._daily_plan_service.mark_plan_recapped(plan_date)
 
-    def get_latest_unwrapped_plan_date(self, before_date: str) -> str | None:
-        """Return the newest earlier plan date that still needs wrap."""
-        return self._daily_plan_service.get_latest_unwrapped_plan_date(before_date)
+    def get_latest_unrecapped_plan_date(self, before_date: str) -> str | None:
+        """Return the newest earlier plan date that still needs recap."""
+        return self._daily_plan_service.get_latest_unrecapped_plan_date(before_date)
 
     def _build_daily_workspace_candidates(
         self, plan_day: date, planned_ids: set[str]

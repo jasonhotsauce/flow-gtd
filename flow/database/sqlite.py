@@ -76,7 +76,7 @@ class SqliteDB:
             self._migrate_add_updated_at(conn)
             self._init_index_jobs(conn)
             self._init_daily_plan_entries(conn)
-            self._init_daily_wrap_status(conn)
+            self._init_daily_recap_status(conn)
             conn.commit()
 
     def _migrate_add_estimated_duration(self, conn: sqlite3.Connection) -> None:
@@ -146,8 +146,11 @@ class SqliteDB:
         except sqlite3.OperationalError:
             return
 
-    def _init_daily_wrap_status(self, conn: sqlite3.Connection) -> None:
-        """Create wrap-status table for explicit end-of-day acknowledgement."""
+    def _init_daily_recap_status(self, conn: sqlite3.Connection) -> None:
+        """Create recap-status storage for explicit end-of-day acknowledgement.
+
+        The table name remains `daily_wrap_status` for backward compatibility.
+        """
         try:
             conn.execute(
                 """
@@ -404,8 +407,8 @@ class SqliteDB:
                 summary[completed_key] += 1
         return summary
 
-    def mark_daily_plan_wrapped(self, plan_date: str) -> None:
-        """Persist that the user explicitly completed wrap for a plan date."""
+    def mark_daily_plan_recapped(self, plan_date: str) -> None:
+        """Persist that the user explicitly completed recap for a plan date."""
         wrapped_at = _iso(datetime.now(timezone.utc))
         with sqlite3.connect(self._path) as conn:
             conn.execute(
@@ -418,8 +421,8 @@ class SqliteDB:
             )
             conn.commit()
 
-    def get_latest_unwrapped_plan_date(self, before_date: str) -> Optional[str]:
-        """Return the latest prior plan date that has not been explicitly wrapped."""
+    def get_latest_unrecapped_plan_date(self, before_date: str) -> Optional[str]:
+        """Return the latest prior plan date that has not been explicitly recapped."""
         with sqlite3.connect(self._path) as conn:
             row = conn.execute(
                 """

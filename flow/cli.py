@@ -210,15 +210,15 @@ def _launch_tui(initial_screen: "Optional[Type[Screen]]" = None) -> None:
     resolved_initial_screen = initial_screen
     if initial_screen is DailyWorkspaceScreen:
         try:
-            prior_wrap_date = Engine().get_latest_unwrapped_plan_date(
+            prior_recap_date = Engine().get_latest_unrecapped_plan_date(
                 date.today().isoformat()
             )
         except Exception:
-            prior_wrap_date = None
-        if prior_wrap_date:
+            prior_recap_date = None
+        if prior_recap_date:
             resolved_initial_screen = DailyWorkspaceScreen(
-                plan_date=prior_wrap_date,
-                start_in_wrap=True,
+                plan_date=prior_recap_date,
+                start_in_recap=True,
             )
     FlowApp(initial_screen=resolved_initial_screen, startup_context=startup_context).run()
 

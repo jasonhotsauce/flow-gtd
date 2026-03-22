@@ -155,10 +155,10 @@ def test_launch_tui_continues_when_first_capture_fails(monkeypatch: Any) -> None
     assert app_inits == [{"initial_screen": None, "startup_context": None}]
 
 
-def test_launch_tui_routes_existing_user_to_latest_prior_unwrapped_daily_wrap(
+def test_launch_tui_routes_existing_user_to_latest_prior_unrecapped_daily_recap(
     monkeypatch: Any,
 ) -> None:
-    """Existing users should land on the latest prior unwrapped wrap before today."""
+    """Existing users should land on the latest prior unrecapped recap before today."""
     app_inits: list[dict[str, object]] = []
 
     class _FakeFlowApp:
@@ -169,7 +169,7 @@ def test_launch_tui_routes_existing_user_to_latest_prior_unwrapped_daily_wrap(
             return
 
     class _FakeEngine:
-        def get_latest_unwrapped_plan_date(self, before_date: str) -> str | None:
+        def get_latest_unrecapped_plan_date(self, before_date: str) -> str | None:
             assert before_date == cli.date.today().isoformat()
             return "2026-03-08"
 
@@ -183,7 +183,7 @@ def test_launch_tui_routes_existing_user_to_latest_prior_unwrapped_daily_wrap(
     initial_screen = app_inits[0]["initial_screen"]
     assert isinstance(initial_screen, DailyWorkspaceScreen)
     assert initial_screen._plan_date == "2026-03-08"
-    assert initial_screen._show_wrap_summary is True
+    assert initial_screen._show_recap_summary is True
 
 
 def test_launch_tui_exits_when_onboarding_not_completed(monkeypatch: Any) -> None:

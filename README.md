@@ -65,12 +65,12 @@ If you choose Obsidian Vault, install Obsidian CLI and provide your vault path.
 | `flow save <url\|file\|text>` | Save a resource with automatic LLM tagging to your selected storage backend |
 | `flow resources` | List saved resources (optional `--tag`, `--limit`) |
 | `flow tags` | List resource tags |
-| `flow` | Launch the daily workspace TUI (plan today, execute from editable confirmed state, explicit wrap) |
+| `flow` | Launch the daily workspace TUI (plan today, execute from editable confirmed state, explicit recap) |
 | `flow tui` | Launch the daily workspace TUI |
 | `flow process` | Launch Process Funnel (Dedup → Cluster → 2-Min → Coach) |
 | `flow next` | Launch Action screen (next actions + Sidecar: resources matched by task tags) |
 | `flow projects` | Launch Projects screen (GTD project list and proceed) |
-| `flow sync` | Sync Apple Reminders into Flow (macOS only) |
+| `flow sync` | Sync Apple Reminders into Flow, excluding the `Recently Deleted` system list (macOS only) |
 | `flow sync-status` | Check Reminders permission status |
 | `flow review` | Launch Weekly Review (Stale, Someday, Report; contextual actions per section) |
 | `flow report` | Print weekly report to stdout |
@@ -90,7 +90,7 @@ If you choose Obsidian Vault, install Obsidian CLI and provide your vault path.
 - The daily workspace has three main jobs:
   - `Plan`: build today's Top 3 and Bonus items from visible draft panes fed by candidate buckets (`Must`, `Inbox`, `Ready`, `Suggested`), then press `x` to confirm the plan
   - `Confirmed execution`: keep editing today's Top 3 and Bonus after confirmation while the right side shows grouped unplanned work (`Inbox`, `Next Actions`, `Project Tasks`)
-  - `Daily Wrap`: open wrap explicitly with `w` when you want completion counts, accomplishments, carry-forward items, deterministic coaching feedback, and optional AI insight
+  - `Daily Recap`: open recap explicitly with `w` when you want completion counts, accomplishments, carry-forward items, deterministic coaching feedback, and optional AI insight
 - Planning stays on one screen: you can add, remove, promote, demote, and reorder draft items without leaving the workspace.
 - In planning mode, adding a task to `Top 3` or `Bonus` keeps focus on `Candidates` so you can continue triaging without jumping back to pane `1`.
 - After you confirm a plan, the same workspace stays live:
@@ -103,7 +103,7 @@ If you choose Obsidian Vault, install Obsidian CLI and provide your vault path.
   - `f` recommends the best active planned item using calendar availability only as an advisory heuristic; it never recommends unplanned work, auto-schedules tasks, or opens a calendar pane
 - If Top 3 is already full, adding unplanned work into Top 3 opens a chooser so you can demote one current Top 3 item into Bonus.
 - The detail pane now shows task metadata plus concise tag-matched and semantic resources for the selected planned or unplanned item.
-- If Flow detects a prior day with an unwrapped plan, startup routes you through that prior daily wrap before opening today's normal planning/execution flow.
+- If Flow detects a prior day with an unrecapped plan, startup routes you through that prior daily recap before opening today's normal planning/execution flow.
 - Inbox, Projects, Review, and Someday remain part of the TUI model; the workspace is the default entry point, not a replacement for GTD structure.
 
 ## TUI Panel Shortcuts

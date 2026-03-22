@@ -94,7 +94,7 @@ def _screen_widgets() -> dict[str, Any]:
         "#daily-section-title",
         "#daily-summary",
         "#daily-detail",
-        "#daily-wrap",
+        "#daily-recap",
         "#daily-insight",
         "#daily-list",
         "#candidates-pane-title",
@@ -111,9 +111,9 @@ def _screen_widgets() -> dict[str, Any]:
         "#detail-pane-title",
         "#detail-pane-status",
         "#detail-content",
-        "#wrap-pane-title",
-        "#wrap-pane-status",
-        "#wrap-content",
+        "#recap-pane-title",
+        "#recap-pane-status",
+        "#recap-content",
         "#unplanned-list",
     ]
     widgets: dict[str, Any] = {selector: _DummyStatic(selector) for selector in selectors}
@@ -215,7 +215,7 @@ def _has_binding(screen: type[DailyWorkspaceScreen], key: str, action: str | Non
     return False
 
 
-def test_daily_workspace_screen_exposes_plan_focus_and_wrap_bindings() -> None:
+def test_daily_workspace_screen_exposes_plan_focus_and_recap_bindings() -> None:
     """Workspace should expose the primary planning and execution actions."""
     assert _has_binding(DailyWorkspaceScreen, "t", "add_to_top")
     assert _has_binding(DailyWorkspaceScreen, "b", "add_to_bonus")
@@ -223,11 +223,11 @@ def test_daily_workspace_screen_exposes_plan_focus_and_wrap_bindings() -> None:
     assert _has_binding(DailyWorkspaceScreen, "n", "new_task")
     assert _has_binding(DailyWorkspaceScreen, "x", "confirm_plan")
     assert _has_binding(DailyWorkspaceScreen, "c", "complete_planned_item")
-    assert _has_binding(DailyWorkspaceScreen, "w", "show_daily_wrap")
-    assert _has_binding(DailyWorkspaceScreen, "I", "generate_wrap_insight")
+    assert _has_binding(DailyWorkspaceScreen, "w", "show_daily_recap")
+    assert _has_binding(DailyWorkspaceScreen, "I", "generate_recap_insight")
     assert _has_binding(DailyWorkspaceScreen, "1", "focus_list_panel")
     assert _has_binding(DailyWorkspaceScreen, "2", "focus_detail_panel")
-    assert _has_binding(DailyWorkspaceScreen, "3", "focus_wrap_panel")
+    assert _has_binding(DailyWorkspaceScreen, "3", "focus_recap_panel")
 
 
 def test_apply_workspace_state_focuses_list_after_loading(monkeypatch) -> None:
@@ -262,7 +262,7 @@ def test_apply_workspace_state_focuses_list_after_loading(monkeypatch) -> None:
         "#daily-section-title": DummyStatic(),
         "#daily-summary": DummyStatic(),
         "#daily-detail": DummyStatic(),
-        "#daily-wrap": DummyStatic(),
+        "#daily-recap": DummyStatic(),
         "#daily-insight": DummyStatic(),
         "#daily-list": DummyOptionList(),
     }
@@ -322,7 +322,7 @@ def test_apply_workspace_state_highlights_first_candidate(monkeypatch) -> None:
         "#daily-section-title": DummyStatic(),
         "#daily-summary": DummyStatic(),
         "#daily-detail": DummyStatic(),
-        "#daily-wrap": DummyStatic(),
+        "#daily-recap": DummyStatic(),
         "#daily-insight": DummyStatic(),
         "#daily-list": DummyOptionList(),
     }
@@ -385,7 +385,7 @@ def test_apply_workspace_state_shows_next_steps_after_plan_confirmation(
         "#daily-section-title": DummyStatic("#daily-section-title"),
         "#daily-summary": DummyStatic("#daily-summary"),
         "#daily-detail": DummyStatic("#daily-detail"),
-        "#daily-wrap": DummyStatic("#daily-wrap"),
+        "#daily-recap": DummyStatic("#daily-recap"),
         "#daily-insight": DummyStatic("#daily-insight"),
         "#daily-list": DummyOptionList(),
     }
@@ -508,7 +508,7 @@ async def test_daily_workspace_confirm_key_confirms_plan_from_focused_list() -> 
 
 
 @pytest.mark.asyncio
-async def test_confirmed_wrap_focus_keeps_list_navigation_active() -> None:
+async def test_confirmed_recap_focus_keeps_list_navigation_active() -> None:
     """Pressing 3 in confirmed state should focus the unplanned list and keep j/k active there."""
 
     screen = DailyWorkspaceScreen()
@@ -533,7 +533,7 @@ async def test_confirmed_wrap_focus_keeps_list_navigation_active() -> None:
         await pilot.press("3")
         await pilot.pause()
 
-        assert screen._draft_focus == "wrap"
+        assert screen._draft_focus == "recap"
         assert app.focused is unplanned_list
         assert unplanned_list.highlighted == 1
         assert str(unplanned_list.get_option_at_index(1).id) == "inbox:inbox-1"
@@ -801,15 +801,15 @@ def test_confirmed_state_renders_today_detail_and_grouped_unplanned_work(
 
     assert widgets["#candidates-pane-title"].value == "[1] Today"
     assert widgets["#detail-pane-title"].value == "[2] Task Detail"
-    assert widgets["#wrap-pane-title"].value == "[3] Unplanned Work"
+    assert widgets["#recap-pane-title"].value == "[3] Unplanned Work"
     assert "t" in widgets["#ops-status-text"].value.lower()
     assert "b" in widgets["#ops-status-text"].value.lower()
     assert "d" in widgets["#ops-status-text"].value.lower()
     assert ("#top-draft-pane", "-hidden", True) in class_calls
     assert ("#bonus-draft-pane", "-hidden", True) in class_calls
     assert ("#today-pane", "-hidden", True) in class_calls
-    assert widgets["#wrap-content"].value == ""
-    assert "Daily Wrap" not in widgets["#wrap-pane-status"].value
+    assert widgets["#recap-content"].value == ""
+    assert "Daily Recap" not in widgets["#recap-pane-status"].value
     assert [str(option.id) for option in widgets["#daily-list"].options] == [
         "top:top-1",
         "top:top-2",
@@ -837,8 +837,8 @@ def test_confirmed_state_renders_today_detail_and_grouped_unplanned_work(
     assert widgets["#unplanned-list"].highlighted == 1
 
 
-def test_confirmed_wrap_focus_targets_unplanned_list(monkeypatch) -> None:
-    """Confirmed wrap focus should target the dedicated unplanned-work list."""
+def test_confirmed_recap_focus_targets_unplanned_list(monkeypatch) -> None:
+    """Confirmed recap focus should target the dedicated unplanned-work list."""
     screen = DailyWorkspaceScreen()
     widgets = _screen_widgets()
     monkeypatch.setattr(
@@ -846,9 +846,9 @@ def test_confirmed_wrap_focus_targets_unplanned_list(monkeypatch) -> None:
     )
 
     screen._apply_workspace_state(_confirmed_state())
-    screen.action_focus_wrap_panel()
+    screen.action_focus_recap_panel()
 
-    assert screen._draft_focus == "wrap"
+    assert screen._draft_focus == "recap"
     assert widgets["#unplanned-list"].focused is True
     assert widgets["#daily-list"].focused is True
 
@@ -872,7 +872,7 @@ def test_confirmed_state_detail_follows_planned_and_unplanned_selection(
 
     assert "Current bucket: Top 3 #1" in widgets["#detail-content"].value
 
-    screen._draft_focus = "wrap"
+    screen._draft_focus = "recap"
     widgets["#unplanned-list"].highlighted = 1
     screen._refresh_supporting_panes()
 
@@ -927,7 +927,7 @@ def test_recommend_focus_item_highlights_calendar_aware_confirmed_item(
         )
     ]
     screen._apply_workspace_state(state)
-    screen.action_focus_wrap_panel()
+    screen.action_focus_recap_panel()
     widgets["#unplanned-list"].highlighted = 3
     widgets["#daily-list"].highlighted = 2
 
@@ -955,7 +955,7 @@ def test_confirmed_focus_action_never_recommends_unplanned_work(
         Item(id="bonus-1", type="action", title="Tidy backlog", status="active")
     ]
     screen._apply_workspace_state(state)
-    screen.action_focus_wrap_panel()
+    screen.action_focus_recap_panel()
     widgets["#unplanned-list"].highlighted = 1
 
     screen.action_recommend_focus_item()
@@ -1030,7 +1030,7 @@ def test_confirmed_state_adds_and_removes_items_without_reentering_planning(
     state["bonus_items"] = []
     screen._apply_workspace_state(state)
 
-    screen.action_focus_wrap_panel()
+    screen.action_focus_recap_panel()
     widgets["#unplanned-list"].highlighted = 1
     screen.action_add_to_top()
 
@@ -1076,7 +1076,7 @@ def test_confirmed_focus_recommendation_ignores_unplanned_selection(
     )
 
     screen._apply_workspace_state(_confirmed_state())
-    screen.action_focus_wrap_panel()
+    screen.action_focus_recap_panel()
     widgets["#unplanned-list"].highlighted = 1
 
     screen.action_recommend_focus_item()
@@ -1140,6 +1140,40 @@ def test_confirmed_remove_returns_item_to_original_unplanned_list_without_switch
         "header:project_tasks",
         "project_tasks:project-task-1",
     ]
+
+
+def test_confirmed_unplanned_delete_archives_selected_item(monkeypatch) -> None:
+    """Confirmed unplanned delete should archive the selected item and keep recap active."""
+    screen = DailyWorkspaceScreen()
+    widgets = _screen_widgets()
+    deleted: list[str] = []
+    monkeypatch.setattr(
+        screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
+    )
+
+    class FakeEngine:
+        def two_min_delete(self, item_id: str) -> None:
+            deleted.append(item_id)
+
+    screen._engine = FakeEngine()
+    screen._apply_workspace_state(_confirmed_state())
+
+    screen.action_focus_recap_panel()
+    widgets["#unplanned-list"].highlighted = 1
+
+    screen.action_remove_selected_draft_item()
+
+    assert deleted == ["inbox-1"]
+    assert screen._draft_focus == "recap"
+    assert widgets["#unplanned-list"].focused is True
+    assert [str(option.id) for option in widgets["#unplanned-list"].options] == [
+        "header:inbox",
+        "header:next_actions",
+        "next_actions:next-1",
+        "header:project_tasks",
+        "project_tasks:project-task-1",
+    ]
+    assert widgets["#unplanned-list"].highlighted == 2
 
 
 def test_confirmed_remove_switches_to_unplanned_and_list_navigation_recovers(
@@ -1277,7 +1311,7 @@ def test_confirmed_add_to_top_opens_replacement_chooser_when_top_three_is_full(
     state["bonus_items"] = []
     screen._apply_workspace_state(state)
 
-    screen.action_focus_wrap_panel()
+    screen.action_focus_recap_panel()
     widgets["#unplanned-list"].highlighted = 1
     screen.action_add_to_top()
 
@@ -1313,7 +1347,7 @@ def test_confirmed_add_to_bonus_persists_updated_plan(monkeypatch) -> None:
 
     screen._apply_workspace_state(_confirmed_state())
 
-    screen.action_focus_wrap_panel()
+    screen.action_focus_recap_panel()
     widgets["#unplanned-list"].highlighted = 1
     screen.action_add_to_bonus()
 
@@ -1357,7 +1391,7 @@ def test_top_three_replacement_chooser_demotes_selected_item_into_bonus(
     state["bonus_items"] = []
     screen._apply_workspace_state(state)
 
-    screen.action_focus_wrap_panel()
+    screen.action_focus_recap_panel()
     widgets["#unplanned-list"].highlighted = 1
     screen.action_add_to_top()
 
@@ -1461,7 +1495,7 @@ def test_detail_pane_shows_concise_resources_for_unplanned_selection(
     }
 
     screen._apply_workspace_state(_confirmed_state())
-    screen._draft_focus = "wrap"
+    screen._draft_focus = "recap"
     screen._refresh_supporting_panes()
     widgets["#daily-list"].highlighted = 0
     screen._refresh_supporting_panes()
@@ -1473,10 +1507,10 @@ def test_detail_pane_shows_concise_resources_for_unplanned_selection(
     assert "..." in detail
 
 
-def test_show_daily_wrap_explicitly_replaces_unplanned_pane_content(
+def test_show_daily_recap_explicitly_replaces_unplanned_pane_content(
     monkeypatch,
 ) -> None:
-    """Confirmed state should only show wrap after the user explicitly asks for it."""
+    """Confirmed state should only show recap after the user explicitly asks for it."""
     screen = DailyWorkspaceScreen()
     widgets = _screen_widgets()
     monkeypatch.setattr(
@@ -1484,7 +1518,7 @@ def test_show_daily_wrap_explicitly_replaces_unplanned_pane_content(
     )
 
     class FakeEngine:
-        def get_daily_wrap_summary(self, _plan_date: str) -> dict[str, object]:
+        def get_daily_recap_summary(self, _plan_date: str) -> dict[str, object]:
             return {
                 "top_total": 2,
                 "top_completed": 1,
@@ -1498,31 +1532,31 @@ def test_show_daily_wrap_explicitly_replaces_unplanned_pane_content(
                 "open_planned_items": [{"id": "top-2", "title": "Review blockers"}],
             }
 
-        def mark_daily_plan_wrapped(self, _plan_date: str) -> None:
+        def mark_daily_plan_recapped(self, _plan_date: str) -> None:
             return
 
     screen._engine = FakeEngine()
 
     screen._apply_workspace_state(_confirmed_state())
 
-    assert "Solid day" not in widgets["#wrap-content"].value
+    assert "Solid day" not in widgets["#recap-content"].value
 
-    screen.action_show_daily_wrap()
+    screen.action_show_daily_recap()
 
-    assert widgets["#wrap-pane-title"].value == "[3] Daily Wrap"
-    assert "Solid day" in widgets["#wrap-content"].value
-    assert widgets["#daily-wrap"].value == ""
-    assert "Coaching" in widgets["#wrap-content"].value
+    assert widgets["#recap-pane-title"].value == "[3] Daily Recap"
+    assert "Solid day" in widgets["#recap-content"].value
+    assert widgets["#daily-recap"].value == ""
+    assert "Coaching" in widgets["#recap-content"].value
 
 
-def test_start_in_wrap_renders_as_prior_day_wrap_gate(monkeypatch) -> None:
-    """Prior-day wrap gate should render as wrap mode, not as normal confirmed execution."""
-    screen = DailyWorkspaceScreen(plan_date="2026-03-08", start_in_wrap=True)
+def test_start_in_recap_renders_as_prior_day_recap_gate(monkeypatch) -> None:
+    """Prior-day recap gate should render as recap mode, not as normal confirmed execution."""
+    screen = DailyWorkspaceScreen(plan_date="2026-03-08", start_in_recap=True)
     widgets = _screen_widgets()
     monkeypatch.setattr(
         screen, "query_one", lambda selector, *_args, **_kwargs: widgets[selector]
     )
-    screen._wrap_summary = {
+    screen._recap_summary = {
         "top_total": 2,
         "top_completed": 1,
         "bonus_total": 0,
@@ -1537,11 +1571,11 @@ def test_start_in_wrap_renders_as_prior_day_wrap_gate(monkeypatch) -> None:
 
     screen._apply_workspace_state(_confirmed_state())
 
-    assert widgets["#daily-title"].value == "Daily Wrap"
+    assert widgets["#daily-title"].value == "Daily Recap"
     assert "2026-03-08" in widgets["#daily-subtitle"].value
     assert "prior day" in widgets["#daily-subtitle"].value.lower()
     assert "Carry Forward" in widgets["#ops-status-text"].value
-    assert "Daily Wrap" in widgets["#ops-status-text"].value
+    assert "Daily Recap" in widgets["#ops-status-text"].value
     assert widgets["#candidates-pane-title"].value == "[1] Carry Forward"
     assert widgets["#candidates-pane-status"].value == "Open planned items that still need a next move"
     assert widgets["#detail-pane-title"].value == "[2] Task Detail"
@@ -1550,17 +1584,17 @@ def test_start_in_wrap_renders_as_prior_day_wrap_gate(monkeypatch) -> None:
         "[Top 2] Review blockers",
         "[Bonus 1] Tidy backlog",
     ]
-    assert "Solid day" in widgets["#wrap-content"].value
-    assert widgets["#daily-wrap"].value == ""
+    assert "Solid day" in widgets["#recap-content"].value
+    assert widgets["#daily-recap"].value == ""
 
 
-def test_confirmed_state_keeps_unplanned_groups_visible_even_with_wrap_summary(
+def test_confirmed_state_keeps_unplanned_groups_visible_even_with_recap_summary(
     monkeypatch,
 ) -> None:
-    """Confirmed state should not render live wrap content by default."""
+    """Confirmed state should not render live recap content by default."""
     screen = DailyWorkspaceScreen()
     widgets = _screen_widgets()
-    screen._wrap_summary = {
+    screen._recap_summary = {
         "top_total": 2,
         "top_completed": 1,
         "bonus_total": 1,
@@ -1604,10 +1638,10 @@ def test_confirmed_state_keeps_unplanned_groups_visible_even_with_wrap_summary(
         }
     )
 
-    wrap_text = widgets["#wrap-content"].value
-    assert wrap_text == ""
-    assert "Solid day" not in wrap_text
-    assert "Coaching" not in wrap_text
+    recap_text = widgets["#recap-content"].value
+    assert recap_text == ""
+    assert "Solid day" not in recap_text
+    assert "Coaching" not in recap_text
     assert [str(option.id) for option in widgets["#unplanned-list"].options] == [
         "header:inbox",
         "inbox:inbox-1",
@@ -1623,7 +1657,7 @@ def test_confirmed_state_keeps_unplanned_groups_visible_even_with_wrap_summary(
 
 
 @pytest.mark.asyncio
-async def test_refresh_async_updates_wrap_pane_without_ai_path() -> None:
+async def test_refresh_async_updates_recap_pane_without_ai_path() -> None:
     """Regular refresh should keep confirmed state on grouped unplanned work."""
     screen = DailyWorkspaceScreen(plan_date="2026-03-08")
 
@@ -1653,7 +1687,7 @@ async def test_refresh_async_updates_wrap_pane_without_ai_path() -> None:
                 },
             }
 
-        def get_daily_wrap_summary(self, _plan_date: str) -> dict[str, object]:
+        def get_daily_recap_summary(self, _plan_date: str) -> dict[str, object]:
             return {
                 "top_total": 1,
                 "top_completed": 1,
@@ -1680,9 +1714,9 @@ async def test_refresh_async_updates_wrap_pane_without_ai_path() -> None:
         await screen._refresh_async()
         await pilot.pause()
 
-        wrap_content = str(screen.query_one("#wrap-content", Static).renderable)
+        recap_content = str(screen.query_one("#recap-content", Static).renderable)
         unplanned_list = screen.query_one("#unplanned-list", OptionList)
-        assert wrap_content == ""
+        assert recap_content == ""
         assert [str(unplanned_list.get_option_at_index(index).id) for index in range(unplanned_list.option_count)] == [
             "header:inbox",
             "header:next_actions",
@@ -1691,14 +1725,14 @@ async def test_refresh_async_updates_wrap_pane_without_ai_path() -> None:
         ]
         assert str(unplanned_list.get_option_at_index(1).prompt) == "Next Actions (1)"
         assert str(unplanned_list.get_option_at_index(2).prompt) == "Ping designer"
-        assert "Strong day" not in wrap_content
+        assert "Strong day" not in recap_content
 
 
-def test_render_wrap_summary_celebrates_completed_top_three() -> None:
-    """Wrap summary should celebrate finishing the Top 3."""
+def test_render_recap_summary_celebrates_completed_top_three() -> None:
+    """Recap summary should celebrate finishing the Top 3."""
     screen = DailyWorkspaceScreen()
 
-    summary = screen._render_wrap_summary(
+    summary = screen._render_recap_summary(
         {
             "top_total": 3,
             "top_completed": 3,
@@ -1712,8 +1746,8 @@ def test_render_wrap_summary_celebrates_completed_top_three() -> None:
     assert "Bonus: 1/2" in summary
 
 
-def test_render_wrap_insight_falls_back_when_unavailable() -> None:
-    """Wrap insight area should degrade gracefully when AI insight is unavailable."""
+def test_render_recap_insight_falls_back_when_unavailable() -> None:
+    """Recap insight area should degrade gracefully when AI insight is unavailable."""
     screen = DailyWorkspaceScreen()
 
-    assert screen._render_wrap_insight(None) == "AI insight unavailable."
+    assert screen._render_recap_insight(None) == "AI insight unavailable."

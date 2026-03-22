@@ -89,7 +89,7 @@ DailyWorkspaceScreen {
 
 #top-draft-pane,
 #bonus-draft-pane,
-#wrap-pane {
+#recap-pane {
     background: #121922;
 }
 
@@ -97,12 +97,12 @@ DailyWorkspaceScreen {
 #bonus-draft-content,
 #detail-content,
 #today-content,
-#wrap-content,
+#recap-content,
 #daily-insight {
     color: #e6eef7;
 }
 
-#wrap-content {
+#recap-content {
     color: #b8c6d8;
 }
 
@@ -115,7 +115,7 @@ DailyWorkspaceScreen {
     min-height: 11;
 }
 
-#wrap-pane {
+#recap-pane {
     min-height: 14;
     margin-bottom: 0;
     background: #18222d;
