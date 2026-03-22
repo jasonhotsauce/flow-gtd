@@ -51,3 +51,7 @@
 - Date: 2026-03-14
 - Pattern: I patched confirmed-state pane focus by relabeling a shared list instead of verifying the implemented UI against the approved plan and the live layout, which hid that pane `3` was supposed to own its own selectable unplanned-task list and add chooser.
 - Prevention rule: For any TUI pane redesign with an approved design/implementation plan, compare the live screen structure against that plan before shipping; if a pane is specified as interactive, implement a real widget in that pane and add a runtime test that exercises its focus, navigation, and primary action.
+
+- Date: 2026-03-21
+- Pattern: I started a repository release by manually editing version/release metadata and planning ad hoc git/gh commands instead of using the existing Makefile workflow the user expected.
+- Prevention rule: For Flow release tasks, inspect the Makefile first and use its release targets (`make bump-*`, `make release`, `make publish`, `make brew-formula` as applicable) instead of manual version edits or hand-run git/GitHub release commands unless the user explicitly asks otherwise.
