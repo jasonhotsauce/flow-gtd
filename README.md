@@ -73,17 +73,16 @@ If you choose Obsidian Vault, install Obsidian CLI and provide your vault path.
 | `flow sync` | Sync Apple Reminders into Flow (macOS only) |
 | `flow sync-status` | Check Reminders permission status |
 | `flow review` | Launch Weekly Review (Stale, Someday, Report; contextual actions per section) |
-| `flow focus` | Launch Focus Mode (calendar-aware task selection) |
 | `flow report` | Print weekly report to stdout |
 | `flow version` | Show version |
 
 ## Workflow
 
 1. **Capture fast**: `flow c "task"` or Siri → Apple Reminders → `flow sync`
-2. **Open the day**: `flow` — if today's plan is missing, build it; otherwise open today's focus list
+2. **Open the day**: `flow` — if today's plan is missing, build it; otherwise open today's confirmed workspace
 3. **Process backlog**: `flow process` — deduplicate, cluster into projects, 2-min drill, coach vague tasks
 4. **Review projects**: `flow projects` — list active projects, see suggested next action and full task list per project; open a project to complete or defer actions
-5. **Execute outside the workspace when needed**: `flow next` or `flow focus` remain available as direct power-user entry points
+5. **Execute outside the workspace when needed**: `flow next` remains available as a direct power-user entry point, but today's planned work executes inside the Daily Workspace
 
 ## Daily Workspace
 
@@ -93,12 +92,15 @@ If you choose Obsidian Vault, install Obsidian CLI and provide your vault path.
   - `Confirmed execution`: keep editing today's Top 3 and Bonus after confirmation while the right side shows grouped unplanned work (`Inbox`, `Next Actions`, `Project Tasks`)
   - `Daily Wrap`: open wrap explicitly with `w` when you want completion counts, accomplishments, carry-forward items, deterministic coaching feedback, and optional AI insight
 - Planning stays on one screen: you can add, remove, promote, demote, and reorder draft items without leaving the workspace.
+- In planning mode, adding a task to `Top 3` or `Bonus` keeps focus on `Candidates` so you can continue triaging without jumping back to pane `1`.
 - After you confirm a plan, the same workspace stays live:
   - `[1]` focuses today's ordered plan
-  - `[3]` focuses grouped unplanned work on the right
-  - `t` / `b` pull selected unplanned work into Top 3 or Bonus
-  - `d` removes a planned item back to its original unplanned group
+  - `[3]` focuses the dedicated grouped unplanned-work list on the right
+  - `j` / `k` move inside that unplanned list
+  - `Enter`, `t`, or `b` on an unplanned task opens a chooser so you can place it into `Top 3` or `Bonus`
+  - `d` removes a planned item back to its original unplanned group without leaving the Today list
   - `c` completes the selected planned item
+  - `f` recommends the best active planned item using calendar availability only as an advisory heuristic; it never recommends unplanned work, auto-schedules tasks, or opens a calendar pane
 - If Top 3 is already full, adding unplanned work into Top 3 opens a chooser so you can demote one current Top 3 item into Bonus.
 - The detail pane now shows task metadata plus concise tag-matched and semantic resources for the selected planned or unplanned item.
 - If Flow detects a prior day with an unwrapped plan, startup routes you through that prior daily wrap before opening today's normal planning/execution flow.
@@ -111,10 +113,9 @@ If you choose Obsidian Vault, install Obsidian CLI and provide your vault path.
   - Panel abbreviations shown in panel headers (for example `l`, `d`, `t`, `r`, `e`)
 - `Tab` focus switching remains available on the Next Actions screen.
 
-## Focus + Inbox Empty States
+## Daily Workspace + Inbox Empty States
 
-- Focus and Inbox use a centered minimalist empty state with an ASCII visual anchor, concise status header, and a high-contrast action hint.
-- Focus empty state keeps `n` as the fastest path to Inbox quick capture.
+- Daily Workspace and Inbox use a centered minimalist empty state with an ASCII visual anchor, concise status header, and a high-contrast action hint.
 - Inbox empty state also supports `n` to open quick capture immediately.
 - A randomized one-line productivity tip appears at the bottom of both empty states.
 

@@ -7,9 +7,9 @@ from typing import Any
 
 import pytest
 import typer
-
+from typer.main import get_command
 import flow.cli as cli
-from flow.cli import _launch_tui, main, save
+from flow.cli import _launch_tui, app, main, save
 from flow.tui.screens.daily_workspace.daily_workspace import DailyWorkspaceScreen
 
 
@@ -25,6 +25,13 @@ def test_main_without_subcommand_launches_default_tui(monkeypatch: Any) -> None:
     main(ctx=SimpleNamespace(invoked_subcommand=None), version=False)
 
     assert calls == [DailyWorkspaceScreen]
+
+
+def test_cli_no_longer_exposes_focus_subcommand() -> None:
+    """Standalone focus command should no longer be part of the CLI surface."""
+    command_names = set(get_command(app).commands)
+
+    assert "focus" not in command_names
 
 
 def test_launch_tui_hands_off_onboarding_first_capture(monkeypatch: Any) -> None:

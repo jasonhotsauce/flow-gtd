@@ -317,7 +317,7 @@ class SqliteDB:
         min_duration: Optional[int] = None,
         status: str = "active",
     ) -> list[Item]:
-        """Return active items filtered by estimated_duration range (for Focus Mode)."""
+        """Return active items filtered by estimated_duration range."""
         with sqlite3.connect(self._path) as conn:
             conn.row_factory = sqlite3.Row
             query = "SELECT * FROM items WHERE status = ?"

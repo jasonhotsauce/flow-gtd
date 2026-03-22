@@ -11,6 +11,7 @@ from flow.config import get_settings
 from flow.core.resources.factory import create_resource_store
 from flow.core.resources.store import ResourceStore
 from flow.core.rag import RAGService
+from flow.core.focus import CalendarAvailability
 from flow.core.services import (
     DailyPlanService,
     ProcessService,
@@ -18,6 +19,7 @@ from flow.core.services import (
     ReviewService,
     TaskService,
 )
+from flow.core.services.calendar_availability import get_calendar_availability
 from flow.core.tagging import extract_tags, extract_tags_async
 from flow.database.resources import ResourceDB
 from flow.database.sqlite import SqliteDB
@@ -48,6 +50,7 @@ class Engine:
         self._process_service = ProcessService(self._db)
         self._resource_service = ResourceService(self._resource_store)
         self._rag_service = RAGService(self._db, self._resource_db)
+        self._calendar_availability_service = get_calendar_availability
         self._process_inbox: list[Item] = []
         self._dedup_index = 0
         self._two_min_index = 0
@@ -378,8 +381,9 @@ class Engine:
         candidates = self._build_daily_workspace_candidates(
             date.fromisoformat(plan_date), planned_ids=planned_ids
         )
+        has_saved_plan = self._daily_plan_service.has_saved_plan(plan_date)
         return {
-            "needs_plan": not top_items and not bonus_items,
+            "needs_plan": not has_saved_plan,
             "top_items": top_items,
             "bonus_items": bonus_items,
             "candidates": candidates,
@@ -389,6 +393,17 @@ class Engine:
     def get_daily_wrap_summary(self, plan_date: str) -> dict[str, object]:
         """Return completion summary for today's plan."""
         return self._daily_plan_service.get_wrap_summary(plan_date)
+
+    def get_calendar_availability(self) -> CalendarAvailability:
+        """Return a compact calendar summary for Daily Workspace heuristics."""
+        try:
+            return self._calendar_availability_service()
+        except Exception:
+            return CalendarAvailability(
+                available=False,
+                next_free_window_minutes=None,
+                minutes_until_next_event=None,
+            )
 
     def generate_daily_wrap_insight(self, plan_date: str) -> str | None:
         """Generate an optional AI insight for today's wrap."""

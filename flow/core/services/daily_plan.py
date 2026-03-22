@@ -53,10 +53,23 @@ class DailyPlanService:
         self, plan_date: str, top_item_ids: list[str], bonus_item_ids: list[str]
     ) -> None:
         entries: list[DailyPlanEntryInput] = []
-        for index, item_id in enumerate(top_item_ids, start=1):
-            entries.append({"item_id": item_id, "bucket": "top", "position": index})
-        for index, item_id in enumerate(bonus_item_ids, start=1):
-            entries.append({"item_id": item_id, "bucket": "bonus", "position": index})
+        seen_item_ids: set[str] = set()
+        top_position = 1
+        for item_id in top_item_ids:
+            if item_id in seen_item_ids:
+                continue
+            seen_item_ids.add(item_id)
+            entries.append({"item_id": item_id, "bucket": "top", "position": top_position})
+            top_position += 1
+        bonus_position = 1
+        for item_id in bonus_item_ids:
+            if item_id in seen_item_ids:
+                continue
+            seen_item_ids.add(item_id)
+            entries.append(
+                {"item_id": item_id, "bucket": "bonus", "position": bonus_position}
+            )
+            bonus_position += 1
         self._db.replace_daily_plan(plan_date, entries)
 
     def get_plan_items(self, plan_date: str) -> tuple[list[Item], list[Item]]:
@@ -70,6 +83,11 @@ class DailyPlanService:
             else:
                 bonus_items.append(entry["item"])
         return top_items, bonus_items
+
+    def has_saved_plan(self, plan_date: str) -> bool:
+        """Return whether a plan exists even if its items are already completed."""
+        summary = self._db.get_daily_plan_summary(plan_date)
+        return (summary["top_total"] + summary["bonus_total"]) > 0
 
     def get_wrap_summary(self, plan_date: str) -> DailyWrapSummary:
         entries = self._db.list_daily_plan(plan_date)

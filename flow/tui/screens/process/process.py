@@ -14,7 +14,6 @@ from flow.core.coach import coach_task
 from flow.tui.common.base_screen import FlowScreen
 from flow.tui.common.keybindings import with_global_bindings
 from flow.tui.common.widgets.defer_dialog import DeferDialog
-from flow.tui.screens.focus.focus import FocusScreen
 from flow.utils.llm.config import mark_first_value_completed, read_first_run_state
 
 
@@ -254,13 +253,13 @@ class ProcessScreen(FlowScreen):
             if self._first_run_focus_bridge_pending:
                 self.query_one("#complete-icon", Static).update("🎯")
                 self.query_one("#complete-text", Static).update(
-                    "Process complete! Start Focus mode to keep momentum."
+                    "Process complete! Return to Daily Workspace to keep momentum."
                 )
                 self._update_stage_guidance(
                     4,
-                    primary="Primary: Enter to Start Focus",
-                    controls="Press Enter to open Focus │ Esc: Back │ 1-4: Review stages",
-                    next_step="Next: Complete one focused task to build the habit loop.",
+                    primary="Primary: Enter to Return to Daily Workspace",
+                    controls="Press Enter to return to Daily Workspace │ Esc: Back │ 1-4: Review stages",
+                    next_step="Next: Continue from today's workspace plan.",
                 )
             else:
                 self.query_one("#complete-icon", Static).update("🎉")
@@ -295,7 +294,7 @@ class ProcessScreen(FlowScreen):
     def _next_step_hint(self, stage: int) -> str:
         """Return one-step-next guidance for process momentum."""
         if stage == 4 and self._first_run_focus_bridge_pending:
-            return "Next: Press Enter to launch Focus mode."
+            return "Next: Press Enter to return to Daily Workspace."
         return {
             1: "Next: Press 2 to move to Clustering.",
             2: "Next: Press 3 to move to 2-Min Drill.",
@@ -386,7 +385,7 @@ class ProcessScreen(FlowScreen):
             if self._first_run_focus_bridge_pending:
                 await asyncio.to_thread(mark_first_value_completed)
                 self._first_run_focus_bridge_pending = False
-                self.action_start_focus()
+                self.action_go_back()
             else:
                 self.action_go_back()
 
@@ -555,10 +554,6 @@ class ProcessScreen(FlowScreen):
     def action_go_back(self) -> None:
         """Return to previous screen."""
         self.app.pop_screen()
-
-    def action_start_focus(self) -> None:
-        """Launch Focus mode from process completion."""
-        self.app.push_screen(FocusScreen())
 
     def action_show_help(self) -> None:
         """Show help toast."""

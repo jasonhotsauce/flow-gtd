@@ -72,7 +72,18 @@ DailyWorkspaceScreen {
     border: round #253241;
 }
 
+#unplanned-list {
+    min-height: 8;
+    margin-bottom: 1;
+    background: #18222d;
+    border: round #253241;
+}
+
 #daily-list:focus {
+    border: round #3f5a73;
+}
+
+#unplanned-list:focus {
     border: round #3f5a73;
 }
 
