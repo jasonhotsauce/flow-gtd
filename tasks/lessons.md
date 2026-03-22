@@ -47,3 +47,7 @@
 - Date: 2026-03-09
 - Pattern: I treated a workflow skill requirement as mandatory even after the user explicitly told me to stay on the current branch and skip worktree setup.
 - Prevention rule: When the user explicitly overrides an implementation workflow preference such as worktree usage, follow the override, record the deviation in `tasks/todo.md`, and continue execution without re-arguing the default workflow.
+
+- Date: 2026-03-14
+- Pattern: I patched confirmed-state pane focus by relabeling a shared list instead of verifying the implemented UI against the approved plan and the live layout, which hid that pane `3` was supposed to own its own selectable unplanned-task list and add chooser.
+- Prevention rule: For any TUI pane redesign with an approved design/implementation plan, compare the live screen structure against that plan before shipping; if a pane is specified as interactive, implement a real widget in that pane and add a runtime test that exercises its focus, navigation, and primary action.

@@ -98,7 +98,7 @@ def suggest_clusters(titles: list[str]) -> list[tuple[str, list[int]]]:
     return result
 
 
-# Valid duration values for Focus Mode
+# Valid duration values for task estimates
 VALID_DURATIONS = [5, 15, 30, 60, 120]
 
 

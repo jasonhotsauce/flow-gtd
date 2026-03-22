@@ -7,9 +7,9 @@ from typing import Any
 
 import pytest
 import typer
-
+from typer.main import get_command
 import flow.cli as cli
-from flow.cli import _launch_tui, main, save
+from flow.cli import _launch_tui, app, main, save
 from flow.tui.screens.daily_workspace.daily_workspace import DailyWorkspaceScreen
 
 
@@ -25,6 +25,13 @@ def test_main_without_subcommand_launches_default_tui(monkeypatch: Any) -> None:
     main(ctx=SimpleNamespace(invoked_subcommand=None), version=False)
 
     assert calls == [DailyWorkspaceScreen]
+
+
+def test_cli_no_longer_exposes_focus_subcommand() -> None:
+    """Standalone focus command should no longer be part of the CLI surface."""
+    command_names = set(get_command(app).commands)
+
+    assert "focus" not in command_names
 
 
 def test_launch_tui_hands_off_onboarding_first_capture(monkeypatch: Any) -> None:
@@ -146,6 +153,37 @@ def test_launch_tui_continues_when_first_capture_fails(monkeypatch: Any) -> None
     _launch_tui()
 
     assert app_inits == [{"initial_screen": None, "startup_context": None}]
+
+
+def test_launch_tui_routes_existing_user_to_latest_prior_unwrapped_daily_wrap(
+    monkeypatch: Any,
+) -> None:
+    """Existing users should land on the latest prior unwrapped wrap before today."""
+    app_inits: list[dict[str, object]] = []
+
+    class _FakeFlowApp:
+        def __init__(self, **kwargs: object) -> None:
+            app_inits.append(dict(kwargs))
+
+        def run(self) -> None:
+            return
+
+    class _FakeEngine:
+        def get_latest_unwrapped_plan_date(self, before_date: str) -> str | None:
+            assert before_date == cli.date.today().isoformat()
+            return "2026-03-08"
+
+    monkeypatch.setattr("flow.cli._check_onboarding", lambda: (True, None, True))
+    monkeypatch.setattr("flow.cli._ensure_resource_storage_selected", lambda: None)
+    monkeypatch.setattr("flow.cli.FlowApp", _FakeFlowApp)
+    monkeypatch.setattr("flow.cli.Engine", _FakeEngine)
+
+    _launch_tui(DailyWorkspaceScreen)
+
+    initial_screen = app_inits[0]["initial_screen"]
+    assert isinstance(initial_screen, DailyWorkspaceScreen)
+    assert initial_screen._plan_date == "2026-03-08"
+    assert initial_screen._show_wrap_summary is True
 
 
 def test_launch_tui_exits_when_onboarding_not_completed(monkeypatch: Any) -> None:

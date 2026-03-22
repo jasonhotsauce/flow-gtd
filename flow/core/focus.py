@@ -1,188 +1,136 @@
-"""Smart Dispatcher for Focus Mode: context-aware task selection."""
+"""Focus helpers for confirmed-plan recommendations."""
 
+from dataclasses import dataclass
+from typing import Literal
 from typing import Optional
 
-from flow.core.engine import Engine
-from flow.database.vector_store import VectorHit
-from flow.models import Item, Resource
-from flow.sync.calendar import CalendarEvent, get_next_event
-
-# Time window thresholds (in minutes)
-QUICK_WIN_THRESHOLD = 30  # Below this: prioritize short tasks
-DEEP_WORK_THRESHOLD = 120  # Above this: prioritize high-energy tasks
-DEFAULT_TIME_WINDOW = 60  # Fallback when no calendar data
+from flow.models import Item
 
 
-class FocusDispatcher:
-    """Selects optimal task based on available time window from calendar.
+@dataclass(frozen=True)
+class ConfirmedFocusRecommendation:
+    """A recommended confirmed-plan item for in-workspace execution."""
 
-    The Smart Dispatcher algorithm:
-    1. Query EventKit for next calendar event
-    2. Calculate available time window
-    3. Select best task based on window:
-       - < 30 mins: Quick Wins (short duration or @admin tag)
-       - > 2 hours: Deep Work (high energy tasks)
-       - Otherwise: Standard priority order
+    item: Item
+    bucket: Literal["top", "bonus"]
+    position: int
+    explanation: str
+
+
+@dataclass(frozen=True)
+class CalendarAvailability:
+    """Compact calendar availability input for confirmed-plan recommendation."""
+
+    available: bool
+    next_free_window_minutes: int | None
+    minutes_until_next_event: int | None
+
+
+@dataclass(frozen=True)
+class _RankedPlannedItem:
+    item: Item
+    bucket: Literal["top", "bonus"]
+    position: int
+
+
+def recommend_confirmed_focus(
+    *,
+    top_items: list[Item],
+    bonus_items: list[Item],
+    calendar_availability: CalendarAvailability | None = None,
+) -> ConfirmedFocusRecommendation | None:
+    """Return the next recommended confirmed-plan item.
+
+    Only active confirmed-plan items are eligible. `Top 3` always outranks
+    `Bonus`, and each bucket preserves its existing order for deterministic
+    fallback behavior.
     """
+    active_top = [
+        _RankedPlannedItem(item=item, bucket="top", position=position)
+        for position, item in enumerate(top_items)
+        if item.status == "active"
+    ]
+    active_bonus = [
+        _RankedPlannedItem(item=item, bucket="bonus", position=position)
+        for position, item in enumerate(bonus_items)
+        if item.status == "active"
+    ]
+    active_items = active_top + active_bonus
+    if not active_items:
+        return None
 
-    def __init__(self, engine: Optional[Engine] = None) -> None:
-        """Initialize dispatcher with engine instance.
+    if _can_use_calendar_fit(active_items, calendar_availability):
+        fitting_top = _first_fitting_item(
+            active_top, calendar_availability.next_free_window_minutes
+        )
+        if fitting_top is not None:
+            return ConfirmedFocusRecommendation(
+                item=fitting_top.item,
+                bucket=fitting_top.bucket,
+                position=fitting_top.position,
+                explanation=(
+                    f"Top 3 fit: {fitting_top.item.estimated_duration}m fits before the "
+                    f"next event in {calendar_availability.minutes_until_next_event}m."
+                ),
+            )
+        fitting_bonus = _first_fitting_item(
+            active_bonus, calendar_availability.next_free_window_minutes
+        )
+        if fitting_bonus is not None:
+            return ConfirmedFocusRecommendation(
+                item=fitting_bonus.item,
+                bucket=fitting_bonus.bucket,
+                position=fitting_bonus.position,
+                explanation=(
+                    f"Bonus fit: no active Top 3 item fits the next "
+                    f"{calendar_availability.next_free_window_minutes}m window."
+                ),
+            )
 
-        Args:
-            engine: Engine instance for database access. Creates new if None.
-        """
-        self._engine = engine or Engine()
-        self._skipped_ids: set[str] = set()
+    explanation = _fallback_explanation(active_items, calendar_availability)
+    selected = active_items[0]
+    return ConfirmedFocusRecommendation(
+        item=selected.item,
+        bucket=selected.bucket,
+        position=selected.position,
+        explanation=explanation,
+    )
 
-    def get_time_window(self) -> tuple[int, Optional[str]]:
-        """Get available time window until next calendar event.
 
-        Returns:
-            Tuple of (minutes_available, next_event_title).
-            Falls back to DEFAULT_TIME_WINDOW if no calendar data.
-        """
-        event = get_next_event()
-        if event is None:
-            return DEFAULT_TIME_WINDOW, None
-        return event.minutes_until_start, event.title
+def _can_use_calendar_fit(
+    active_items: list[_RankedPlannedItem],
+    calendar_availability: CalendarAvailability | None,
+) -> bool:
+    if (
+        calendar_availability is None
+        or not calendar_availability.available
+        or calendar_availability.next_free_window_minutes is None
+        or calendar_availability.minutes_until_next_event is None
+    ):
+        return False
+    return all(item.item.estimated_duration is not None for item in active_items)
 
-    def get_next_event(self) -> Optional[CalendarEvent]:
-        """Get the next calendar event (for display purposes).
 
-        Returns:
-            CalendarEvent or None if no upcoming events.
-        """
-        return get_next_event()
+def _first_fitting_item(
+    items: list[_RankedPlannedItem], next_free_window_minutes: int | None
+) -> _RankedPlannedItem | None:
+    if next_free_window_minutes is None:
+        return None
+    for ranked_item in items:
+        duration = ranked_item.item.estimated_duration
+        if duration is not None and duration <= next_free_window_minutes:
+            return ranked_item
+    return None
 
-    def select_task(self) -> Optional[Item]:
-        """Select the best task based on available time window.
 
-        Selection algorithm:
-        - If window < 30 mins: Filter for short tasks (<=15 min) or @admin tags
-        - If window > 120 mins: Prioritize high-energy tasks
-        - Otherwise: Return first available active task
-
-        Skipped tasks (via skip_task) are excluded from selection.
-
-        Returns:
-            Best matching Item, or None if no tasks available.
-        """
-        window, _ = self.get_time_window()
-        actions = self._engine.next_actions()
-
-        # Filter out skipped tasks
-        available = [a for a in actions if a.id not in self._skipped_ids]
-
-        if not available:
-            return None
-
-        if window < QUICK_WIN_THRESHOLD:
-            # Quick Wins: short tasks or @admin
-            candidates = [
-                a
-                for a in available
-                if (a.estimated_duration is not None and a.estimated_duration <= 15)
-                or "@admin" in a.context_tags
-            ]
-            if candidates:
-                return candidates[0]
-
-        elif window > DEEP_WORK_THRESHOLD:
-            # Deep Work: high-energy, high-priority tasks
-            candidates = [
-                a
-                for a in available
-                if a.meta_payload.get("energy") == "high"
-                or a.meta_payload.get("priority") == 1
-            ]
-            if candidates:
-                return candidates[0]
-
-        # Fallback: first available task
-        return available[0] if available else None
-
-    def skip_task(self, item_id: str) -> None:
-        """Mark a task as skipped for this session.
-
-        Skipped tasks won't be selected again until the session ends
-        or reset_skipped() is called.
-
-        Args:
-            item_id: ID of the task to skip.
-        """
-        self._skipped_ids.add(item_id)
-
-    def reset_skipped(self) -> None:
-        """Clear all skipped tasks, making them eligible for selection again."""
-        self._skipped_ids.clear()
-
-    def complete_task(self, item_id: str) -> None:
-        """Mark a task as completed.
-
-        Args:
-            item_id: ID of the task to complete.
-        """
-        self._engine.complete_item(item_id)
-
-    def get_resources_for_task(self, item: Item) -> list[Resource]:
-        """Get resources matching the task's tags.
-
-        Args:
-            item: The task (Item) whose context_tags are used for matching.
-
-        Returns:
-            List of Resource objects with matching tags, or [] if no tags.
-        """
-        if not item.context_tags:
-            return []
-        return self._engine.get_resources_by_tags(item.context_tags)
-
-    def get_semantic_resources_for_task(self, item: Item, top_k: int = 3) -> list[VectorHit]:
-        """Get semantically related resources for task title."""
-        return self._engine.get_semantic_resources(item.title, top_k=top_k)
-
-    def get_task_count(self) -> int:
-        """Get total count of available active tasks.
-
-        Returns:
-            Number of active tasks (excluding skipped).
-        """
-        actions = self._engine.next_actions()
-        return len([a for a in actions if a.id not in self._skipped_ids])
-
-    def get_window_description(self) -> str:
-        """Get human-readable description of current time window.
-
-        Returns:
-            Description like "You have 45 mins before 'Weekly Sync'"
-            or "Open schedule - no upcoming events".
-        """
-        window, event_title = self.get_time_window()
-
-        if event_title is None:
-            return "Open schedule - no upcoming events"
-
-        if window < 60:
-            return f"You have {window} mins before '{event_title}'"
-        else:
-            hours = window // 60
-            mins = window % 60
-            if mins > 0:
-                return f"You have {hours}h {mins}m before '{event_title}'"
-            else:
-                return f"You have {hours}h before '{event_title}'"
-
-    def get_mode_indicator(self) -> str:
-        """Get indicator for current focus mode type.
-
-        Returns:
-            Mode description based on time window.
-        """
-        window, _ = self.get_time_window()
-
-        if window < QUICK_WIN_THRESHOLD:
-            return "Quick Wins Mode"
-        elif window > DEEP_WORK_THRESHOLD:
-            return "Deep Work Mode"
-        else:
-            return "Standard Mode"
+def _fallback_explanation(
+    active_items: list[_RankedPlannedItem],
+    calendar_availability: CalendarAvailability | None,
+) -> str:
+    selected = active_items[0]
+    if calendar_availability is None or not calendar_availability.available:
+        return "Calendar unavailable. Falling back to saved plan order."
+    return (
+        f"Using saved plan order for {selected.bucket.title()} because calendar fit "
+        "metadata is incomplete."
+    )

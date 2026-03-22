@@ -25,7 +25,7 @@ class FlowApp(App):
 
     def __init__(
         self,
-        initial_screen: Optional[Type[Screen]] = None,
+        initial_screen: Optional[Type[Screen] | Screen] = None,
         startup_context: dict[str, object] | None = None,
         **kwargs,
     ):  # type: ignore[no-untyped-def]
@@ -37,7 +37,10 @@ class FlowApp(App):
         """Push initial screen on mount."""
         self._start_index_worker()
         if self._initial_screen is not None:
-            self.push_screen(self._initial_screen())
+            if isinstance(self._initial_screen, Screen):
+                self.push_screen(self._initial_screen)
+            else:
+                self.push_screen(self._initial_screen())
         else:
             self.push_screen(InboxScreen(startup_context=self._startup_context))
 

@@ -76,6 +76,7 @@ class SqliteDB:
             self._migrate_add_updated_at(conn)
             self._init_index_jobs(conn)
             self._init_daily_plan_entries(conn)
+            self._init_daily_wrap_status(conn)
             conn.commit()
 
     def _migrate_add_estimated_duration(self, conn: sqlite3.Connection) -> None:
@@ -141,6 +142,20 @@ class SqliteDB:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_daily_plan_date_bucket_position "
                 "ON daily_plan_entries(plan_date, bucket, position)"
+            )
+        except sqlite3.OperationalError:
+            return
+
+    def _init_daily_wrap_status(self, conn: sqlite3.Connection) -> None:
+        """Create wrap-status table for explicit end-of-day acknowledgement."""
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS daily_wrap_status (
+                    plan_date TEXT PRIMARY KEY,
+                    wrapped_at DATETIME NOT NULL
+                )
+                """
             )
         except sqlite3.OperationalError:
             return
@@ -302,7 +317,7 @@ class SqliteDB:
         min_duration: Optional[int] = None,
         status: str = "active",
     ) -> list[Item]:
-        """Return active items filtered by estimated_duration range (for Focus Mode)."""
+        """Return active items filtered by estimated_duration range."""
         with sqlite3.connect(self._path) as conn:
             conn.row_factory = sqlite3.Row
             query = "SELECT * FROM items WHERE status = ?"
@@ -388,6 +403,38 @@ class SqliteDB:
             if entry["item"].status == "done":
                 summary[completed_key] += 1
         return summary
+
+    def mark_daily_plan_wrapped(self, plan_date: str) -> None:
+        """Persist that the user explicitly completed wrap for a plan date."""
+        wrapped_at = _iso(datetime.now(timezone.utc))
+        with sqlite3.connect(self._path) as conn:
+            conn.execute(
+                """
+                INSERT INTO daily_wrap_status (plan_date, wrapped_at)
+                VALUES (?, ?)
+                ON CONFLICT(plan_date) DO UPDATE SET wrapped_at = excluded.wrapped_at
+                """,
+                (plan_date, wrapped_at),
+            )
+            conn.commit()
+
+    def get_latest_unwrapped_plan_date(self, before_date: str) -> Optional[str]:
+        """Return the latest prior plan date that has not been explicitly wrapped."""
+        with sqlite3.connect(self._path) as conn:
+            row = conn.execute(
+                """
+                SELECT DISTINCT d.plan_date
+                FROM daily_plan_entries d
+                LEFT JOIN daily_wrap_status w ON w.plan_date = d.plan_date
+                WHERE d.plan_date < ? AND w.plan_date IS NULL
+                ORDER BY d.plan_date DESC
+                LIMIT 1
+                """,
+                (before_date,),
+            ).fetchone()
+        if row is None:
+            return None
+        return str(row[0])
 
     def enqueue_index_job(
         self,

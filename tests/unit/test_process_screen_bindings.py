@@ -89,7 +89,7 @@ async def test_process_screen_hides_cluster_list_when_no_suggestions(
 def test_process_screen_stage4_complete_uses_focus_bridge_copy_when_pending(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Stage 4 completion should promote Focus mode during first-run handoff."""
+    """Stage 4 completion should point users back to Daily Workspace."""
     screen = ProcessScreen()
     screen._first_run_focus_bridge_pending = True
     monkeypatch.setattr(screen._engine, "get_coach_current", lambda: None)
@@ -112,29 +112,29 @@ def test_process_screen_stage4_complete_uses_focus_bridge_copy_when_pending(
 
     assert widgets["#complete-state"].display is True
     assert widgets["#complete-icon"].value == "🎯"
-    assert "Focus mode" in str(widgets["#complete-text"].value)
-    assert widgets["#process-cta-text"].value == "Primary: Enter to Start Focus"
+    assert "Daily Workspace" in str(widgets["#complete-text"].value)
+    assert widgets["#process-cta-text"].value == "Primary: Enter to Return to Daily Workspace"
 
 
 @pytest.mark.asyncio
 async def test_process_screen_stage4_primary_routes_to_focus_for_first_run_bridge(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Stage 4 Enter should launch Focus and mark first-run completion once."""
+    """Stage 4 Enter should return to Daily Workspace and mark first-run completion once."""
     screen = ProcessScreen()
     screen._first_run_focus_bridge_pending = True
     monkeypatch.setattr(screen._engine, "get_coach_current", lambda: None)
 
     marked: list[bool] = []
-    launched: list[bool] = []
+    returned: list[bool] = []
     monkeypatch.setattr(
         "flow.tui.screens.process.process.mark_first_value_completed",
         lambda: marked.append(True),
     )
-    monkeypatch.setattr(screen, "action_start_focus", lambda: launched.append(True))
+    monkeypatch.setattr(screen, "action_go_back", lambda: returned.append(True))
 
     await screen._primary_stage4_async()
 
     assert marked == [True]
-    assert launched == [True]
+    assert returned == [True]
     assert screen._first_run_focus_bridge_pending is False

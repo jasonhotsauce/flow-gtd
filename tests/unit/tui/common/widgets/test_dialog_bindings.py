@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from textual.app import App, ComposeResult
-from textual.widgets import Input, Static
+from textual.widgets import Input, OptionList, Static
 
+from flow.models import Item
 from flow.tui.common.base_screen import FlowModalScreen
+from flow.tui.common.widgets.daily_workspace_plan_bucket_dialog import (
+    DailyWorkspacePlanBucketDialog,
+)
 from flow.tui.common.widgets.defer_dialog import DeferDialog
 from flow.tui.common.widgets.process_task_dialog import ProcessTaskDialog
 from flow.tui.common.widgets.project_picker_dialog import ProjectPickerDialog
@@ -67,3 +71,30 @@ async def test_quick_capture_dialog_uses_ops_style_copy() -> None:
     assert "Quick Capture" in title
     assert "Daily workspace" in status
     assert placeholder is not None and "next concrete step" in placeholder
+
+
+async def test_daily_workspace_plan_bucket_dialog_selects_top_on_first_enter() -> None:
+    """Bucket chooser should be immediately operable from its first focused state."""
+
+    dialog = DailyWorkspacePlanBucketDialog(
+        Item(id="task-1", type="action", title="Write proposal", status="active")
+    )
+    dismissed: list[dict[str, str] | None] = []
+
+    class DialogApp(App[None]):
+        def compose(self) -> ComposeResult:
+            if False:
+                yield
+
+    app = DialogApp()
+    async with app.run_test() as pilot:
+        app.push_screen(dialog, callback=dismissed.append)
+        await pilot.pause()
+
+        options = dialog.query_one("#daily-workspace-plan-bucket-options", OptionList)
+        assert options.highlighted == 0
+
+        await pilot.press("enter")
+        await pilot.pause()
+
+    assert dismissed == [{"bucket": "top"}]

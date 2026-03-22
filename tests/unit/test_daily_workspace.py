@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from flow.core.engine import Engine
+from flow.core.focus import CalendarAvailability
 from flow.models import Item
 
 
@@ -39,6 +40,29 @@ def test_save_daily_plan_exposes_top_and_bonus_items(temp_db_path: Path) -> None
     assert state["needs_plan"] is False
     assert [item.id for item in state["top_items"]] == ["top-1"]
     assert [item.id for item in state["bonus_items"]] == ["bonus-1"]
+
+
+def test_save_daily_plan_deduplicates_item_ids_before_persisting(
+    temp_db_path: Path,
+) -> None:
+    """Saving a plan should normalize duplicate item ids instead of crashing persistence."""
+    engine = Engine(db_path=temp_db_path)
+    for item in (
+        Item(id="task-1", type="action", title="Task 1", status="active"),
+        Item(id="task-2", type="action", title="Task 2", status="active"),
+    ):
+        engine._db.insert_inbox(item)  # type: ignore[attr-defined]
+
+    engine.save_daily_plan(
+        "2026-03-08",
+        top_item_ids=["task-1", "task-1"],
+        bonus_item_ids=["task-1", "task-2"],
+    )
+
+    state = engine.get_daily_workspace_state("2026-03-08")
+
+    assert [item.id for item in state["top_items"]] == ["task-1"]
+    assert [item.id for item in state["bonus_items"]] == ["task-2"]
 
 
 def test_daily_workspace_hides_non_active_planned_items(temp_db_path: Path) -> None:
@@ -100,6 +124,109 @@ def test_get_daily_workspace_candidates_groups_must_address_ready_and_inbox(
     assert [item.id for item in state["candidates"]["inbox"]] == ["inbox-1"]
     assert [item.id for item in state["candidates"]["ready_actions"]] == ["ready-1"]
     assert [item.id for item in state["candidates"]["suggested"]] == ["project-task-1"]
+
+
+def test_confirmed_workspace_exposes_grouped_unplanned_work_and_readds_removed_items(
+    temp_db_path: Path,
+) -> None:
+    """Confirmed workspace should keep unplanned work grouped by original source."""
+    engine = Engine(db_path=temp_db_path)
+    inbox_item = Item(id="inbox-1", type="inbox", title="Inbox", status="active")
+    next_action = Item(
+        id="next-1",
+        type="action",
+        title="Next",
+        status="active",
+    )
+    project = Item(
+        id="project-1",
+        type="project",
+        title="Project",
+        status="active",
+    )
+    planned_project_task = Item(
+        id="project-task-1",
+        type="action",
+        title="Planned project task",
+        status="active",
+        parent_id="project-1",
+    )
+    remaining_project_task = Item(
+        id="project-task-2",
+        type="action",
+        title="Remaining project task",
+        status="active",
+        parent_id="project-1",
+    )
+    for item in (
+        inbox_item,
+        next_action,
+        project,
+        planned_project_task,
+        remaining_project_task,
+    ):
+        engine._db.insert_inbox(item)  # type: ignore[attr-defined]
+
+    engine.save_daily_plan(
+        "2026-03-08",
+        top_item_ids=["inbox-1"],
+        bonus_item_ids=["project-task-1"],
+    )
+
+    state = engine.get_daily_workspace_state("2026-03-08")
+
+    assert [item.id for item in state["unplanned_work"]["inbox"]] == []
+    assert [item.id for item in state["unplanned_work"]["next_actions"]] == ["next-1"]
+    assert [item.id for item in state["unplanned_work"]["project_tasks"]] == [
+        "project-task-2"
+    ]
+
+    engine.save_daily_plan(
+        "2026-03-08",
+        top_item_ids=["inbox-1"],
+        bonus_item_ids=[],
+    )
+
+    updated_state = engine.get_daily_workspace_state("2026-03-08")
+
+    assert [item.id for item in updated_state["unplanned_work"]["project_tasks"]] == [
+        "project-task-1",
+        "project-task-2",
+    ]
+
+
+def test_engine_finds_latest_prior_unwrapped_plan_date(temp_db_path: Path) -> None:
+    """Engine should expose the most recent prior plan that still needs wrap."""
+    engine = Engine(db_path=temp_db_path)
+    item = Item(id="task-1", type="action", title="Task", status="active")
+    engine._db.insert_inbox(item)  # type: ignore[attr-defined]
+
+    engine.save_daily_plan("2026-03-07", top_item_ids=["task-1"], bonus_item_ids=[])
+    engine.save_daily_plan("2026-03-08", top_item_ids=["task-1"], bonus_item_ids=[])
+    engine.mark_daily_plan_wrapped("2026-03-07")
+
+    assert engine.get_latest_unwrapped_plan_date("2026-03-08") is None
+    assert engine.get_latest_unwrapped_plan_date("2026-03-09") == "2026-03-08"
+
+
+def test_completed_saved_plan_still_blocks_wrap_gate_until_wrapped(
+    temp_db_path: Path,
+) -> None:
+    """A completed saved plan should remain a wrap target instead of reverting to planning."""
+    engine = Engine(db_path=temp_db_path)
+    completed = Item(id="top-done", type="action", title="Top done", status="done")
+    engine._db.insert_inbox(completed)  # type: ignore[attr-defined]
+
+    engine.save_daily_plan("2026-03-08", top_item_ids=["top-done"], bonus_item_ids=[])
+
+    state = engine.get_daily_workspace_state("2026-03-08")
+
+    assert state["needs_plan"] is False
+    assert state["top_items"] == []
+    assert state["bonus_items"] == []
+    assert engine.get_daily_wrap_summary("2026-03-08")["completed_top_items"] == [
+        {"id": "top-done", "title": "Top done"}
+    ]
 
 
 def test_get_daily_wrap_summary_returns_rich_structured_feedback(temp_db_path: Path) -> None:
@@ -229,3 +356,37 @@ def test_generate_daily_wrap_insight_returns_none_without_provider(
     )
 
     assert engine.generate_daily_wrap_insight("2026-03-08") is None
+
+
+def test_engine_get_calendar_availability_exposes_compact_summary(
+    monkeypatch, temp_db_path: Path
+) -> None:
+    """Engine should return only the calendar summary Daily Workspace needs."""
+    engine = Engine(db_path=temp_db_path)
+    expected = CalendarAvailability(
+        available=True,
+        next_free_window_minutes=45,
+        minutes_until_next_event=60,
+    )
+
+    monkeypatch.setattr(engine, "_calendar_availability_service", lambda: expected)
+
+    assert engine.get_calendar_availability() == expected
+
+
+def test_engine_get_calendar_availability_degrades_to_unavailable_on_failure(
+    monkeypatch, temp_db_path: Path
+) -> None:
+    """Calendar provider failures should not escape through the engine."""
+    engine = Engine(db_path=temp_db_path)
+
+    def _raise() -> CalendarAvailability:
+        raise RuntimeError("calendar unavailable")
+
+    monkeypatch.setattr(engine, "_calendar_availability_service", _raise)
+
+    assert engine.get_calendar_availability() == CalendarAvailability(
+        available=False,
+        next_free_window_minutes=None,
+        minutes_until_next_event=None,
+    )

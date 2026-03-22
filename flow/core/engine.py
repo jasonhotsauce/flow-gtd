@@ -11,6 +11,7 @@ from flow.config import get_settings
 from flow.core.resources.factory import create_resource_store
 from flow.core.resources.store import ResourceStore
 from flow.core.rag import RAGService
+from flow.core.focus import CalendarAvailability
 from flow.core.services import (
     DailyPlanService,
     ProcessService,
@@ -18,6 +19,7 @@ from flow.core.services import (
     ReviewService,
     TaskService,
 )
+from flow.core.services.calendar_availability import get_calendar_availability
 from flow.core.tagging import extract_tags, extract_tags_async
 from flow.database.resources import ResourceDB
 from flow.database.sqlite import SqliteDB
@@ -48,6 +50,7 @@ class Engine:
         self._process_service = ProcessService(self._db)
         self._resource_service = ResourceService(self._resource_store)
         self._rag_service = RAGService(self._db, self._resource_db)
+        self._calendar_availability_service = get_calendar_availability
         self._process_inbox: list[Item] = []
         self._dedup_index = 0
         self._two_min_index = 0
@@ -254,6 +257,15 @@ class Engine:
             for hit in hits
         ]
 
+    def get_task_detail_resources(
+        self, task_id: str, task_title: str
+    ) -> dict[str, list[Resource | VectorHit]]:
+        """Return both tag-matched and semantic resources for a task detail view."""
+        return {
+            "tag_resources": self.get_resources_for_task(task_id)[:2],
+            "semantic_resources": self.get_semantic_resources(task_title, top_k=2),
+        }
+
     def enqueue_resource_index(
         self,
         *,
@@ -365,23 +377,45 @@ class Engine:
     def get_daily_workspace_state(self, plan_date: str) -> dict[str, object]:
         """Return plan status and planning candidates for a given day."""
         top_items, bonus_items = self._daily_plan_service.get_plan_items(plan_date)
+        planned_ids = {item.id for item in top_items + bonus_items}
         candidates = self._build_daily_workspace_candidates(
-            date.fromisoformat(plan_date), planned_ids={item.id for item in top_items + bonus_items}
+            date.fromisoformat(plan_date), planned_ids=planned_ids
         )
+        has_saved_plan = self._daily_plan_service.has_saved_plan(plan_date)
         return {
-            "needs_plan": not top_items and not bonus_items,
+            "needs_plan": not has_saved_plan,
             "top_items": top_items,
             "bonus_items": bonus_items,
             "candidates": candidates,
+            "unplanned_work": self._build_daily_unplanned_work(planned_ids),
         }
 
     def get_daily_wrap_summary(self, plan_date: str) -> dict[str, object]:
         """Return completion summary for today's plan."""
         return self._daily_plan_service.get_wrap_summary(plan_date)
 
+    def get_calendar_availability(self) -> CalendarAvailability:
+        """Return a compact calendar summary for Daily Workspace heuristics."""
+        try:
+            return self._calendar_availability_service()
+        except Exception:
+            return CalendarAvailability(
+                available=False,
+                next_free_window_minutes=None,
+                minutes_until_next_event=None,
+            )
+
     def generate_daily_wrap_insight(self, plan_date: str) -> str | None:
         """Generate an optional AI insight for today's wrap."""
         return self._daily_plan_service.generate_wrap_insight(plan_date)
+
+    def mark_daily_plan_wrapped(self, plan_date: str) -> None:
+        """Persist explicit wrap completion for a plan date."""
+        self._daily_plan_service.mark_plan_wrapped(plan_date)
+
+    def get_latest_unwrapped_plan_date(self, before_date: str) -> str | None:
+        """Return the newest earlier plan date that still needs wrap."""
+        return self._daily_plan_service.get_latest_unwrapped_plan_date(before_date)
 
     def _build_daily_workspace_candidates(
         self, plan_day: date, planned_ids: set[str]
@@ -427,6 +461,31 @@ class Engine:
             "inbox": inbox_items,
             "ready_actions": ready_actions,
             "suggested": suggested,
+        }
+
+    def _build_daily_unplanned_work(self, planned_ids: set[str]) -> dict[str, list[Item]]:
+        """Group open unplanned work for the confirmed workspace state."""
+        inbox_items = [
+            item for item in self.list_inbox() if item.id not in planned_ids
+        ]
+        next_actions = [
+            item
+            for item in self.next_actions()
+            if item.id not in planned_ids
+            and item.type == "action"
+            and item.parent_id is None
+        ]
+        project_tasks = [
+            item
+            for item in self.next_actions()
+            if item.id not in planned_ids
+            and item.type == "action"
+            and item.parent_id is not None
+        ]
+        return {
+            "inbox": inbox_items,
+            "next_actions": next_actions,
+            "project_tasks": project_tasks,
         }
 
     def get_project_next_action(self, project_id: str) -> Optional[Item]:

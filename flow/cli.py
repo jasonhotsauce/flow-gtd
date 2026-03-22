@@ -3,6 +3,7 @@
 import re
 import multiprocessing
 import uuid
+from datetime import date
 from importlib.metadata import PackageNotFoundError, version as get_package_version
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Type, TypedDict
@@ -26,7 +27,6 @@ from flow.sync.reminders import get_reminder_auth_status, sync_reminders_to_flow
 from flow.tui.app import FlowApp
 from flow.tui.screens.action.action import ActionScreen
 from flow.tui.screens.daily_workspace.daily_workspace import DailyWorkspaceScreen
-from flow.tui.screens.focus.focus import FocusScreen
 from flow.tui.screens.process import ProcessScreen
 from flow.tui.screens.projects.projects import ProjectsScreen
 from flow.tui.screens.review.review import ReviewScreen
@@ -207,7 +207,20 @@ def _launch_tui(initial_screen: "Optional[Type[Screen]]" = None) -> None:
         raise typer.Exit(0)
     if already_onboarded:
         _ensure_resource_storage_selected()
-    FlowApp(initial_screen=initial_screen, startup_context=startup_context).run()
+    resolved_initial_screen = initial_screen
+    if initial_screen is DailyWorkspaceScreen:
+        try:
+            prior_wrap_date = Engine().get_latest_unwrapped_plan_date(
+                date.today().isoformat()
+            )
+        except Exception:
+            prior_wrap_date = None
+        if prior_wrap_date:
+            resolved_initial_screen = DailyWorkspaceScreen(
+                plan_date=prior_wrap_date,
+                start_in_wrap=True,
+            )
+    FlowApp(initial_screen=resolved_initial_screen, startup_context=startup_context).run()
 
 
 @app.callback(invoke_without_command=True)
@@ -358,19 +371,6 @@ def sync_status() -> None:
 def review() -> None:
     """Launch TUI Weekly Review (Stale, Someday, Report)."""
     _launch_tui(ReviewScreen)
-
-
-@app.command()
-def focus() -> None:
-    """Launch Focus Mode - AI selects best task for your time window.
-
-    Smart Dispatcher analyzes your calendar to determine available time,
-    then selects the optimal task:
-    - < 30 mins: Quick Wins (short tasks, @admin)
-    - > 2 hours: Deep Work (high-energy tasks)
-    - Otherwise: Standard priority order
-    """
-    _launch_tui(FocusScreen)
 
 
 @app.command()
