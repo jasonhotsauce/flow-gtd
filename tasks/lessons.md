@@ -55,3 +55,7 @@
 - Date: 2026-03-21
 - Pattern: I started a repository release by manually editing version/release metadata and planning ad hoc git/gh commands instead of using the existing Makefile workflow the user expected.
 - Prevention rule: For Flow release tasks, inspect the Makefile first and use its release targets (`make bump-*`, `make release`, `make publish`, `make brew-formula` as applicable) instead of manual version edits or hand-run git/GitHub release commands unless the user explicitly asks otherwise.
+
+- Date: 2026-03-22
+- Pattern: I claimed the startup daily recap could be acknowledged without verifying that the actual `w`/`x` key paths advanced the gated screen out of the prior-day recap.
+- Prevention rule: For any gated TUI continuation flow in Flow, add or run a real Textual keypress test for the advertised acknowledgement keys and assert the screen transitions to the next state, not just that a handler method mutates backend state.

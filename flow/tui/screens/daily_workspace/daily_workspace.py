@@ -1335,6 +1335,9 @@ class DailyWorkspaceScreen(FlowScreen):
 
     def action_confirm_plan(self) -> None:
         """Persist the current draft plan and switch into focus mode."""
+        if self._mode == "focus" and self._startup_recap_gate and self._show_recap_summary:
+            self._acknowledge_startup_recap_and_continue()
+            return
         if self._mode != "plan" or not self._top_items:
             return
         self._engine.save_daily_plan(
@@ -1415,6 +1418,9 @@ class DailyWorkspaceScreen(FlowScreen):
 
     def action_show_daily_recap(self) -> None:
         """Render recap summary for the current plan."""
+        if self._startup_recap_gate and self._show_recap_summary:
+            self._acknowledge_startup_recap_and_continue()
+            return
         self._show_recap_summary = True
         self._recap_summary = self._engine.get_daily_recap_summary(self._plan_date)
         self._engine.mark_daily_plan_recapped(self._plan_date)
@@ -1423,6 +1429,22 @@ class DailyWorkspaceScreen(FlowScreen):
         self._set_text("#recap-content", recap_text)
         self._set_text("#daily-recap", "")
         self._refresh_supporting_panes()
+
+    def _acknowledge_startup_recap_and_continue(self) -> None:
+        """Mark the gated recap complete and load today's normal workspace."""
+        prior_plan_date = self._plan_date
+        today_plan_date = date.today().isoformat()
+        self._engine.mark_daily_plan_recapped(prior_plan_date)
+        self._startup_recap_gate = False
+        self._show_recap_summary = False
+        self._recap_summary = None
+        self._plan_date = today_plan_date
+        self._detail_resource_cache.clear()
+        self._detail_status_override = None
+        self._set_text("#ops-status-text", "FLOW  |  Loading today's workspace")
+        self._set_text("#daily-title", "Loading Today")
+        self._set_text("#daily-subtitle", f"Opening {today_plan_date}")
+        asyncio.create_task(self._refresh_async())
 
     def action_generate_recap_insight(self) -> None:
         """Generate optional AI insight for the current daily recap."""

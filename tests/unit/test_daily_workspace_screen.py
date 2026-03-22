@@ -549,6 +549,106 @@ async def test_confirmed_recap_focus_keeps_list_navigation_active() -> None:
         assert unplanned_list.highlighted == 1
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("key", ["w", "x"])
+async def test_startup_recap_gate_acknowledgement_routes_into_today(
+    monkeypatch, key: str
+) -> None:
+    """Acknowledging the startup recap gate should continue directly into today's workspace."""
+
+    class FakeDate:
+        @classmethod
+        def today(cls) -> Any:
+            class _Today:
+                def isoformat(self) -> str:
+                    return "2026-03-22"
+
+            return _Today()
+
+    class FakeEngine:
+        def __init__(self) -> None:
+            self.recapped_dates: list[str] = []
+
+        def get_daily_workspace_state(self, plan_date: str) -> dict[str, object]:
+            if plan_date == "2026-03-08":
+                return _confirmed_state()
+            if plan_date == "2026-03-22":
+                return _state_with_candidates()
+            raise AssertionError(f"unexpected plan_date: {plan_date}")
+
+        def get_daily_recap_summary(self, plan_date: str) -> dict[str, object]:
+            if plan_date == "2026-03-08":
+                return {
+                    "top_total": 2,
+                    "top_completed": 1,
+                    "bonus_total": 1,
+                    "bonus_completed": 0,
+                    "all_top_completed": False,
+                    "headline": "Solid day",
+                    "coaching_feedback": "Close the loop before starting a new day.",
+                    "completed_top_items": [
+                        {"id": "top-1", "title": "Draft launch brief"}
+                    ],
+                    "completed_bonus_items": [],
+                    "open_planned_items": [
+                        {"id": "top-2", "title": "Review blockers"}
+                    ],
+                }
+            if plan_date == "2026-03-22":
+                return {
+                    "top_total": 0,
+                    "top_completed": 0,
+                    "bonus_total": 0,
+                    "bonus_completed": 0,
+                    "all_top_completed": False,
+                    "headline": "Daily Recap",
+                    "coaching_feedback": "Recap will fill in as you complete planned work.",
+                    "completed_top_items": [],
+                    "completed_bonus_items": [],
+                    "open_planned_items": [],
+                }
+            raise AssertionError(f"unexpected recap plan_date: {plan_date}")
+
+        def mark_daily_plan_recapped(self, plan_date: str) -> None:
+            self.recapped_dates.append(plan_date)
+
+        def get_task_detail_resources(
+            self, _item_id: str, _item_title: str
+        ) -> dict[str, list[Any]]:
+            return {"tag_resources": [], "semantic_resources": []}
+
+    class DailyWorkspaceTestApp(App[None]):
+        def compose(self) -> ComposeResult:
+            yield screen
+
+    monkeypatch.setattr(
+        "flow.tui.screens.daily_workspace.daily_workspace.date", FakeDate
+    )
+
+    screen = DailyWorkspaceScreen(plan_date="2026-03-08", start_in_recap=True)
+    fake_engine = FakeEngine()
+    screen._engine = fake_engine
+
+    app = DailyWorkspaceTestApp()
+    async with app.run_test() as pilot:
+        app.push_screen(screen)
+        await pilot.pause()
+
+        assert str(screen.query_one("#daily-title", Static).renderable) == "Daily Recap"
+
+        await pilot.press(key)
+        await pilot.pause()
+        await asyncio.sleep(0)
+        await pilot.pause()
+
+        assert fake_engine.recapped_dates == ["2026-03-08"]
+        assert screen._plan_date == "2026-03-22"
+        assert screen._startup_recap_gate is False
+        assert screen._show_recap_summary is False
+        assert str(screen.query_one("#daily-title", Static).renderable) == "Plan Today"
+        assert "2026-03-22" in str(screen.query_one("#daily-subtitle", Static).renderable)
+
+
 def test_build_candidate_lines_groups_items_for_planning() -> None:
     """Planning list should keep bucket labels visible."""
     screen = DailyWorkspaceScreen()

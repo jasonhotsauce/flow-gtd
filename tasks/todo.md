@@ -21,6 +21,36 @@
   - Tests: targeted unit coverage updated for renamed UI actions, startup recap gating, and recap summary APIs.
   - Review findings: no material issues found.
 
+# Daily Recap Gate Acknowledgement
+
+- [x] Confirm the startup daily recap acknowledgement path and capture the root cause
+- [x] Add a failing regression test for acknowledging a prior-day recap gate routing into today's workspace
+- [x] Implement the minimal daily recap acknowledgement transition into today's workspace
+- [x] Run targeted verification
+- [x] Run Flow review checklist on touched files
+
+## Review / Results
+- Root cause:
+  - In the startup recap gate, `w` called `action_show_daily_recap()`, which marked the prior day recapped but only re-rendered the same recap pane for the same `plan_date`.
+  - `x` remained bound to `action_confirm_plan()`, which returned immediately outside planning mode, so it did nothing in the recap gate.
+- Implemented behavior:
+  - When the screen is launched in the prior-day startup recap gate, both `w` and `x` now acknowledge that recap, clear the gate flags, switch `plan_date` to today, and asynchronously load today's normal workspace in-place.
+  - Normal non-gated recap behavior is unchanged: `w` still opens the current plan's explicit recap summary.
+- TDD evidence:
+  - `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py -k startup_recap_gate_acknowledgement_routes_into_today -v` initially failed:
+    - `w`: prior recap was marked but `screen._plan_date` stayed on `2026-03-08`
+    - `x`: no recap acknowledgement was recorded at all
+  - The same command passed after the fix, covering both `w` and `x` with real Textual key presses.
+- Verification evidence:
+  - `source .venv/bin/activate && pytest tests/unit/test_daily_workspace_screen.py -v` => `46 passed in 2.36s`.
+- Mandatory Flow review checklist:
+  - Security/privacy: no secrets, unsafe SQL, or sensitive logging added.
+  - Architecture: change stays inside the Daily Workspace TUI screen and its unit tests; no dependency-direction violations introduced.
+  - Typing: changed helper and test doubles remain explicitly typed.
+  - Async safety: transition still uses `asyncio.create_task(self._refresh_async())`; no new blocking TUI work added.
+  - Tests: added runtime regression coverage for both `w` and `x` acknowledgement paths, and reran the full screen module.
+  - Review findings: no material issues found.
+
 # Reminders Sync Active-Only
 
 - [x] Review existing Reminders sync path and identify why completed reminders still appear in Flow
