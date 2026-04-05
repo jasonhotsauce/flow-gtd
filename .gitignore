@@ -88,3 +88,6 @@ temp/
 
 # Local Codex hook marker
 .codex/.env_setup_done
+
+# Local task management
+tasks/
