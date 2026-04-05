@@ -1,3 +1,35 @@
+# Worktree Environment Bootstrap
+
+- [x] Write design and implementation plan docs for worktree environment bootstrap
+- [x] Add failing regression tests for repo-managed worktree environment setup
+- [x] Implement versioned bootstrap script and `make worktree-setup`
+- [x] Add parent-root convenience wrapper script for the worktree root
+- [x] Update README with the worktree bootstrap workflow
+- [x] Run targeted verification for tests and real setup commands
+
+## Review / Results
+- Implemented behavior:
+  - Added `scripts/setup_worktree_env.sh` and `make worktree-setup WORKTREE=<name>` so a checkout can create its own `.venv`, install `poetry`, install dependencies from `main`, and then install the target checkout in editable mode.
+  - Added a parent-root convenience wrapper at `/Users/wenbinzhang/Documents/flow-gtd/worktree-setup` so the setup command can be launched directly from the shared directory that contains `main/` and sibling worktrees.
+  - Updated `README.md` with the supported parent-root bootstrap workflow.
+  - Synced `Makefile`, `README.md`, and `scripts/setup_worktree_env.sh` into the sibling `../main` checkout so `make -C main worktree-setup ...` works immediately in the current local layout.
+- TDD evidence:
+  - `source .venv/bin/activate && pytest tests/unit/test_worktree_env_setup.py -v` initially failed because `scripts/setup_worktree_env.sh` did not exist.
+  - The same command passed after the implementation: `3 passed in 2.14s`.
+- Verification evidence:
+  - From `/Users/wenbinzhang/Documents/flow-gtd`: `./worktree-setup main` completed successfully and created `/Users/wenbinzhang/Documents/flow-gtd/main/.venv`.
+  - From `/Users/wenbinzhang/Documents/flow-gtd`: `./worktree-setup project-tasks-as-candidate` completed successfully and reused `/Users/wenbinzhang/Documents/flow-gtd/project-tasks-as-candidate/.venv` while reinstalling from `main`.
+  - `source .venv/bin/activate && python -c 'import flow,sys; print(sys.executable); print(flow.__file__)'` in `/Users/wenbinzhang/Documents/flow-gtd/main` resolved to `main/.venv/bin/python` and `main/flow/__init__.py`.
+  - `source .venv/bin/activate && python -c 'import flow,sys; print(sys.executable); print(flow.__file__)'` in `/Users/wenbinzhang/Documents/flow-gtd/project-tasks-as-candidate` resolved to `project-tasks-as-candidate/.venv/bin/python` and `project-tasks-as-candidate/flow/__init__.py`.
+  - `source .venv/bin/activate && poetry --version` reported `Poetry (version 2.3.3)` in both checkouts.
+- Mandatory Flow review checklist:
+  - Security/privacy: no secrets, unsafe SQL, or sensitive logging added; the new shell entrypoints only operate on explicit local checkout paths.
+  - Architecture: changes stay in repo tooling, docs, and tests; no Flow package dependency-direction rules were affected.
+  - Typing: the new Python test module uses explicit `Path` and `CompletedProcess[str]`-compatible typing.
+  - Async safety: no Textual runtime paths changed.
+  - Tests: added focused regression coverage for sibling-target setup, `main` setup, and missing-target failure.
+  - Review findings: no material issues found.
+
 # Daily Recap Rename
 
 - [x] Record implementation plan and rename scope

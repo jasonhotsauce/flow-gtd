@@ -222,3 +222,12 @@ install-all: ## Install with all optional dependencies
 	@echo "$(YELLOW)Installing with all LLM providers...$(RESET)"
 	poetry install --extras "all-llm"
 	@echo "$(GREEN)Install complete.$(RESET)"
+
+.PHONY: worktree-setup
+worktree-setup: ## Create a local .venv for WORKTREE using main's dependency files
+	@if [ -z "$(WORKTREE)" ]; then \
+		echo "$(RED)Error: WORKTREE is required.$(RESET)"; \
+		echo "Usage: make worktree-setup WORKTREE=<main-or-sibling-folder>"; \
+		exit 1; \
+	fi
+	bash ./scripts/setup_worktree_env.sh "$(WORKTREE)"

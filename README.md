@@ -24,6 +24,23 @@ pip3 install poetry
 poetry install
 ```
 
+### Git Worktrees
+
+If you use the sibling worktree layout with a shared parent directory that contains `main/` and other worktree folders, bootstrap a checkout from that parent directory with:
+
+```bash
+make -C main worktree-setup WORKTREE=<main-or-sibling-folder>
+```
+
+Examples:
+
+```bash
+make -C main worktree-setup WORKTREE=main
+make -C main worktree-setup WORKTREE=project-tasks-as-candidate
+```
+
+This creates a local `.venv` inside the requested checkout, installs `poetry` there if needed, installs dependencies from `main/pyproject.toml` and `main/poetry.lock`, and then installs the target checkout itself in editable mode.
+
 Optional extras:
 
 ```bash
