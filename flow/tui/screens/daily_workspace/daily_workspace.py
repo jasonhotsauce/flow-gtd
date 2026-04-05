@@ -196,21 +196,36 @@ class DailyWorkspaceScreen(FlowScreen):
             return "Bonus"
         return "Not planned"
 
-    def _build_candidate_lines(
-        self, candidates: dict[str, list[object]]
-    ) -> list[tuple[str, str]]:
-        """Flatten candidate groups into visible labeled lines."""
+    def _build_candidate_options(
+        self, candidates: dict[str, list[Item]]
+    ) -> list[Option]:
+        """Return grouped options for the planning candidate pane."""
         labels = {
             "must_address": "Must",
             "inbox": "Inbox",
             "ready_actions": "Ready",
+            "project_tasks": "Project",
             "suggested": "Suggested",
         }
-        lines: list[tuple[str, str]] = []
-        for bucket in ("must_address", "inbox", "ready_actions", "suggested"):
-            for item in candidates.get(bucket, []):
-                lines.append((f"{bucket}:{item.id}", f"[{labels[bucket]}] {item.title}"))
-        return lines
+        options: list[Option] = []
+        for bucket in (
+            "must_address",
+            "inbox",
+            "ready_actions",
+            "project_tasks",
+            "suggested",
+        ):
+            items = candidates.get(bucket, [])
+            options.append(
+                Option(
+                    f"{labels[bucket]} ({len(items)})",
+                    id=f"header:{bucket}",
+                    disabled=True,
+                )
+            )
+            for item in items:
+                options.append(Option(item.title, id=f"{bucket}:{item.id}"))
+        return options
 
     def _build_plan_lines(
         self, *, top_items: list[object], bonus_items: list[object]
@@ -975,8 +990,20 @@ class DailyWorkspaceScreen(FlowScreen):
             self._set_text("#daily-section-title", "[1] Planning Candidates")
             self._set_text("#daily-summary", f"Top 3: {len(self._top_items)}/3\nBonus: {len(self._bonus_items)}")
             self._set_text("#candidates-pane-title", "[1] Candidates")
-            if any(candidates[bucket] for bucket in ("must_address", "inbox", "ready_actions", "suggested")):
-                self._set_text("#candidates-pane-status", "Must, Inbox, Ready, Suggested  |  n: New task")
+            if any(
+                candidates.get(bucket, [])
+                for bucket in (
+                    "must_address",
+                    "inbox",
+                    "ready_actions",
+                    "project_tasks",
+                    "suggested",
+                )
+            ):
+                self._set_text(
+                    "#candidates-pane-status",
+                    "Must, Inbox, Ready, Project, Suggested  |  n: New task",
+                )
             else:
                 self._set_text("#candidates-pane-status", "No candidates yet  |  n: New task")
             self._set_text("#top-draft-pane-title", "Top 3 Draft")
@@ -985,11 +1012,17 @@ class DailyWorkspaceScreen(FlowScreen):
             self._set_classes("#today-pane", "-hidden", True)
             self._set_classes("#candidates-pane", "-hidden", False)
 
-            for option_id, label in self._build_candidate_lines(candidates):
+            for option in self._build_candidate_options(candidates):
                 if options is not None:
-                    options.add_option(Option(label, id=option_id))
-            for bucket in ("must_address", "inbox", "ready_actions", "suggested"):
-                for item in candidates[bucket]:
+                    options.add_option(option)
+            for bucket in (
+                "must_address",
+                "inbox",
+                "ready_actions",
+                "project_tasks",
+                "suggested",
+            ):
+                for item in candidates.get(bucket, []):
                     self._candidate_lookup[f"{bucket}:{item.id}"] = item
             if options is not None and options.option_count:
                 options.action_first()

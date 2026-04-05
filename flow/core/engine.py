@@ -442,25 +442,18 @@ class Engine:
             for item in active_actions
             if item.parent_id is None and item.id not in must_address_ids
         ]
-
-        suggested: list[Item] = []
-        for _project, actions in self.list_projects_with_actions():
-            for action in actions:
-                if action.id in planned_ids or action.id in must_address_ids:
-                    continue
-                suggested.append(action)
-                break
-
-        suggested_ids = {item.id for item in suggested}
-        ready_actions = [
-            item for item in ready_actions if item.id not in suggested_ids
+        project_tasks = [
+            item
+            for item in active_actions
+            if item.parent_id is not None and item.id not in must_address_ids
         ]
 
         return {
             "must_address": must_address,
             "inbox": inbox_items,
             "ready_actions": ready_actions,
-            "suggested": suggested,
+            "project_tasks": project_tasks,
+            "suggested": [],
         }
 
     def _build_daily_unplanned_work(self, planned_ids: set[str]) -> dict[str, list[Item]]:

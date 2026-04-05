@@ -105,7 +105,7 @@ If you choose Obsidian Vault, install Obsidian CLI and provide your vault path.
 
 - `flow` and `flow tui` now open the daily workspace instead of dropping directly into Inbox.
 - The daily workspace has three main jobs:
-  - `Plan`: build today's Top 3 and Bonus items from visible draft panes fed by candidate buckets (`Must`, `Inbox`, `Ready`, `Suggested`), then press `x` to confirm the plan
+  - `Plan`: build today's Top 3 and Bonus items from visible draft panes fed by grouped candidate sections (`Must`, `Inbox`, `Ready`, `Project`, `Suggested`), then press `x` to confirm the plan
   - `Confirmed execution`: keep editing today's Top 3 and Bonus after confirmation while the right side shows grouped unplanned work (`Inbox`, `Next Actions`, `Project Tasks`)
   - `Daily Recap`: open recap explicitly with `w` when you want completion counts, accomplishments, carry-forward items, deterministic coaching feedback, and optional AI insight
 - Planning stays on one screen: you can add, remove, promote, demote, and reorder draft items without leaving the workspace.

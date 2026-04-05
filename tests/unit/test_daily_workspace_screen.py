@@ -152,8 +152,17 @@ def _state_with_candidates() -> dict[str, object]:
             "ready_actions": [
                 Item(id="cand-3", type="action", title="Tidy backlog", status="active")
             ],
+            "project_tasks": [
+                Item(
+                    id="cand-4",
+                    type="action",
+                    title="Prep follow-up",
+                    status="active",
+                    parent_id="project-1",
+                )
+            ],
             "suggested": [
-                Item(id="cand-4", type="action", title="Prep follow-up", status="active")
+                Item(id="cand-5", type="action", title="Check timeline", status="active")
             ],
         },
     }
@@ -649,24 +658,56 @@ async def test_startup_recap_gate_acknowledgement_routes_into_today(
         assert "2026-03-22" in str(screen.query_one("#daily-subtitle", Static).renderable)
 
 
-def test_build_candidate_lines_groups_items_for_planning() -> None:
-    """Planning list should keep bucket labels visible."""
+def test_build_candidate_options_group_items_for_planning() -> None:
+    """Planning list should mirror the grouped option structure used in focus mode."""
     screen = DailyWorkspaceScreen()
-    lines = screen._build_candidate_lines(
+    options = screen._build_candidate_options(
         {
             "must_address": [Item(id="1", type="action", title="Due", status="active")],
             "inbox": [Item(id="2", type="inbox", title="Clarify note", status="active")],
             "ready_actions": [Item(id="3", type="action", title="Ready", status="active")],
-            "suggested": [Item(id="4", type="action", title="Suggested", status="active")],
+            "project_tasks": [
+                Item(
+                    id="4",
+                    type="action",
+                    title="Project task",
+                    status="active",
+                    parent_id="project-1",
+                )
+            ],
+            "suggested": [Item(id="5", type="action", title="Suggested", status="active")],
         }
     )
 
-    assert lines == [
-        ("must_address:1", "[Must] Due"),
-        ("inbox:2", "[Inbox] Clarify note"),
-        ("ready_actions:3", "[Ready] Ready"),
-        ("suggested:4", "[Suggested] Suggested"),
+    assert [str(option.id) for option in options] == [
+        "header:must_address",
+        "must_address:1",
+        "header:inbox",
+        "inbox:2",
+        "header:ready_actions",
+        "ready_actions:3",
+        "header:project_tasks",
+        "project_tasks:4",
+        "header:suggested",
+        "suggested:5",
     ]
+    assert _option_prompts(options) == [
+        "Must (1)",
+        "Due",
+        "Inbox (1)",
+        "Clarify note",
+        "Ready (1)",
+        "Ready",
+        "Project (1)",
+        "Project task",
+        "Suggested (1)",
+        "Suggested",
+    ]
+    assert options[0].disabled is True
+    assert options[2].disabled is True
+    assert options[4].disabled is True
+    assert options[6].disabled is True
+    assert options[8].disabled is True
 
 
 def test_apply_workspace_state_renders_visible_top_and_bonus_drafts(monkeypatch) -> None:
@@ -679,6 +720,19 @@ def test_apply_workspace_state_renders_visible_top_and_bonus_drafts(monkeypatch)
 
     screen._apply_workspace_state(_state_with_candidates())
 
+    assert [str(option.id) for option in widgets["#daily-list"].options] == [
+        "header:must_address",
+        "must_address:cand-1",
+        "header:inbox",
+        "inbox:cand-2",
+        "header:ready_actions",
+        "ready_actions:cand-3",
+        "header:project_tasks",
+        "project_tasks:cand-4",
+        "header:suggested",
+        "suggested:cand-5",
+    ]
+    assert widgets["#daily-list"].highlighted == 1
     assert "Draft launch brief" in widgets["#top-draft-content"].value
     assert "Review blockers" in widgets["#top-draft-content"].value
     assert "Tidy backlog" in widgets["#bonus-draft-content"].value
@@ -796,12 +850,12 @@ def test_planning_add_to_draft_keeps_candidates_focused(monkeypatch) -> None:
     assert widgets["#daily-list"].highlighted == 1
     assert [item.id for item in screen._top_items] == ["cand-1", "cand-2"]
 
-    widgets["#daily-list"].highlighted = 3
+    widgets["#daily-list"].highlighted = 7
     screen.action_add_to_bonus()
 
     assert screen._draft_focus == "candidates"
     assert widgets["#daily-list"].focused is True
-    assert widgets["#daily-list"].highlighted == 3
+    assert widgets["#daily-list"].highlighted == 7
     assert [item.id for item in screen._bonus_items] == ["cand-3", "cand-4"]
 
 

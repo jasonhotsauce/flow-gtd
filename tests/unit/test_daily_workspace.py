@@ -88,7 +88,7 @@ def test_daily_workspace_hides_non_active_planned_items(temp_db_path: Path) -> N
     assert state["bonus_items"] == []
 
 
-def test_get_daily_workspace_candidates_groups_must_address_ready_and_inbox(
+def test_get_daily_workspace_candidates_groups_must_address_ready_inbox_and_project_tasks(
     temp_db_path: Path,
 ) -> None:
     """Workspace should group candidates by planning role."""
@@ -115,7 +115,21 @@ def test_get_daily_workspace_candidates_groups_must_address_ready_and_inbox(
         status="active",
         parent_id="project-1",
     )
-    for item in (inbox_item, due_item, ready_item, suggested_item, suggested_next):
+    second_project_task = Item(
+        id="project-task-2",
+        type="action",
+        title="Review checklist",
+        status="active",
+        parent_id="project-1",
+    )
+    for item in (
+        inbox_item,
+        due_item,
+        ready_item,
+        suggested_item,
+        suggested_next,
+        second_project_task,
+    ):
         engine._db.insert_inbox(item)  # type: ignore[attr-defined]
 
     state = engine.get_daily_workspace_state("2026-03-08")
@@ -123,7 +137,11 @@ def test_get_daily_workspace_candidates_groups_must_address_ready_and_inbox(
     assert [item.id for item in state["candidates"]["must_address"]] == ["due-1"]
     assert [item.id for item in state["candidates"]["inbox"]] == ["inbox-1"]
     assert [item.id for item in state["candidates"]["ready_actions"]] == ["ready-1"]
-    assert [item.id for item in state["candidates"]["suggested"]] == ["project-task-1"]
+    assert [item.id for item in state["candidates"]["project_tasks"]] == [
+        "project-task-1",
+        "project-task-2",
+    ]
+    assert state["candidates"]["suggested"] == []
 
 
 def test_confirmed_workspace_exposes_grouped_unplanned_work_and_readds_removed_items(
