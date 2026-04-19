@@ -42,7 +42,7 @@ So: any feature that adds tags to **tasks** (e.g. auto-tagging on capture) must 
 
 **All changes under `flow/` or `tests/` must run the Flow code-review skill** before being considered complete. See:
 
-- `.codex/skills/code-review-flow/SKILL.md` — required review checklist and acceptance bar.
+- `.codex/skills/code-review-flow/SKILL.md` — required review checklist and acceptance bar. Each worktree receives this runtime path from the shared parent `.codex/` bootstrap.
 
 Run `git diff` on modified files and apply that checklist before finalizing.
 

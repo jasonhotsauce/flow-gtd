@@ -86,8 +86,9 @@ temp/
 *.tmp
 .worktrees/
 
-# Local Codex hook marker
-.codex/.env_setup_done
+# Shared Codex runtime copy
+.codex/
 
 # Local task management
 tasks/
+docs/

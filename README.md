@@ -26,20 +26,22 @@ poetry install
 
 ### Git Worktrees
 
-If you use the sibling worktree layout with a shared parent directory that contains `main/` and other worktree folders, bootstrap a checkout from that parent directory with:
+If you use the sibling worktree layout with a shared parent directory that contains `main/`, `.bare/`, `.codex/`, and other worktree folders, create a new checkout from that parent directory with:
 
 ```bash
-make -C main worktree-setup WORKTREE=<main-or-sibling-folder>
+../create_worktree.sh <new-worktree-name>
 ```
 
-Examples:
+This creates the new sibling worktree, initializes its local `.venv`, and copies shared Codex runtime assets from `../.codex/` into `<worktree>/.codex/` when that shared directory exists.
+
+To re-bootstrap an existing checkout from the same parent layout:
 
 ```bash
 make -C main worktree-setup WORKTREE=main
 make -C main worktree-setup WORKTREE=project-tasks-as-candidate
 ```
 
-This creates a local `.venv` inside the requested checkout, installs `poetry` there if needed, installs dependencies from `main/pyproject.toml` and `main/poetry.lock`, and then installs the target checkout itself in editable mode.
+This creates or reuses a local `.venv` inside the requested checkout, installs `poetry` there if needed, installs dependencies from `main/pyproject.toml` and `main/poetry.lock`, installs the target checkout itself in editable mode, and refreshes the local `.codex/` runtime copy from the shared parent directory when available.
 
 Optional extras:
 

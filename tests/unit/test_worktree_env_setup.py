@@ -68,6 +68,15 @@ def _make_checkout(parent_dir: Path, name: str) -> Path:
     return checkout_dir
 
 
+def _make_shared_codex(parent_dir: Path) -> Path:
+    codex_dir = parent_dir / ".codex"
+    (codex_dir / "docs").mkdir(parents=True, exist_ok=True)
+    (codex_dir / "hooks").mkdir(parents=True, exist_ok=True)
+    (codex_dir / "docs" / "agent-workflow.md").write_text("# Agent Workflow\n")
+    (codex_dir / "hooks.json").write_text('{"hooks":{}}\n')
+    return codex_dir
+
+
 def _run_setup(script_path: Path, parent_dir: Path, worktree: str, log_path: Path) -> subprocess.CompletedProcess[str]:
     fake_bin = parent_dir / "fake-bin"
     fake_bin.mkdir()
@@ -88,6 +97,7 @@ def test_setup_worktree_uses_main_dependencies_for_sibling_target(tmp_path: Path
     parent_dir = tmp_path / "flow-gtd"
     main_dir = _make_checkout(parent_dir, "main")
     worktree_dir = _make_checkout(parent_dir, "feature-x")
+    _make_shared_codex(parent_dir)
     (main_dir / "pyproject.toml").write_text("[tool.poetry]\nname = 'flow-gtd'\nversion = '0.0.0'\n")
     (main_dir / "poetry.lock").write_text("lock-version = '2.0'\n")
     script_path = _install_repo_script(parent_dir)
@@ -102,6 +112,8 @@ def test_setup_worktree_uses_main_dependencies_for_sibling_target(tmp_path: Path
     assert "PIP install poetry" in log_lines
     assert f"POETRY install --directory {main_dir} --no-root" in log_lines
     assert f"PIP install --editable {worktree_dir} --no-deps" in log_lines
+    assert (worktree_dir / ".codex" / "docs" / "agent-workflow.md").read_text() == "# Agent Workflow\n"
+    assert (worktree_dir / ".codex" / "hooks.json").read_text() == '{"hooks":{}}\n'
 
 
 def test_setup_worktree_supports_main_as_target(tmp_path: Path) -> None:
