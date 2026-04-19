@@ -11,6 +11,24 @@ fail() {
   exit 1
 }
 
+sync_codex_assets() {
+  local shared_codex
+  local target_codex
+
+  shared_codex="${PARENT_DIR}/.codex"
+  target_codex="${TARGET_DIR}/.codex"
+
+  if [ ! -d "${shared_codex}" ]; then
+    log "Shared Codex assets not found at ${shared_codex}; skipping .codex sync"
+    return
+  fi
+
+  rm -rf "${target_codex}"
+  mkdir -p "${TARGET_DIR}"
+  cp -R "${shared_codex}" "${target_codex}"
+  log "Copied shared Codex assets into ${target_codex}"
+}
+
 choose_python() {
   if command -v python3.11 >/dev/null 2>&1; then
     printf '%s\n' "python3.11"
@@ -65,3 +83,5 @@ POETRY_VIRTUALENVS_CREATE=false VIRTUAL_ENV="${TARGET_VENV}" "${TARGET_POETRY}" 
 
 log "Installing editable package from ${TARGET_DIR}"
 "${TARGET_PIP}" install --editable "${TARGET_DIR}" --no-deps
+
+sync_codex_assets
