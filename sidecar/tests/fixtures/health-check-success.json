@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "id": "health-check-1",
+  "result": {
+    "protocolVersion": "2026-05-02",
+    "sidecarVersion": "0.1.0",
+    "transport": "stdio",
+    "status": "ok",
+    "capabilities": [
+      "health.check"
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "jsonrpc": "2.0",
+  "id": "health-check-2",
+  "error": {
+    "code": -32001,
+    "message": "Unsupported protocol version.",
+    "data": {
+      "supportedProtocolVersion": "2026-05-02"
+    }
+  }
+}

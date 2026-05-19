@@ -1,19 +1,27 @@
 """Main workflow: Capture -> Process -> Execute."""
 
 import logging
+import sqlite3
 import threading
 import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal, Optional
 
+from flow.agents.adapters.claude_agent import ClaudeAgentSDKAdapter
+from flow.agents.adapters.codex_cli import CodexCLIAdapter
+from flow.agents.adapters.deterministic import DeterministicAgentAdapter
+from flow.agents.adapters.openai_agents import OpenAIAgentsSDKAdapter
+from flow.agents.runtime import AgentRuntime
 from flow.config import get_settings
 from flow.core.resources.factory import create_resource_store
 from flow.core.resources.store import ResourceStore
 from flow.core.rag import RAGService
 from flow.core.focus import CalendarAvailability
 from flow.core.services import (
+    AssistantService,
     DailyPlanService,
+    MemoryService,
     ProcessService,
     ResourceService,
     ReviewService,
@@ -24,8 +32,8 @@ from flow.core.tagging import extract_tags, extract_tags_async
 from flow.database.resources import ResourceDB
 from flow.database.sqlite import SqliteDB
 from flow.database.vector_store import VectorHit
-from flow.models import Item, Resource
-from flow.utils.llm.config import load_config
+from flow.models import AssistantTurn, Item, MemoryEntry, Resource
+from flow.utils.llm.config import AgentRuntimeConfig, LLMConfig, load_config
 
 logger = logging.getLogger(__name__)
 DeferMode = Literal["waiting", "until", "someday"]
@@ -47,10 +55,19 @@ class Engine:
         self._task_service = TaskService(self._db)
         self._daily_plan_service = DailyPlanService(self._db)
         self._review_service = ReviewService(self._db)
+        self._memory_service = MemoryService(self._db)
+        self._calendar_availability_service = get_calendar_availability
+        self._assistant_service = AssistantService(
+            self._db,
+            self._daily_plan_service,
+            self._review_service,
+            self._memory_service,
+            agent_runtime=self._create_agent_runtime(config),
+            calendar_availability_service=self._calendar_availability_service,
+        )
         self._process_service = ProcessService(self._db)
         self._resource_service = ResourceService(self._resource_store)
         self._rag_service = RAGService(self._db, self._resource_db)
-        self._calendar_availability_service = get_calendar_availability
         self._process_inbox: list[Item] = []
         self._dedup_index = 0
         self._two_min_index = 0
@@ -66,6 +83,29 @@ class Engine:
             )
         return create_resource_store("flow-library", resource_db=self._resource_db)
 
+    def _create_agent_runtime(self, config: LLMConfig) -> AgentRuntime:
+        agent_config = getattr(config, "agent_runtime", AgentRuntimeConfig())
+        if agent_config.provider == "openai-agents":
+            adapter = OpenAIAgentsSDKAdapter(
+                model=agent_config.default_model,
+                timeout=agent_config.timeout,
+                api_key=config.openai.api_key,
+                base_url=config.openai.base_url,
+            )
+        elif agent_config.provider == "claude-agent":
+            adapter = ClaudeAgentSDKAdapter(
+                model=agent_config.default_model,
+                timeout=agent_config.timeout,
+            )
+        elif agent_config.provider == "codex-cli":
+            adapter = CodexCLIAdapter(
+                model=agent_config.default_model,
+                timeout=agent_config.timeout,
+            )
+        else:
+            adapter = DeterministicAgentAdapter()
+        return AgentRuntime(adapter)
+
     def capture(
         self,
         text: str,
@@ -79,7 +119,8 @@ class Engine:
 
         Tasks are automatically tagged using LLM for matching with saved
         resources. By default tagging runs in a background thread; use
-        block_auto_tag=True (e.g. from CLI) so tags are written before exit.
+        block_auto_tag=True when the caller must wait for tags to be written
+        before returning.
 
         Args:
             text: The capture text (task description, note, etc.).
@@ -87,8 +128,7 @@ class Engine:
             tags: Optional explicit tags (skips auto-tagging).
             skip_auto_tag: If True, skip LLM auto-tagging entirely.
             block_auto_tag: If True, run tagging in the same thread so it
-                completes before return (use from CLI to avoid process exit
-                killing the background thread).
+                completes before return.
             on_tagging_start: Optional callback invoked when blocking auto-tag
                 is about to run (e.g. to display "Tagging..." progress).
 
@@ -124,7 +164,7 @@ class Engine:
                     merged = list(dict.fromkeys(item.context_tags + tags))
                     updated = item.model_copy(update={"context_tags": merged})
                     self._db.update_item(updated)
-        except (IOError, ValueError, RuntimeError) as e:
+        except (IOError, ValueError, RuntimeError, sqlite3.Error) as e:
             logger.debug("Auto-tagging failed for item %s: %s", item_id, e)
 
     async def _run_auto_tagging_async(self, item_id: str, text: str) -> None:
@@ -138,7 +178,7 @@ class Engine:
                     merged = list(dict.fromkeys(item.context_tags + tags))
                     updated = item.model_copy(update={"context_tags": merged})
                     self._db.update_item(updated)
-        except (IOError, ValueError, RuntimeError) as e:
+        except (IOError, ValueError, RuntimeError, sqlite3.Error) as e:
             logger.debug("Auto-tagging failed for item %s: %s", item_id, e)
 
     async def capture_async(
@@ -148,11 +188,11 @@ class Engine:
         tags: Optional[list[str]] = None,
         skip_auto_tag: bool = False,
     ) -> Item:
-        """Quick capture with async auto-tagging (non-blocking for event loop).
+        """Quick capture with async auto-tagging for async callers.
 
-        Use from TUI or any async context so the LLM tagging does not block the
-        main thread. Item is persisted immediately; tags are applied when the
-        async call completes.
+        Use when the caller needs LLM tagging without blocking the event loop.
+        The item is persisted immediately; tags are applied when the async call
+        completes.
 
         Args:
             text: The capture text (task description, note, etc.).
@@ -195,8 +235,8 @@ class Engine:
         Args:
             item_id: ID of the item to tag.
             text: Text content to extract tags from.
-            block: If True, run in the same thread (for CLI so process exit
-                does not kill the tagging work). If False, run in a daemon thread.
+            block: If True, run in the same thread. If False, run in a daemon
+                thread.
             on_start: If block is True, called once before running tagging (e.g. progress).
         """
         if block:
@@ -393,6 +433,108 @@ class Engine:
     def get_daily_recap_summary(self, plan_date: str) -> dict[str, object]:
         """Return completion summary for today's plan."""
         return self._daily_plan_service.get_recap_summary(plan_date)
+
+    # ---- Assistant + Memory ----
+    def send_assistant_prompt(
+        self, prompt: str, plan_date: str | None = None
+    ) -> AssistantTurn:
+        """Persist and return an assistant turn for the given prompt."""
+        return self._assistant_service.send_prompt(prompt, plan_date=plan_date)
+
+    def list_assistant_turns(self, limit: int = 30) -> list[AssistantTurn]:
+        """Return recent assistant turns."""
+        return self._assistant_service.list_turns(limit=limit)
+
+    def confirm_assistant_proposal(self, turn_id: str) -> str:
+        """Execute a pending assistant proposal and mark it confirmed."""
+        turn = self._assistant_service.get_turn(turn_id)
+        if turn is None:
+            raise ValueError("Assistant turn does not exist")
+        if turn.proposal is None:
+            raise ValueError("Assistant turn has no proposal")
+        if turn.proposal_status != "pending":
+            raise ValueError("Assistant proposal is not pending")
+
+        proposal = turn.proposal
+        if proposal.action_type in {"create_task", "capture_task"}:
+            title = str(proposal.payload.get("title", "")).strip()
+            if not title:
+                raise ValueError("Assistant capture proposal is missing a title")
+            self.capture(title, skip_auto_tag=True)
+            message = f"Added to Inbox: {title}"
+        elif proposal.action_type == "save_memory":
+            self.create_memory_entry(
+                kind=str(proposal.payload.get("kind", "explicit_preference")),
+                scope=str(proposal.payload.get("scope", "global")),
+                value=str(proposal.payload.get("value", "")),
+                source=str(proposal.payload.get("source", "assistant-chat")),
+                confidence=float(proposal.payload.get("confidence", 1.0)),
+            )
+            message = "Saved preference to Memory."
+        else:
+            message = "Proposal confirmed."
+
+        self._assistant_service.set_proposal_status(turn_id, status="confirmed")
+        return message
+
+    def dismiss_assistant_proposal(self, turn_id: str) -> None:
+        """Dismiss a pending assistant proposal without executing it."""
+        turn = self._assistant_service.get_turn(turn_id)
+        if turn is None:
+            raise ValueError("Assistant turn does not exist")
+        if turn.proposal_status != "pending":
+            return
+        self._assistant_service.set_proposal_status(turn_id, status="dismissed")
+
+    def create_memory_entry(
+        self,
+        *,
+        kind: str,
+        scope: str,
+        value: str,
+        source: str,
+        confidence: float,
+        scope_ref: str | None = None,
+    ) -> MemoryEntry:
+        """Create and persist a memory entry."""
+        return self._memory_service.create_entry(
+            kind=kind,
+            scope=scope,
+            scope_ref=scope_ref,
+            value=value,
+            source=source,
+            confidence=confidence,
+        )
+
+    def get_memory_entry(self, memory_id: str) -> MemoryEntry | None:
+        """Return one memory entry by id."""
+        return self._memory_service.get_entry(memory_id)
+
+    def list_memory_entries(
+        self,
+        query: str | None = None,
+        *,
+        include_disabled: bool = True,
+    ) -> list[MemoryEntry]:
+        """Return memory entries ordered by freshness."""
+        return self._memory_service.list_entries(
+            query=query,
+            include_disabled=include_disabled,
+        )
+
+    def update_memory_entry(self, memory_id: str, *, value: str) -> MemoryEntry:
+        """Update a persisted memory entry."""
+        return self._memory_service.update_entry(memory_id, value=value)
+
+    def set_memory_entry_enabled(
+        self, memory_id: str, *, enabled: bool
+    ) -> MemoryEntry:
+        """Enable or disable a memory entry."""
+        return self._memory_service.set_entry_enabled(memory_id, enabled=enabled)
+
+    def delete_memory_entry(self, memory_id: str) -> None:
+        """Delete a memory entry."""
+        self._memory_service.delete_entry(memory_id)
 
     def get_calendar_availability(self) -> CalendarAvailability:
         """Return a compact calendar summary for Daily Workspace heuristics."""

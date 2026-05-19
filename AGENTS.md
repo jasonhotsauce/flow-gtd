@@ -27,8 +27,8 @@ This repository is configured for Codex-first collaboration.
 
 ## Project Snapshot
 
-- Product: Local-first, AI-augmented GTD CLI for macOS users.
-- Core stack: Python 3.11+, `typer`, `textual`, raw `sqlite3`, optional ChromaDB, PyObjC EventKit.
+- Product: Local-first, AI-augmented GTD native macOS app.
+- Core stack: SwiftUI native app, Swift, Python 3.11+, raw `sqlite3`, optional ChromaDB, PyObjC EventKit.
 - LLM integration: `flow/utils/llm/` (Gemini, OpenAI, Ollama), config in `~/.flow/config.toml`.
 
 ## Non-Negotiable Guardrails
@@ -46,7 +46,7 @@ This repository is configured for Codex-first collaboration.
   - After activation, use `python` / `pytest` from that active environment.
   - Use Poetry commands when changing dependencies.
 - Preserve dependency direction:
-  - Presentation (`flow/cli.py`, `flow/tui/`) -> Core (`flow/core/`) -> Models/Database/Sync.
+  - Native presentation (`Sources/FlowMacApp/`) -> Native app/core bridge (`Sources/FlowMacCore/`) -> Python data/services (`flow/core/`, `flow/database/`, `flow/sync/`) -> Models/storage providers.
   - `flow/models/` stays pure domain logic.
   - `flow/database/` and `flow/sync/` must not import from `flow/core/`.
 - Keep file placement aligned with the existing package layout.

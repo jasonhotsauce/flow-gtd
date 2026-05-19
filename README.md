@@ -1,171 +1,143 @@
 # Flow GTD
 
-Local-First, AI-Augmented GTD CLI for Senior Engineering Managers (Apple ecosystem).
+Local-first, AI-augmented GTD as a native macOS app.
 
-## Installation
+## Product
 
-### Homebrew (Recommended)
+Flow is now a native macOS experience built with SwiftUI. The retired terminal UI is no longer part of the supported product surface.
+
+The current native app includes:
+
+- Today, Inbox, Projects, Review, Assistant, and Memory views in a native split-view shell
+- quick capture, clarify, inbox conversion, task/project lifecycle actions, toolbar search, sidebar navigation, and keyboard selection movement
+- assistant sessions and messages with explicit proposal contracts, proposal confirmation, audit trail, and local undo for supported assistant-created writes
+- inspectable Memory records with search, editing, enable/disable, deletion, and visible rationale
+- daily planning with accepted top/bonus tasks, candidate buckets, risk flags, calendar-aware degraded reasoning, and Flow-owned notification policy state
+- weekly review packages with completed work, stale items, inbox cleanup candidates, project health, upcoming deadlines, and audited batch cleanup actions
+- local SQLite-backed data access with normalized native workflow tables owned by the bundled TypeScript sidecar
+- Apple Reminders import plus explicit opt-in write-back with conflict handling
+- automatic Flow-owned Apple Calendar event creation/reconciliation for eligible tasks
+
+Deferred from this branch:
+
+- open-ended agent self-improvement
+- broad knowledge-base search
+- highly customized productivity methodologies beyond the default guided workflow
+- autonomous EventKit writes without explicit Flow policy and conflict records
+
+Current status: native PRD workflow implementation is in place for launch-critical capture, clarify, planning, review, assistant, memory, notification policy, Reminders sync, and calendar-event sync. Final verification and release-documentation cleanup are tracked in `tasks/todo.md`.
+
+## Runtime Architecture
+
+The shipped native app now runs against a bundled local TypeScript sidecar.
+
+- `Sources/FlowMacApp/` remains the macOS UI shell.
+- `Sources/FlowMacCore/` owns native state, IPC, and Apple bridge adapters.
+- `sidecar/` owns the shipped product runtime: SQLite access, GTD reads and writes, assistant sessions and messages, proposal confirmation, audit persistence, undo, and orchestrated specialist routing.
+- Legacy assistant turn helpers remain in compatibility paths for review-guidance and migration-era tests, but the product surface is session/message-first.
+- Swift continues to host Apple-native integrations such as Reminders, Calendar, and notification capability checks behind a narrow bridge contract.
+- Python remains in the repository for legacy support and migration-era tooling, but it is not required for normal native app execution.
+
+Current sidecar scope:
+
+- bundled private Node runtime plus compiled `sidecar/dist` output inside the app bundle
+- provider-neutral assistant orchestration with a Codex-backed native assistant path, explicit provider evidence, deterministic fallback, and write-proposal validation
+- sidecar-backed workspace snapshot, planning, review, memory, task-state, and assistant session/message mutation flows
+- explicit degraded-mode startup/retry UI when the background runtime is unavailable
+- Apple bridge capability/status handoff from Swift to the sidecar
+
+Provider targets:
+
+- Codex-backed provider for the shipped native assistant path when the local Codex runtime is available
+- deterministic provider for bounded fallback behavior and non-migrated specialist routes
+- OpenAI and Anthropic adapter boundaries for future runtime-backed model execution
+- the legacy Python Codex CLI adapter is not the shipped native assistant path
+
+## Repository Layout
+
+- `Sources/FlowMacApp/`: SwiftUI app shell and views
+- `Sources/FlowMacCore/`: app state, sidecar IPC, repository bridge, and Apple-native integration adapters
+- `sidecar/`: shipped TypeScript backend for SQLite access, domain logic, and assistant orchestration
+- `flow/`: legacy Python support code retained for migration support and non-shipped tooling
+- `scripts/build_native_app.sh`: native app bundle build
+- `scripts/test_native_app.sh`: native smoke verification
+
+## Build
+
+Build the app bundle with:
 
 ```bash
-brew tap <your-github-username>/flow
-brew install flow-gtd
+./scripts/build_native_app.sh
 ```
 
-### From Source
+The app bundle is emitted at `.build/native/Flow.app` and includes the private Node runtime plus compiled sidecar resources under `Contents/Resources/sidecar-runtime/`.
 
-For development or contributing:
+## Verify
+
+Run native smoke verification with:
 
 ```bash
-git clone https://github.com/<your-github-username>/flow-gtd.git
-cd flow-gtd
+./scripts/test_native_app.sh
+```
+
+This repository expects a working macOS toolchain with Xcode command line tools and a compatible SDK.
+
+For sidecar development, install Node dependencies once:
+
+```bash
+cd sidecar
+npm install
+```
+
+## Development Setup
+
+For Python-side development and tests:
+
+```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip3 install poetry
 poetry install
 ```
 
-### Git Worktrees
-
-If you use the sibling worktree layout with a shared parent directory that contains `main/`, `.bare/`, `.codex/`, and other worktree folders, create a new checkout from that parent directory with:
-
-```bash
-../create_worktree.sh <new-worktree-name>
-```
-
-This creates the new sibling worktree, initializes its local `.venv`, and copies shared Codex runtime assets from `../.codex/` into `<worktree>/.codex/` when that shared directory exists.
-
-To re-bootstrap an existing checkout from the same parent layout:
-
-```bash
-make -C main worktree-setup WORKTREE=main
-make -C main worktree-setup WORKTREE=project-tasks-as-candidate
-```
-
-This creates or reuses a local `.venv` inside the requested checkout, installs `poetry` there if needed, installs dependencies from `main/pyproject.toml` and `main/poetry.lock`, installs the target checkout itself in editable mode, and refreshes the local `.codex/` runtime copy from the shared parent directory when available.
-
 Optional extras:
 
 ```bash
-# URL extraction support for `flow save <url>`
 poetry install --extras "web"
-
-# Local RAG sidecar stack (ChromaDB + embeddings + PDF parsing)
 poetry install --extras "rag"
 ```
 
-## Resource Storage Options
-
-During setup, Flow asks where to store saved resources:
-
-- `Flow Library`: built-in local storage managed by Flow
-- `Obsidian Vault`: resources saved as notes via Obsidian CLI
-
-If you choose Obsidian Vault, install Obsidian CLI and provide your vault path.
-
-## Environment
+## Configuration
 
 | Variable | Description |
 |----------|-------------|
 | `FLOW_DB_PATH` | SQLite path (default: `data/flow.db`) |
 | `FLOW_LLM_PROVIDER` | LLM provider override (`gemini`, `openai`, `ollama`) |
+| `FLOW_AGENT_RUNTIME_PROVIDER` | Agent runtime provider (`deterministic`, `codex`, `openai-agents`, `claude-agent`) |
+| `FLOW_AGENT_RUNTIME_MODEL` | Agent runtime model override for providers that use models |
+| `FLOW_AGENT_RUNTIME_TIMEOUT` | Agent runtime timeout in seconds |
 | `FLOW_GEMINI_API_KEY` or `GOOGLE_API_KEY` | Gemini API key |
-| `FLOW_OPENAI_API_KEY` | OpenAI API key (when provider is `openai`) |
+| `FLOW_OPENAI_API_KEY` | OpenAI API key when provider is `openai` |
 | `FLOW_OLLAMA_BASE_URL` | Ollama base URL (default: `http://localhost:11434`) |
 | `FLOW_RESOURCE_STORAGE` | Resource storage provider (`flow-library`, `obsidian-vault`) |
 | `FLOW_OBSIDIAN_VAULT_PATH` | Obsidian vault path when using `obsidian-vault` |
 | `FLOW_OBSIDIAN_NOTES_DIR` | Notes subfolder for Flow resources (default: `flow/resources`) |
 
-## Commands
+## Worktrees
 
-| Command | Description |
-|---------|-------------|
-| `flow c <text>` | Quick capture alias (supports `--private/-p`) |
-| `flow capture <text>` | Full capture command (supports `--private/-p` and `--tags/-t`) |
-| `flow save <url\|file\|text>` | Save a resource with automatic LLM tagging to your selected storage backend |
-| `flow resources` | List saved resources (optional `--tag`, `--limit`) |
-| `flow tags` | List resource tags |
-| `flow` | Launch the daily workspace TUI (plan today, execute from editable confirmed state, explicit recap) |
-| `flow tui` | Launch the daily workspace TUI |
-| `flow process` | Launch Process Funnel (Dedup → Cluster → 2-Min → Coach) |
-| `flow next` | Launch Action screen (next actions + Sidecar: resources matched by task tags) |
-| `flow projects` | Launch Projects screen (GTD project list and proceed) |
-| `flow sync` | Sync Apple Reminders into Flow, excluding the `Recently Deleted` system list (macOS only) |
-| `flow sync-status` | Check Reminders permission status |
-| `flow review` | Launch Weekly Review (Stale, Someday, Report; contextual actions per section) |
-| `flow report` | Print weekly report to stdout |
-| `flow version` | Show version |
-
-## Workflow
-
-1. **Capture fast**: `flow c "task"` or Siri → Apple Reminders → `flow sync`
-2. **Open the day**: `flow` — if today's plan is missing, build it; otherwise open today's confirmed workspace
-3. **Process backlog**: `flow process` — deduplicate, cluster into projects, 2-min drill, coach vague tasks
-4. **Review projects**: `flow projects` — list active projects, see suggested next action and full task list per project; open a project to complete or defer actions
-5. **Execute outside the workspace when needed**: `flow next` remains available as a direct power-user entry point, but today's planned work executes inside the Daily Workspace
-
-## Daily Workspace
-
-- `flow` and `flow tui` now open the daily workspace instead of dropping directly into Inbox.
-- The daily workspace has three main jobs:
-  - `Plan`: build today's Top 3 and Bonus items from visible draft panes fed by grouped candidate sections (`Must`, `Inbox`, `Ready`, `Project`, `Suggested`), then press `x` to confirm the plan
-  - `Confirmed execution`: keep editing today's Top 3 and Bonus after confirmation while the right side shows grouped unplanned work (`Inbox`, `Next Actions`, `Project Tasks`)
-  - `Daily Recap`: open recap explicitly with `w` when you want completion counts, accomplishments, carry-forward items, deterministic coaching feedback, and optional AI insight
-- Planning stays on one screen: you can add, remove, promote, demote, and reorder draft items without leaving the workspace.
-- In planning mode, adding a task to `Top 3` or `Bonus` keeps focus on `Candidates` so you can continue triaging without jumping back to pane `1`.
-- After you confirm a plan, the same workspace stays live:
-  - `[1]` focuses today's ordered plan
-  - `[3]` focuses the dedicated grouped unplanned-work list on the right
-  - `j` / `k` move inside that unplanned list
-  - `Enter`, `t`, or `b` on an unplanned task opens a chooser so you can place it into `Top 3` or `Bonus`
-  - `d` removes a planned item back to its original unplanned group without leaving the Today list
-  - `c` completes the selected planned item
-  - `f` recommends the best active planned item using calendar availability only as an advisory heuristic; it never recommends unplanned work, auto-schedules tasks, or opens a calendar pane
-- If Top 3 is already full, adding unplanned work into Top 3 opens a chooser so you can demote one current Top 3 item into Bonus.
-- The detail pane now shows task metadata plus concise tag-matched and semantic resources for the selected planned or unplanned item.
-- If Flow detects a prior day with an unrecapped plan, startup routes you through that prior daily recap before opening today's normal planning/execution flow.
-- Inbox, Projects, Review, and Someday remain part of the TUI model; the workspace is the default entry point, not a replacement for GTD structure.
-
-## TUI Panel Shortcuts
-
-- On split-panel screens (`Inbox`, `Projects`, `Next Actions`), switch focus with:
-  - `1` / `2` for first/second panel
-  - Panel abbreviations shown in panel headers (for example `l`, `d`, `t`, `r`, `e`)
-- `Tab` focus switching remains available on the Next Actions screen.
-
-## Daily Workspace + Inbox Empty States
-
-- Daily Workspace and Inbox use a centered minimalist empty state with an ASCII visual anchor, concise status header, and a high-contrast action hint.
-- Inbox empty state also supports `n` to open quick capture immediately.
-- A randomized one-line productivity tip appears at the bottom of both empty states.
-
-## Tech
-
-- **CLI**: Typer  
-- **TUI**: Textual  
-- **DB**: SQLite (local)  
-- **LLM**: Multi-provider adapter (Gemini default, OpenAI/Ollama optional)  
-- **Sync**: PyObjC EventKit (macOS)
-
-## Tests
+If you use the sibling worktree layout with shared parent assets, create a new checkout from the parent directory with:
 
 ```bash
-pytest tests/unit -v
+../create_worktree.sh <new-worktree-name>
 ```
 
-## Development
-
-### Make Targets
+To re-bootstrap an existing checkout from the same parent layout:
 
 ```bash
-make help          # Show all available targets
-make test          # Run tests
-make build         # Build wheel and sdist
-make bump-patch    # Bump version (0.1.0 → 0.1.1)
-make release       # Create GitHub release
-make brew-formula  # Generate Homebrew formula
-make publish       # Full release workflow
+make -C main worktree-setup WORKTREE=main
+make -C main worktree-setup WORKTREE=<worktree-name>
 ```
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License. See [LICENSE](LICENSE).

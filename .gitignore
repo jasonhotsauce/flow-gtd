@@ -48,6 +48,7 @@ build/
 *.whl
 *.tar.gz
 MANIFEST
+.build/
 
 # Environment variables
 .env
@@ -66,7 +67,7 @@ logs/
 
 # Sentence Transformers / ML Model Cache
 .cache/
-models/
+/models/
 
 # Textual
 .textual/

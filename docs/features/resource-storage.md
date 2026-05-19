@@ -2,16 +2,12 @@
 
 Flow supports pluggable resource storage providers.
 
-## User Choices in Setup
+## User Choices
 
 - **Flow Library**: built-in local storage managed by Flow.
 - **Obsidian Vault**: resources saved as notes in an Obsidian vault using Obsidian CLI.
 
-## Commands
-
-- `flow save <url|file|text>`: saves to the selected provider.
-- `flow resources`: lists resources from the selected provider.
-- `flow tags`: lists resource tags from the selected provider.
+The native macOS app reads and writes resources through the selected provider rather than through terminal commands.
 
 ## Obsidian Notes
 

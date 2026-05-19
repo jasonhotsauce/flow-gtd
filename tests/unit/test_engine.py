@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from flow.core.engine import Engine
+from flow.utils.llm.config import AgentRuntimeConfig, LLMConfig
 
 
 @pytest.fixture
@@ -25,6 +26,40 @@ def test_engine_init_does_not_eagerly_init_rag_backend(
 
     monkeypatch.setattr(rag_service, "ChromaVectorStore", _boom)
     Engine(db_path=temp_db_path)
+
+
+def test_engine_wires_openai_agent_runtime_credentials(
+    monkeypatch: pytest.MonkeyPatch, temp_db_path: Path
+) -> None:
+    """Engine should pass runtime model and OpenAI credentials to the adapter."""
+    config = LLMConfig()
+    config.agent_runtime = AgentRuntimeConfig(
+        provider="openai-agents",
+        default_model="gpt-5.4",
+        timeout=45.0,
+    )
+    config.openai.api_key = "test-openai-key"
+    config.openai.base_url = "https://example.openai.test/v1"
+    captured: dict[str, object] = {}
+
+    class FakeOpenAIAgentsSDKAdapter:
+        def __init__(self, **kwargs: object) -> None:
+            captured["kwargs"] = kwargs
+
+    monkeypatch.setattr("flow.core.engine.load_config", lambda: config)
+    monkeypatch.setattr(
+        "flow.core.engine.OpenAIAgentsSDKAdapter",
+        FakeOpenAIAgentsSDKAdapter,
+    )
+
+    Engine(db_path=temp_db_path)
+
+    assert captured["kwargs"] == {
+        "model": "gpt-5.4",
+        "timeout": 45.0,
+        "api_key": "test-openai-key",
+        "base_url": "https://example.openai.test/v1",
+    }
 
 
 def test_capture(engine: Engine) -> None:

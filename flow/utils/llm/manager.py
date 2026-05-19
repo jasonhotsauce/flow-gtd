@@ -184,7 +184,7 @@ def complete_json(
 
 
 # =============================================================================
-# Async API (for TUI usage - non-blocking)
+# Async API for non-blocking callers
 # =============================================================================
 
 
@@ -193,7 +193,7 @@ async def complete_async(
     model: str | None = None,
     sanitize: bool = True,
 ) -> Optional[str]:
-    """Async text completion for non-blocking TUI operations.
+    """Async text completion for non-blocking callers.
 
     Args:
         prompt: The input prompt.
@@ -214,7 +214,7 @@ async def complete_json_async(
     model: str | None = None,
     sanitize: bool = True,
 ) -> Optional[dict[str, Any]]:
-    """Async JSON completion for non-blocking TUI operations.
+    """Async JSON completion for non-blocking callers.
 
     Args:
         prompt: The input prompt (should request JSON output).

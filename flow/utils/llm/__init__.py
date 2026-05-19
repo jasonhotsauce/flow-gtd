@@ -8,7 +8,7 @@ Synchronous API:
     - complete_stream(prompt, model, sanitize) -> Iterator[str]
     - complete_json(prompt, model, sanitize) -> Optional[dict]
 
-Async API (for TUI - non-blocking):
+Async API (for non-blocking callers):
     - complete_async(prompt, model, sanitize) -> Optional[str]
     - complete_json_async(prompt, model, sanitize) -> Optional[dict]
 
@@ -67,7 +67,7 @@ __all__ = [
     "complete",
     "complete_stream",
     "complete_json",
-    # Async functions (for TUI)
+    # Async functions
     "complete_async",
     "complete_json_async",
     # Utilities

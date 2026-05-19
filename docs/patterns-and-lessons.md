@@ -2,6 +2,8 @@
 
 This doc captures implementation patterns and lessons learned so Codex and developers can follow consistent rules when changing `flow/` or `tests/`.
 
+Historical note: some entries below come from the retired terminal-era implementation. Keep them as engineering history, not as guidance for the current supported product surface.
+
 ---
 
 ## 1. CLI vs process lifetime: background work
@@ -21,8 +23,8 @@ This doc captures implementation patterns and lessons learned so Codex and devel
 
 - If a **CLI command** triggers work that must be visible after the command (e.g. DB updates, tag creation), that work must either:
   - Run in the **same thread** (block until done), or
-  - Be deferred to a **long-lived process** (e.g. TUI or a daemon), not a short-lived CLI process.
-- Prefer an explicit **block / run-in-foreground** parameter (e.g. `block_auto_tag`) when the same operation can be called from both CLI (short-lived) and TUI (long-lived), so the caller can choose.
+  - Be deferred to a **long-lived process** (for example a background service), not a short-lived CLI process.
+- Prefer an explicit **block / run-in-foreground** parameter (e.g. `block_auto_tag`) when the same operation can be called from both short-lived and long-lived contexts, so the caller can choose.
 
 ---
 

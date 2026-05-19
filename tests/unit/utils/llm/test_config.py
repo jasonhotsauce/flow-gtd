@@ -4,6 +4,8 @@ import tomllib
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from flow.utils.llm.config import (
     has_resource_storage_config,
     load_config,
@@ -12,6 +14,74 @@ from flow.utils.llm.config import (
     save_config,
     set_resource_storage_config,
 )
+
+
+def test_load_config_reads_agent_runtime_settings(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[llm]",
+                'provider = "gemini"',
+                "",
+                "[agents]",
+                'runtime_provider = "openai-agents"',
+                'default_model = "gpt-5.4"',
+                "timeout = 45.0",
+            ]
+        )
+    )
+
+    config = load_config(config_path=config_path)
+
+    assert config.agent_runtime.provider == "openai-agents"
+    assert config.agent_runtime.default_model == "gpt-5.4"
+    assert config.agent_runtime.timeout == 45.0
+
+
+def test_load_config_agent_runtime_env_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[llm]",
+                'provider = "gemini"',
+                "",
+                "[agents]",
+                'runtime_provider = "openai-agents"',
+            ]
+        )
+    )
+    monkeypatch.setenv("FLOW_AGENT_RUNTIME_PROVIDER", "claude-agent")
+    monkeypatch.setenv("FLOW_AGENT_RUNTIME_MODEL", "claude-opus-4-7")
+
+    config = load_config(config_path=config_path)
+
+    assert config.agent_runtime.provider == "claude-agent"
+    assert config.agent_runtime.default_model == "claude-opus-4-7"
+
+
+def test_load_config_invalid_agent_runtime_defaults_to_deterministic(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[llm]",
+                'provider = "gemini"',
+                "",
+                "[agents]",
+                'runtime_provider = "unknown"',
+            ]
+        )
+    )
+
+    config = load_config(config_path=config_path)
+
+    assert config.agent_runtime.provider == "deterministic"
 
 
 def test_save_config_writes_first_value_pending_flag(tmp_path: Path) -> None:

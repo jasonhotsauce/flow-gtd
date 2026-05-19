@@ -14,6 +14,9 @@ from typing import Literal, Mapping, Optional, cast
 # Provider type alias
 ProviderType = Literal["gemini", "openai", "ollama"]
 ResourceStorageType = Literal["flow-library", "obsidian-vault"]
+AgentRuntimeProviderType = Literal[
+    "deterministic", "openai-agents", "claude-agent", "codex-cli"
+]
 
 # Default config file location
 DEFAULT_CONFIG_PATH = Path.home() / ".flow" / "config.toml"
@@ -48,6 +51,15 @@ class OllamaConfig:
 
 
 @dataclass
+class AgentRuntimeConfig:
+    """Configuration for Flow's product agent runtime."""
+
+    provider: AgentRuntimeProviderType = "deterministic"
+    default_model: str = ""
+    timeout: float = 60.0
+
+
+@dataclass
 class LLMConfig:
     """Main LLM configuration."""
 
@@ -55,6 +67,7 @@ class LLMConfig:
     gemini: GeminiConfig = field(default_factory=GeminiConfig)
     openai: OpenAIConfig = field(default_factory=OpenAIConfig)
     ollama: OllamaConfig = field(default_factory=OllamaConfig)
+    agent_runtime: AgentRuntimeConfig = field(default_factory=AgentRuntimeConfig)
     resource_storage: ResourceStorageType = "flow-library"
     obsidian_vault_path: str = ""
     obsidian_notes_dir: str = "flow/resources"
@@ -184,6 +197,24 @@ def load_config(config_path: Optional[Path] = None) -> LLMConfig:
         ),
     )
 
+    # Product agent runtime config. This coexists with legacy llm.provider while
+    # assistant workflows migrate route by route.
+    agents_section = file_config.get("agents", {})
+    config.agent_runtime = AgentRuntimeConfig(
+        provider=_get_agent_runtime_provider_type(
+            os.environ.get("FLOW_AGENT_RUNTIME_PROVIDER")
+            or agents_section.get("runtime_provider", "deterministic")
+        ),
+        default_model=str(
+            os.environ.get("FLOW_AGENT_RUNTIME_MODEL")
+            or agents_section.get("default_model", "")
+        ),
+        timeout=float(
+            os.environ.get("FLOW_AGENT_RUNTIME_TIMEOUT")
+            or agents_section.get("timeout", 60.0)
+        ),
+    )
+
     # Resource storage config
     resources_section = file_config.get("resources", {})
     config.resource_storage = _get_resource_storage_type(
@@ -227,6 +258,14 @@ def _get_resource_storage_type(value: str) -> ResourceStorageType:
     return "flow-library"
 
 
+def _get_agent_runtime_provider_type(value: str) -> AgentRuntimeProviderType:
+    """Validate and normalize an agent runtime provider string."""
+    normalized = value.lower().strip()
+    if normalized in ("deterministic", "openai-agents", "claude-agent", "codex-cli"):
+        return cast(AgentRuntimeProviderType, normalized)
+    return "deterministic"
+
+
 def get_example_config() -> str:
     """Return example config.toml content with documented options.
 
@@ -263,6 +302,13 @@ timeout = 30.0  # Request timeout in seconds
 base_url = "http://localhost:11434"
 default_model = "llama3.2"
 timeout = 120.0  # Higher timeout for local models
+
+[agents]
+# Agent runtime for orchestrated assistant workflows.
+# Available providers: "deterministic", "openai-agents", "claude-agent", "codex-cli"
+runtime_provider = "deterministic"
+default_model = ""
+timeout = 60.0
 """
 
 
@@ -377,6 +423,11 @@ def save_config(
             f'base_url = "{ollama_base_url}"',
             'default_model = "llama3.2"',
             "timeout = 120.0",
+            "",
+            "[agents]",
+            'runtime_provider = "deterministic"',
+            'default_model = ""',
+            "timeout = 60.0",
             "",
             "[resources]",
             f'storage = "{resource_storage}"',

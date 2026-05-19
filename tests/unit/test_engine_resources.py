@@ -1,6 +1,7 @@
 """Tests for Engine resource and tagging integration."""
 
 import tempfile
+import sqlite3
 from pathlib import Path
 from unittest.mock import patch
 
@@ -34,6 +35,13 @@ def resource_db(temp_db_path: Path) -> ResourceDB:
     db = ResourceDB(temp_db_path)
     db.init_db()
     return db
+
+
+def test_engine_accepts_legacy_config_without_agent_runtime(temp_db_path: Path) -> None:
+    """Tests may still provide pre-runtime config shims during migration."""
+    engine = Engine(db_path=temp_db_path)
+
+    assert engine.list_inbox() == []
 
 
 @pytest.fixture(autouse=True)
@@ -110,6 +118,14 @@ class TestEngineCaptureWithTags:
         updated = engine.get_item(item.id)
         assert updated is not None
         assert updated.context_tags == ["blocked-tag"]
+
+    @patch("flow.core.engine.extract_tags")
+    def test_auto_tagging_swallows_database_teardown_race(self, mock_extract, engine):
+        """Background auto-tagging should not leak thread exceptions after temp DB cleanup."""
+        mock_extract.return_value = ["late-tag"]
+
+        with patch.object(engine._db, "get_item", side_effect=sqlite3.OperationalError("no such table: items")):
+            engine._run_auto_tagging("missing-item", "Late background tagging")
 
     @pytest.mark.asyncio
     @patch("flow.core.engine.extract_tags_async")

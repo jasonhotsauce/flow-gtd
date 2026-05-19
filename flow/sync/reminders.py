@@ -1,8 +1,10 @@
 """macOS EventKit bridge for bi-directional sync with Apple Reminders."""
 
+import sqlite3
 import sys
 import threading
 import uuid as _uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -34,6 +36,85 @@ def _calendar_title(reminder: object) -> str:
         return ""
     raw_title = getattr(calendar, "title", lambda: "")()
     return str(raw_title).strip().casefold()
+
+
+def _reminder_modified_token(reminder: object) -> str | None:
+    """Return a stable string token for EventKit source modification state."""
+    raw_value = getattr(reminder, "lastModifiedDate", lambda: None)()
+    if raw_value is None:
+        return None
+    interval = getattr(raw_value, "timeIntervalSince1970", None)
+    if callable(interval):
+        return datetime.fromtimestamp(float(interval()), tz=timezone.utc).isoformat()
+    return str(raw_value)
+
+
+def _now_token() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _upsert_reminder_link(
+    db_path: Path,
+    *,
+    task_id: str,
+    external_id: str,
+    source_modified_at: str | None,
+) -> None:
+    now = _now_token()
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO reminder_links (
+                id, task_id, external_id, sync_status, conflict_status,
+                last_synced_at, source_modified_at, tombstoned_at
+            ) VALUES (?, ?, ?, 'synced', 'none', ?, ?, NULL)
+            ON CONFLICT(id) DO UPDATE SET
+                sync_status = excluded.sync_status,
+                conflict_status = excluded.conflict_status,
+                last_synced_at = excluded.last_synced_at,
+                source_modified_at = excluded.source_modified_at,
+                tombstoned_at = NULL
+            """,
+            (
+                f"reminder:{external_id}",
+                task_id,
+                external_id,
+                now,
+                source_modified_at,
+            ),
+        )
+
+
+def _mark_reminder_link_conflict(db_path: Path, *, task_id: str) -> None:
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE reminder_links
+            SET sync_status = 'conflict', conflict_status = 'source_changed'
+            WHERE task_id = ?
+            """,
+            (task_id,),
+        )
+
+
+def _mark_reminder_link_synced(
+    db_path: Path,
+    *,
+    task_id: str,
+    source_modified_at: str | None,
+) -> None:
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE reminder_links
+            SET sync_status = 'synced',
+                conflict_status = 'none',
+                last_synced_at = ?,
+                source_modified_at = ?
+            WHERE task_id = ?
+            """,
+            (_now_token(), source_modified_at, task_id),
+        )
 
 
 def get_reminder_auth_status() -> tuple[int, str]:
@@ -182,9 +263,107 @@ def sync_reminders_to_flow(db_path: Path) -> tuple[int, str]:
                 original_ek_id=ek_id,
             )
             db.insert_inbox(item)
+        _upsert_reminder_link(
+            db_path,
+            task_id=item.id,
+            external_id=ek_id,
+            source_modified_at=_reminder_modified_token(rem),
+        )
         count += 1
         # NOTE: We intentionally do NOT move reminders to Flow-Imported list.
         # EventKit has a bug where reminders with certain alarm configurations
         # crash in _fixAlarmUUIDsForClone:from: when moved to a new calendar.
 
     return count, f"Imported {count} incomplete reminders."
+
+
+def sync_flow_to_reminders(db_path: Path, *, write_back: bool = False) -> tuple[int, str]:
+    """
+    Push linked Flow task changes back to Apple Reminders.
+
+    Write-back is opt-in. If the source Reminder changed since the last recorded
+    sync token, Flow marks the link as a conflict and does not overwrite it.
+    """
+    if not write_back:
+        return 0, "Write-back disabled; no Apple Reminders were modified."
+    if not _reminders_available():
+        return 0, "Reminders write-back is only supported on macOS."
+
+    status, status_desc = get_reminder_auth_status()
+    if status != _EK_AUTH_FULL_ACCESS:
+        return 0, f"Reminders write-back unavailable (status: {status_desc})."
+
+    store = EventKit.EKEventStore.alloc().init()
+    rows = _linked_flow_reminder_rows(db_path)
+    written = 0
+    conflicts = 0
+
+    for row in rows:
+        try:
+            reminder = store.calendarItemWithIdentifier_(row["external_id"])
+        except Exception:  # pragma: no cover - defensive PyObjC boundary
+            reminder = None
+        if reminder is None:
+            _mark_reminder_link_conflict(db_path, task_id=row["task_id"])
+            conflicts += 1
+            continue
+
+        source_modified_at = _reminder_modified_token(reminder)
+        if (
+            row["source_modified_at"]
+            and source_modified_at
+            and source_modified_at != row["source_modified_at"]
+        ):
+            _mark_reminder_link_conflict(db_path, task_id=row["task_id"])
+            conflicts += 1
+            continue
+
+        if row["status"] == "archived":
+            continue
+
+        try:
+            reminder.setTitle_(row["title"])
+            reminder.setCompleted_(row["status"] == "done")
+            save_result = store.saveReminder_commit_error_(reminder, True, None)
+            saved = bool(save_result[0]) if isinstance(save_result, tuple) else bool(save_result)
+        except Exception:  # pragma: no cover - defensive PyObjC boundary
+            saved = False
+
+        if saved:
+            _mark_reminder_link_synced(
+                db_path,
+                task_id=row["task_id"],
+                source_modified_at=_reminder_modified_token(reminder) or source_modified_at,
+            )
+            written += 1
+
+    if conflicts:
+        return written, f"Wrote {written} Flow changes to Apple Reminders; {conflicts} conflict(s) need review."
+    suffix = "change" if written == 1 else "changes"
+    return written, f"Wrote {written} Flow {suffix} to Apple Reminders."
+
+
+def _linked_flow_reminder_rows(db_path: Path) -> list[sqlite3.Row]:
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        return conn.execute(
+            """
+            SELECT
+                i.id AS task_id,
+                i.title,
+                i.status,
+                i.updated_at,
+                rl.external_id,
+                rl.source_modified_at,
+                rl.last_synced_at
+            FROM reminder_links rl
+            JOIN items i ON i.id = rl.task_id
+            WHERE rl.tombstoned_at IS NULL
+              AND rl.conflict_status = 'none'
+              AND (
+                rl.last_synced_at IS NULL
+                OR COALESCE(i.updated_at, i.created_at, '') > rl.last_synced_at
+              )
+            ORDER BY i.updated_at ASC
+            """
+        ).fetchall()

@@ -216,7 +216,7 @@ class OpenAIProvider(LLMProvider):
             logger.debug("OpenAI streaming failed: %s: %s", type(e).__name__, e)
 
     # =========================================================================
-    # Async methods for TUI usage
+    # Async methods for non-blocking callers
     # =========================================================================
 
     async def generate_text_async(
@@ -225,7 +225,7 @@ class OpenAIProvider(LLMProvider):
         model: str | None = None,
         sanitize: bool = True,
     ) -> Optional[str]:
-        """Async version of generate_text for non-blocking TUI operations.
+        """Async version of generate_text for non-blocking callers.
 
         Uses native async OpenAI client.
 
@@ -264,7 +264,7 @@ class OpenAIProvider(LLMProvider):
         model: str | None = None,
         sanitize: bool = True,
     ) -> Optional[dict[str, Any]]:
-        """Async version of generate_json for non-blocking TUI operations.
+        """Async version of generate_json for non-blocking callers.
 
         Args:
             prompt: The input prompt (should request JSON output).

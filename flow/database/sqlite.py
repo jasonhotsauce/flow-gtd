@@ -5,9 +5,16 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal, Optional, TypedDict
+from typing import Any, Literal, Optional, TypedDict
 
-from flow.models import Item
+from flow.models import (
+    AssistantAgentContract,
+    AssistantAuditStep,
+    AssistantProposal,
+    AssistantTurn,
+    Item,
+    MemoryEntry,
+)
 
 
 DailyPlanBucket = Literal["top", "bonus"]
@@ -77,6 +84,11 @@ class SqliteDB:
             self._init_index_jobs(conn)
             self._init_daily_plan_entries(conn)
             self._init_daily_recap_status(conn)
+            self._init_assistant_turns(conn)
+            self._init_assistant_audit_steps(conn)
+            self._init_memory_entries(conn)
+            self._init_native_workflow_tables(conn)
+            self._migrate_legacy_items_to_native_workflow(conn)
             conn.commit()
 
     def _migrate_add_estimated_duration(self, conn: sqlite3.Connection) -> None:
@@ -163,6 +175,307 @@ class SqliteDB:
         except sqlite3.OperationalError:
             return
 
+    def _init_assistant_turns(self, conn: sqlite3.Connection) -> None:
+        """Create assistant turn storage."""
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS assistant_turns (
+                    id TEXT PRIMARY KEY,
+                    prompt TEXT NOT NULL,
+                    response TEXT NOT NULL,
+                    route TEXT NOT NULL,
+                    proposal_json TEXT,
+                    proposal_status TEXT NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_assistant_turns_created_at "
+                "ON assistant_turns(created_at DESC)"
+            )
+        except sqlite3.OperationalError:
+            return
+
+    def _init_assistant_audit_steps(self, conn: sqlite3.Connection) -> None:
+        """Create assistant audit-step storage."""
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS assistant_audit_steps (
+                    id TEXT PRIMARY KEY,
+                    turn_id TEXT NOT NULL,
+                    stage TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    FOREIGN KEY (turn_id) REFERENCES assistant_turns(id)
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_assistant_audit_turn_created "
+                "ON assistant_audit_steps(turn_id, created_at ASC)"
+            )
+        except sqlite3.OperationalError:
+            return
+
+    def _init_memory_entries(self, conn: sqlite3.Connection) -> None:
+        """Create inspectable memory storage."""
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS memory_entries (
+                    id TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL,
+                    scope TEXT NOT NULL,
+                    scope_ref TEXT,
+                    value TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    enabled INTEGER NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL,
+                    last_confirmed_at DATETIME
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_memory_entries_kind_scope "
+                "ON memory_entries(kind, scope)"
+            )
+        except sqlite3.OperationalError:
+            return
+
+    def _init_native_workflow_tables(self, conn: sqlite3.Connection) -> None:
+        """Create normalized workflow tables for the native product contract."""
+        statements = [
+            """
+            CREATE TABLE IF NOT EXISTS raw_captures (
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                raw_text TEXT NOT NULL,
+                created_at DATETIME NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS inbox_items (
+                id TEXT PRIMARY KEY,
+                raw_capture_id TEXT NOT NULL,
+                origin_type TEXT NOT NULL,
+                inbox_state TEXT NOT NULL,
+                source_ref TEXT,
+                imported_at DATETIME,
+                task_id TEXT,
+                clarified_task_id TEXT,
+                clarified_project_id TEXT,
+                clarified_at DATETIME,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS tasks (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                status TEXT NOT NULL,
+                project_id TEXT,
+                source_inbox_item_id TEXT,
+                time_sensitivity TEXT NOT NULL,
+                effort_band TEXT NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS projects (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS reminder_links (
+                id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                external_id TEXT NOT NULL,
+                sync_status TEXT NOT NULL,
+                conflict_status TEXT NOT NULL,
+                last_synced_at DATETIME,
+                source_modified_at DATETIME,
+                tombstoned_at DATETIME
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS calendar_event_links (
+                id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                external_id TEXT NOT NULL,
+                sync_status TEXT NOT NULL,
+                conflict_status TEXT NOT NULL,
+                last_synced_at DATETIME,
+                source_modified_at DATETIME,
+                tombstoned_at DATETIME
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS notification_policy (
+                id TEXT PRIMARY KEY,
+                permission_status TEXT NOT NULL,
+                updated_at DATETIME NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS mutation_batches (
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                requires_confirmation INTEGER NOT NULL,
+                created_at DATETIME NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS mutation_records (
+                id TEXT PRIMARY KEY,
+                batch_id TEXT NOT NULL,
+                target_table TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                created_at DATETIME NOT NULL
+            )
+            """,
+        ]
+        for statement in statements:
+            conn.execute(statement)
+
+    def _migrate_legacy_items_to_native_workflow(self, conn: sqlite3.Connection) -> None:
+        """Promote legacy item rows into normalized native workflow tables."""
+        rows = conn.execute(
+            """
+            SELECT id, type, title, status, parent_id, created_at, updated_at, original_ek_id
+            FROM items
+            """
+        ).fetchall()
+
+        for item_id, item_type, title, status, parent_id, created_at, updated_at, original_ek_id in rows:
+            if item_type == "inbox":
+                self._insert_native_capture_and_inbox_rows(
+                    conn,
+                    item_id=item_id,
+                    title=title,
+                    origin_type="reminders_import" if original_ek_id else "manual_capture",
+                    source_ref=original_ek_id or None,
+                    created_at=created_at,
+                    updated_at=updated_at,
+                )
+            elif item_type == "project":
+                self._insert_native_project_row(
+                    conn,
+                    project_id=item_id,
+                    name=title,
+                    status=status,
+                    created_at=created_at,
+                    updated_at=updated_at,
+                )
+            elif item_type == "action":
+                self._insert_native_task_row(
+                    conn,
+                    task_id=item_id,
+                    title=title,
+                    status=status,
+                    project_id=parent_id,
+                    created_at=created_at,
+                    updated_at=updated_at,
+                )
+
+    def _insert_native_capture_and_inbox_rows(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        item_id: str,
+        title: str,
+        origin_type: str,
+        source_ref: str | None,
+        created_at: str | None,
+        updated_at: str | None,
+    ) -> None:
+        created_value = created_at or _iso(datetime.now(timezone.utc))
+        updated_value = updated_at or created_value
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO raw_captures (id, source, raw_text, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (item_id, origin_type, title, created_value),
+        )
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO inbox_items (
+                id, raw_capture_id, origin_type, inbox_state, source_ref,
+                imported_at, task_id, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
+            """,
+            (
+                item_id,
+                item_id,
+                origin_type,
+                "needs_clarification",
+                source_ref,
+                created_value if source_ref else None,
+                created_value,
+                updated_value,
+            ),
+        )
+
+    def _insert_native_project_row(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        project_id: str,
+        name: str,
+        status: str,
+        created_at: str | None,
+        updated_at: str | None,
+    ) -> None:
+        created_value = created_at or _iso(datetime.now(timezone.utc))
+        updated_value = updated_at or created_value
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO projects (id, name, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (project_id, name, status, created_value, updated_value),
+        )
+
+    def _insert_native_task_row(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        task_id: str,
+        title: str,
+        status: str,
+        project_id: str | None,
+        created_at: str | None,
+        updated_at: str | None,
+    ) -> None:
+        created_value = created_at or _iso(datetime.now(timezone.utc))
+        updated_value = updated_at or created_value
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO tasks (
+                id, title, status, project_id, time_sensitivity, effort_band, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (task_id, title, status, project_id, "none", "medium", created_value, updated_value),
+        )
+
     def insert_inbox(self, item: Item) -> None:
         """Insert a single inbox item (type=inbox, status=active)."""
         with sqlite3.connect(self._path) as conn:
@@ -187,7 +500,296 @@ class SqliteDB:
                     item.estimated_duration,
                 ),
             )
+            self._insert_native_capture_and_inbox_rows(
+                conn,
+                item_id=item.id,
+                title=item.title,
+                origin_type="reminders_import" if item.original_ek_id else "manual_capture",
+                source_ref=item.original_ek_id,
+                created_at=_iso(item.created_at),
+                updated_at=_iso(item.updated_at),
+            )
             conn.commit()
+
+    def clarify_inbox_item(
+        self,
+        *,
+        inbox_item_id: str,
+        clarified_title: str,
+        destination_type: Literal["task", "project"],
+        project_title: str | None,
+    ) -> None:
+        """Convert a raw inbox capture into a structured task or project."""
+        now = _iso(datetime.now(timezone.utc))
+        if now is None:
+            raise RuntimeError("Expected clarify timestamp to be available.")
+
+        with sqlite3.connect(self._path) as conn:
+            item_row = conn.execute(
+                "SELECT created_at FROM items WHERE id = ?",
+                (inbox_item_id,),
+            ).fetchone()
+            if item_row is None:
+                raise ValueError(f"Unknown inbox item: {inbox_item_id}")
+            created_at = item_row[0] or now
+
+            batch_id = self._insert_mutation_batch(
+                conn,
+                source="capture_clarify",
+                requires_confirmation=False,
+                created_at=now,
+            )
+
+            if destination_type == "task":
+                project_id = self._find_or_create_project(
+                    conn,
+                    title=project_title,
+                    created_at=now,
+                    batch_id=batch_id,
+                )
+                conn.execute(
+                    """
+                    UPDATE items
+                    SET type = 'action', title = ?, parent_id = ?, status = 'active', updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (clarified_title, project_id, now, inbox_item_id),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO tasks (
+                        id, title, status, project_id, source_inbox_item_id,
+                        time_sensitivity, effort_band, created_at, updated_at
+                    )
+                    VALUES (?, ?, 'active', ?, ?, 'none', 'medium', ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        title = excluded.title,
+                        status = excluded.status,
+                        project_id = excluded.project_id,
+                        source_inbox_item_id = excluded.source_inbox_item_id,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        inbox_item_id,
+                        clarified_title,
+                        project_id,
+                        inbox_item_id,
+                        created_at,
+                        now,
+                    ),
+                )
+                conn.execute(
+                    """
+                    UPDATE inbox_items
+                    SET inbox_state = 'clarified',
+                        task_id = ?,
+                        clarified_task_id = ?,
+                        clarified_project_id = ?,
+                        clarified_at = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (inbox_item_id, inbox_item_id, project_id, now, now, inbox_item_id),
+                )
+                self._insert_mutation_record(
+                    conn,
+                    batch_id=batch_id,
+                    target_table="tasks",
+                    target_id=inbox_item_id,
+                    action="clarify_accept",
+                    payload={
+                        "destination_type": "task",
+                        "project_id": project_id,
+                        "title": clarified_title,
+                    },
+                    created_at=now,
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE items
+                    SET type = 'project', title = ?, parent_id = NULL, status = 'active', updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (clarified_title, now, inbox_item_id),
+                )
+                conn.execute("DELETE FROM tasks WHERE id = ?", (inbox_item_id,))
+                conn.execute(
+                    """
+                    INSERT INTO projects (id, name, status, created_at, updated_at)
+                    VALUES (?, ?, 'active', ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        name = excluded.name,
+                        status = excluded.status,
+                        updated_at = excluded.updated_at
+                    """,
+                    (inbox_item_id, clarified_title, created_at, now),
+                )
+                conn.execute(
+                    """
+                    UPDATE inbox_items
+                    SET inbox_state = 'converted_to_project',
+                        task_id = NULL,
+                        clarified_task_id = NULL,
+                        clarified_project_id = ?,
+                        clarified_at = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (inbox_item_id, now, now, inbox_item_id),
+                )
+                self._insert_mutation_record(
+                    conn,
+                    batch_id=batch_id,
+                    target_table="projects",
+                    target_id=inbox_item_id,
+                    action="clarify_accept",
+                    payload={
+                        "destination_type": "project",
+                        "title": clarified_title,
+                    },
+                    created_at=now,
+                )
+
+            conn.commit()
+
+    def reject_inbox_item(self, inbox_item_id: str) -> None:
+        """Archive an inbox capture while preserving raw capture history."""
+        now = _iso(datetime.now(timezone.utc))
+        if now is None:
+            raise RuntimeError("Expected reject timestamp to be available.")
+
+        with sqlite3.connect(self._path) as conn:
+            batch_id = self._insert_mutation_batch(
+                conn,
+                source="capture_clarify",
+                requires_confirmation=False,
+                created_at=now,
+            )
+            conn.execute(
+                "UPDATE items SET status = 'archived', updated_at = ? WHERE id = ?",
+                (now, inbox_item_id),
+            )
+            conn.execute(
+                """
+                UPDATE inbox_items
+                SET inbox_state = 'rejected',
+                    clarified_at = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (now, now, inbox_item_id),
+            )
+            self._insert_mutation_record(
+                conn,
+                batch_id=batch_id,
+                target_table="inbox_items",
+                target_id=inbox_item_id,
+                action="clarify_reject",
+                payload={"inbox_item_id": inbox_item_id},
+                created_at=now,
+            )
+            conn.commit()
+
+    def _find_or_create_project(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        title: str | None,
+        created_at: str,
+        batch_id: str,
+    ) -> str | None:
+        normalized = (title or "").strip()
+        if not normalized:
+            return None
+
+        row = conn.execute(
+            """
+            SELECT id
+            FROM projects
+            WHERE lower(name) = lower(?) AND status != 'archived'
+            LIMIT 1
+            """,
+            (normalized,),
+        ).fetchone()
+        if row is not None:
+            return str(row[0])
+
+        project_id = str(uuid.uuid4())
+        conn.execute(
+            """
+            INSERT INTO items (
+                id, type, title, status, context_tags, parent_id, created_at,
+                due_date, meta_payload, original_ek_id, estimated_duration, updated_at
+            )
+            VALUES (?, 'project', ?, 'active', '[]', NULL, ?, NULL, '{}', NULL, NULL, ?)
+            """,
+            (project_id, normalized, created_at, created_at),
+        )
+        conn.execute(
+            """
+            INSERT INTO projects (id, name, status, created_at, updated_at)
+            VALUES (?, ?, 'active', ?, ?)
+            """,
+            (project_id, normalized, created_at, created_at),
+        )
+        self._insert_mutation_record(
+            conn,
+            batch_id=batch_id,
+            target_table="projects",
+            target_id=project_id,
+            action="create",
+            payload={"title": normalized},
+            created_at=created_at,
+        )
+        return project_id
+
+    def _insert_mutation_batch(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        source: str,
+        requires_confirmation: bool,
+        created_at: str,
+    ) -> str:
+        batch_id = str(uuid.uuid4())
+        conn.execute(
+            """
+            INSERT INTO mutation_batches (id, source, requires_confirmation, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (batch_id, source, int(requires_confirmation), created_at),
+        )
+        return batch_id
+
+    def _insert_mutation_record(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        batch_id: str,
+        target_table: str,
+        target_id: str,
+        action: str,
+        payload: dict[str, Any],
+        created_at: str,
+    ) -> None:
+        conn.execute(
+            """
+            INSERT INTO mutation_records (
+                id, batch_id, target_table, target_id, action, payload_json, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid.uuid4()),
+                batch_id,
+                target_table,
+                target_id,
+                action,
+                json.dumps(payload, sort_keys=True),
+                created_at,
+            ),
+        )
 
     def list_inbox(self) -> list[Item]:
         """Return active inbox items that are not assigned to a project."""
@@ -489,6 +1091,209 @@ class SqliteDB:
             )
             conn.commit()
 
+    def create_assistant_turn(self, turn: AssistantTurn) -> None:
+        """Persist an assistant turn."""
+        if turn.proposal is not None:
+            raw_contract = turn.proposal.payload.get("agent_contract")
+            if raw_contract is None:
+                raise ValueError("Assistant proposals must include agent_contract")
+            AssistantAgentContract.model_validate(raw_contract)
+        with sqlite3.connect(self._path) as conn:
+            conn.execute(
+                """
+                INSERT INTO assistant_turns (
+                    id, prompt, response, route, proposal_json, proposal_status,
+                    created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    turn.id,
+                    turn.prompt,
+                    turn.response,
+                    turn.route,
+                    json.dumps(turn.proposal.model_dump() if turn.proposal else None),
+                    turn.proposal_status,
+                    _iso(turn.created_at),
+                    _iso(turn.updated_at),
+                ),
+            )
+            conn.commit()
+
+    def get_assistant_turn(self, turn_id: str) -> AssistantTurn | None:
+        """Return one assistant turn by id."""
+        with sqlite3.connect(self._path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT * FROM assistant_turns WHERE id = ?",
+                (turn_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        turn = _row_to_assistant_turn(row)
+        return turn.model_copy(update={"audit_steps": self.list_assistant_audit_steps(turn_id)})
+
+    def list_assistant_turns(self, limit: int = 30) -> list[AssistantTurn]:
+        """Return assistant turns ordered newest-first."""
+        with sqlite3.connect(self._path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT * FROM assistant_turns ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        turns = [_row_to_assistant_turn(row) for row in rows]
+        return [
+            turn.model_copy(update={"audit_steps": self.list_assistant_audit_steps(turn.id)})
+            for turn in turns
+        ]
+
+    def update_assistant_proposal_status(self, turn_id: str, status: str) -> None:
+        """Persist proposal-status updates for an assistant turn."""
+        with sqlite3.connect(self._path) as conn:
+            conn.execute(
+                """
+                UPDATE assistant_turns
+                SET proposal_status = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (status, _iso(datetime.now(timezone.utc)), turn_id),
+            )
+            conn.commit()
+
+    def create_assistant_audit_steps(
+        self, turn_id: str, steps: list[AssistantAuditStep]
+    ) -> None:
+        """Persist audit steps for an assistant turn."""
+        if not steps:
+            return
+        with sqlite3.connect(self._path) as conn:
+            for step in steps:
+                conn.execute(
+                    """
+                    INSERT INTO assistant_audit_steps (
+                        id, turn_id, stage, status, summary, payload_json, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(uuid.uuid4()),
+                        turn_id,
+                        step.stage,
+                        step.status,
+                        step.summary,
+                        json.dumps(step.payload),
+                        _iso(step.created_at),
+                    ),
+                )
+            conn.commit()
+
+    def list_assistant_audit_steps(self, turn_id: str) -> list[AssistantAuditStep]:
+        """Return audit steps for a persisted assistant turn."""
+        with sqlite3.connect(self._path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT stage, status, summary, payload_json, created_at
+                FROM assistant_audit_steps
+                WHERE turn_id = ?
+                ORDER BY created_at ASC
+                """,
+                (turn_id,),
+            ).fetchall()
+        return [_row_to_assistant_audit_step(row) for row in rows]
+
+    def insert_memory_entry(self, entry: MemoryEntry) -> None:
+        """Persist a memory entry."""
+        with sqlite3.connect(self._path) as conn:
+            conn.execute(
+                """
+                INSERT INTO memory_entries (
+                    id, kind, scope, scope_ref, value, source, confidence, enabled,
+                    created_at, updated_at, last_confirmed_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    entry.id,
+                    entry.kind,
+                    entry.scope,
+                    entry.scope_ref,
+                    entry.value,
+                    entry.source,
+                    entry.confidence,
+                    int(entry.enabled),
+                    _iso(entry.created_at),
+                    _iso(entry.updated_at),
+                    _iso(entry.last_confirmed_at),
+                ),
+            )
+            conn.commit()
+
+    def get_memory_entry(self, memory_id: str) -> MemoryEntry | None:
+        """Return one memory entry by id."""
+        with sqlite3.connect(self._path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT * FROM memory_entries WHERE id = ?",
+                (memory_id,),
+            ).fetchone()
+        return _row_to_memory_entry(row) if row else None
+
+    def list_memory_entries(
+        self,
+        *,
+        query: str | None = None,
+        include_disabled: bool = True,
+    ) -> list[MemoryEntry]:
+        """Return memory entries ordered by freshness."""
+        sql = "SELECT * FROM memory_entries"
+        params: list[Any] = []
+        clauses: list[str] = []
+        if not include_disabled:
+            clauses.append("enabled = 1")
+        if query:
+            clauses.append("LOWER(value) LIKE ?")
+            params.append(f"%{query.lower()}%")
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY updated_at DESC, created_at DESC"
+
+        with sqlite3.connect(self._path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(sql, params).fetchall()
+        return [_row_to_memory_entry(row) for row in rows]
+
+    def update_memory_entry(self, entry: MemoryEntry) -> None:
+        """Update an existing memory entry."""
+        with sqlite3.connect(self._path) as conn:
+            conn.execute(
+                """
+                UPDATE memory_entries
+                SET kind = ?, scope = ?, scope_ref = ?, value = ?, source = ?,
+                    confidence = ?, enabled = ?, updated_at = ?, last_confirmed_at = ?
+                WHERE id = ?
+                """,
+                (
+                    entry.kind,
+                    entry.scope,
+                    entry.scope_ref,
+                    entry.value,
+                    entry.source,
+                    entry.confidence,
+                    int(entry.enabled),
+                    _iso(entry.updated_at),
+                    _iso(entry.last_confirmed_at),
+                    entry.id,
+                ),
+            )
+            conn.commit()
+
+    def delete_memory_entry(self, memory_id: str) -> None:
+        """Delete a persisted memory entry."""
+        with sqlite3.connect(self._path) as conn:
+            conn.execute("DELETE FROM memory_entries WHERE id = ?", (memory_id,))
+            conn.commit()
+
 
 def _row_to_item(row: sqlite3.Row) -> Item:
     """Convert database row to Item, handling malformed data gracefully."""
@@ -516,4 +1321,59 @@ def _row_to_item(row: sqlite3.Row) -> Item:
         original_ek_id=row["original_ek_id"],
         estimated_duration=row["estimated_duration"],
         updated_at=_parse_dt(row["updated_at"]) if "updated_at" in row.keys() else None,
+    )
+
+
+def _json_loads(raw: str | None, default: Any) -> Any:
+    """Load JSON with a default fallback."""
+    if raw is None:
+        return default
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return default
+
+
+def _row_to_assistant_turn(row: sqlite3.Row) -> AssistantTurn:
+    """Convert database row to AssistantTurn."""
+    proposal_raw = _json_loads(row["proposal_json"], None)
+    proposal = AssistantProposal(**proposal_raw) if proposal_raw else None
+    return AssistantTurn(
+        id=row["id"],
+        prompt=row["prompt"],
+        response=row["response"],
+        route=row["route"],
+        proposal=proposal,
+        proposal_status=row["proposal_status"],
+        audit_steps=[],
+        created_at=_parse_dt(row["created_at"]) or datetime.now(timezone.utc),
+        updated_at=_parse_dt(row["updated_at"]) or datetime.now(timezone.utc),
+    )
+
+
+def _row_to_assistant_audit_step(row: sqlite3.Row) -> AssistantAuditStep:
+    """Convert database row to AssistantAuditStep."""
+    return AssistantAuditStep(
+        stage=row["stage"],
+        status=row["status"],
+        summary=row["summary"],
+        payload=_json_loads(row["payload_json"], {}),
+        created_at=_parse_dt(row["created_at"]) or datetime.now(timezone.utc),
+    )
+
+
+def _row_to_memory_entry(row: sqlite3.Row) -> MemoryEntry:
+    """Convert database row to MemoryEntry."""
+    return MemoryEntry(
+        id=row["id"],
+        kind=row["kind"],
+        scope=row["scope"],
+        scope_ref=row["scope_ref"],
+        value=row["value"],
+        source=row["source"],
+        confidence=float(row["confidence"]),
+        enabled=bool(row["enabled"]),
+        created_at=_parse_dt(row["created_at"]) or datetime.now(timezone.utc),
+        updated_at=_parse_dt(row["updated_at"]) or datetime.now(timezone.utc),
+        last_confirmed_at=_parse_dt(row["last_confirmed_at"]),
     )

@@ -4,34 +4,30 @@
 
 Flow’s **Projects** feature lets you review active projects and work through their next actions in line with GTD: each project is a multi-step outcome; you “proceed” by doing the suggested next action, then defining or doing the next one.
 
-Projects are created in the **Process** funnel (Stage 2: Cluster), where the AI suggests groupings and you create a project and attach tasks. The Projects screen is for **review** (“Do I have a next action for each?”) and **proceed** (open a project and complete or defer actions).
+In the native macOS app, Projects is a first-class view in the sidebar. It is used for both review ("Do I have a next action for each?") and proceed work inside a native split-view layout.
 
 ## Capabilities
 
-- **Project list (GTD review)**  
-  - See all active projects with a short “next action” preview per line.  
-  - Two-panel layout: left = project list, right = selected project’s name, **suggested next action** (full text + tags), and **task list** (all actions with the first marked as `[next]`).  
-  - Navigate with `j/k`; Enter opens the project in the detail screen.
-  - Switch panel focus with `1/2` or `l/d` (also shown in panel headers).
+- **Project list (GTD review)**
+  - See all active projects with a short next-action preview per line.
+  - The native app shows project selection, detail, and related metadata in a desktop split-view layout.
+  - Keyboard movement and selection follow the app’s native list behavior.
 
-- **Project detail (proceed)**  
-  - List of active actions for one project with full task text and tags in a side panel.  
-  - **Complete (c)** marks the selected action done; **Defer (f)** opens a chooser:
+- **Project detail (proceed)**
+  - List of active actions for one project with full task text, metadata, and supporting context.
+  - Complete and defer actions are available from the native detail view:
     - `Waiting For` for external blockers
     - `Defer Until` for tickler-style resurface at a date/time
     - `Someday/Maybe` for low-commitment ideas
-  - List refreshes after each action; if no actions remain, a GTD-style reminder is shown.  
-  - Esc returns to the project list.
+  - The list refreshes after each action; if no actions remain, Flow prompts you to define the next step.
 
-- **Data and performance**  
-  - Projects and their actions are loaded in one async call (`list_projects_with_actions`) so the UI stays responsive.  
-  - Project detail loads actions in the background and shows a short loading state.
+- **Data and performance**
+  - Projects and their actions are loaded through the app’s shared data layer so the UI remains responsive.
+  - Detail content can load progressively without blocking the main window.
 
-## Entry points
+## Entry point
 
-- **CLI**: `flow projects` — opens the TUI on the Projects screen.  
-- **TUI**: From Inbox, Action, or Review, press **P** (or use **?** Help to see shortcuts) to open the Projects screen.
-- **Inbox triage**: In Inbox, press **Enter** to open the Process menu, then choose **Add to project** to attach the selected task to an existing active project.
+- Open **Projects** from the native app sidebar.
 
 ## GTD alignment
 
@@ -41,11 +37,10 @@ Projects are created in the **Process** funnel (Stage 2: Cluster), where the AI 
 | One next action per project | Shown in list and in detail; first task in the list is the suggested next action. |
 | Proceed = do the next action | Project detail: complete or defer the selected action; list updates; next task becomes the new “next” or you add one. |
 | Different defer intents | `Waiting For` maps to `status=waiting`; `Someday/Maybe` maps to `status=someday`; `Defer Until` keeps `status=active` and stores `meta_payload.defer_until`. |
-| Weekly review | Review screen can be used with Projects (e.g. “Review projects” then open Projects). |
+| Weekly review | Review and Projects are adjacent native views, making project review part of the same desktop workflow. |
 
 ## Implementation notes
 
 - **Engine**: `list_projects()`, `list_projects_with_actions()`, `get_project_next_action()`, `defer_item(mode=...)`, `is_deferred_until_active()`.  
 - **DB**: `list_projects(status)` in `flow/database/sqlite.py`.  
-- **TUI**: `flow/tui/screens/projects/` — `ProjectsScreen` (list + detail panel), `ProjectDetailScreen` (proceed).  
-- **Footer**: Cross-screen nav (a, i, r, P) is hidden from the footer but still works; **?** Help lists all shortcuts.
+- **Native app**: project presentation and selection live in `Sources/FlowMacApp/` and `Sources/FlowMacCore/`.

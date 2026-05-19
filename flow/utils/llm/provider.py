@@ -86,7 +86,7 @@ class LLMProvider(ABC):
         ...
 
     # =========================================================================
-    # Async methods for TUI usage (non-blocking)
+    # Async methods for non-blocking callers
     # =========================================================================
 
     @abstractmethod
@@ -96,7 +96,7 @@ class LLMProvider(ABC):
         model: str | None = None,
         sanitize: bool = True,
     ) -> Optional[str]:
-        """Async version of generate_text for non-blocking TUI operations.
+        """Async version of generate_text for non-blocking callers.
 
         Args:
             prompt: The input prompt.
@@ -115,7 +115,7 @@ class LLMProvider(ABC):
         model: str | None = None,
         sanitize: bool = True,
     ) -> Optional[dict[str, Any]]:
-        """Async version of generate_json for non-blocking TUI operations.
+        """Async version of generate_json for non-blocking callers.
 
         Args:
             prompt: The input prompt (should request JSON output).
