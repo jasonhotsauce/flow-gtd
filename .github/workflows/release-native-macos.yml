@@ -1,0 +1,224 @@
+name: Release Native macOS App
+
+on:
+  push:
+    branches:
+      - "release/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-native-macos-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  HOMEBREW_TAP_REPOSITORY: ${{ vars.HOMEBREW_TAP_REPOSITORY || format('{0}/homebrew-flow', github.repository_owner) }}
+  HOMEBREW_CASK_PATH: Casks/flow-gtd.rb
+
+jobs:
+  release:
+    name: Build, sign, notarize, and publish
+    runs-on: macos-14
+    environment:
+      name: release
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' pyproject.toml | head -n 1)"
+          if [[ -z "$version" ]]; then
+            echo "Could not read version from pyproject.toml" >&2
+            exit 1
+          fi
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            expected_with_v="release/v${version}"
+            expected_without_v="release/${version}"
+            if [[ "${GITHUB_REF_NAME}" != "$expected_with_v" && "${GITHUB_REF_NAME}" != "$expected_without_v" ]]; then
+              echo "Release branch must be ${expected_with_v} or ${expected_without_v}; got ${GITHUB_REF_NAME}" >&2
+              exit 1
+            fi
+          fi
+
+          arch="$(uname -m)"
+          case "$arch" in
+            arm64|aarch64) release_arch="arm64" ;;
+            x86_64|amd64) release_arch="x86_64" ;;
+            *)
+              echo "Unsupported release architecture: $arch" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "release_arch=$release_arch" >> "$GITHUB_OUTPUT"
+          echo "asset=Flow-${version}-macos-${release_arch}.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Stop if release already exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists." >&2
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip poetry
+          poetry install
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: sidecar/package-lock.json
+
+      - name: Install sidecar dependencies
+        working-directory: sidecar
+        run: npm ci
+
+      - name: Import Developer ID certificate
+        env:
+          APPLE_DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$APPLE_DEVELOPER_ID_CERTIFICATE_BASE64" || -z "$APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD" ]]; then
+            echo "Missing Apple Developer ID certificate secrets." >&2
+            exit 1
+          fi
+
+          certificate_path="$RUNNER_TEMP/developer_id_application.p12"
+          keychain_path="$RUNNER_TEMP/flow-release-signing.keychain-db"
+          keychain_password="$(openssl rand -base64 32)"
+
+          echo "$APPLE_DEVELOPER_ID_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" -P "$APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security list-keychains -d user -s "$keychain_path" login.keychain-db
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path"
+          security find-identity -v -p codesigning "$keychain_path"
+
+      - name: Run unit tests
+        run: poetry run pytest tests/unit -v
+
+      - name: Run native smoke tests
+        run: ./scripts/test_native_app.sh
+
+      - name: Build native app
+        run: ./scripts/build_native_app.sh
+
+      - name: Sign and package app for notarization
+        env:
+          FLOW_CODESIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
+          FLOW_RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          FLOW_RELEASE_ARCH: ${{ steps.version.outputs.release_arch }}
+          FLOW_REQUIRE_SIGNED: "1"
+        run: ./scripts/package_native_app.sh
+
+      - name: Notarize app archive
+        env:
+          APPLE_NOTARY_KEY_BASE64: ${{ secrets.APPLE_NOTARY_KEY_BASE64 }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          ASSET: ${{ steps.version.outputs.asset }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$APPLE_NOTARY_KEY_BASE64" || -z "$APPLE_NOTARY_KEY_ID" || -z "$APPLE_NOTARY_ISSUER_ID" ]]; then
+            echo "Missing Apple notarization secrets." >&2
+            exit 1
+          fi
+
+          notary_key="$RUNNER_TEMP/AuthKey_${APPLE_NOTARY_KEY_ID}.p8"
+          echo "$APPLE_NOTARY_KEY_BASE64" | base64 --decode > "$notary_key"
+          xcrun notarytool submit "dist/$ASSET" \
+            --key "$notary_key" \
+            --key-id "$APPLE_NOTARY_KEY_ID" \
+            --issuer "$APPLE_NOTARY_ISSUER_ID" \
+            --wait
+          xcrun stapler staple ".build/native/Flow.app"
+          xcrun stapler validate ".build/native/Flow.app"
+
+      - name: Package final stapled app
+        env:
+          FLOW_RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          FLOW_RELEASE_ARCH: ${{ steps.version.outputs.release_arch }}
+          FLOW_REQUIRE_SIGNED: "1"
+        run: ./scripts/package_native_app.sh
+
+      - name: Render Homebrew Cask
+        run: |
+          python3 scripts/render_homebrew_cask.py \
+            --version "${{ steps.version.outputs.version }}" \
+            --github-user "${{ github.repository_owner }}" \
+            --github-repo "${{ github.event.repository.name }}" \
+            --archive "dist/${{ steps.version.outputs.asset }}" \
+            --arch "${{ steps.version.outputs.release_arch }}" \
+            --output "$RUNNER_TEMP/flow-gtd.rb"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          ASSET: ${{ steps.version.outputs.asset }}
+        run: |
+          gh release create "$TAG" "dist/$ASSET" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --generate-notes
+
+      - name: Update Homebrew tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$HOMEBREW_TAP_TOKEN" ]]; then
+            echo "Missing HOMEBREW_TAP_TOKEN secret." >&2
+            exit 1
+          fi
+
+          tap_dir="$RUNNER_TEMP/homebrew-flow"
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPOSITORY}.git" "$tap_dir"
+          mkdir -p "$tap_dir/$(dirname "$HOMEBREW_CASK_PATH")"
+          cp "$RUNNER_TEMP/flow-gtd.rb" "$tap_dir/$HOMEBREW_CASK_PATH"
+          cd "$tap_dir"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$HOMEBREW_CASK_PATH"
+          if git diff --cached --quiet; then
+            echo "Homebrew cask already up to date."
+            exit 0
+          fi
+          git commit -m "Update Flow GTD ${TAG}"
+          git push origin HEAD
+
+      - name: Clean up release credentials
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/flow-release-signing.keychain-db" >/dev/null 2>&1 || true
+          rm -f "$RUNNER_TEMP/developer_id_application.p12" "$RUNNER_TEMP"/AuthKey_*.p8

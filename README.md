@@ -72,6 +72,18 @@ Build the app bundle with:
 
 The app bundle is emitted at `.build/native/Flow.app` and includes the private Node runtime plus compiled sidecar resources under `Contents/Resources/sidecar-runtime/`.
 
+## Install With Homebrew
+
+Flow ships as a native macOS app through a Homebrew Cask:
+
+```bash
+brew tap <github-user>/flow
+brew install --cask flow-gtd
+open -a "Flow GTD"
+```
+
+The Cask installs `Flow.app` from the native release archive. Python is not required for normal app usage.
+
 ## Verify
 
 Run native smoke verification with:
@@ -106,6 +118,83 @@ Optional extras:
 poetry install --extras "web"
 poetry install --extras "rag"
 ```
+
+## Release
+
+The native release artifact is:
+
+```text
+dist/Flow-<version>-macos-<arch>.zip
+```
+
+Maintainer release flow:
+
+```bash
+source .venv/bin/activate
+pytest tests/unit -v
+./scripts/test_native_app.sh
+make native-release-archive
+make release
+make brew-cask
+```
+
+`make native-release-archive` builds `.build/native/Flow.app`, validates the bundle layout, and packages the app with `ditto`. `make release` requires a clean working tree, creates the GitHub release, and attaches the native zip asset. `make brew-cask` renders the Cask from the uploaded release archive so it can be copied to the tap at `homebrew-flow/Casks/flow-gtd.rb`.
+
+For local tap testing before upload, run `make brew-cask-local` after `make native-release-archive`; it hashes the existing local archive without rebuilding it.
+
+Public `make release` requires a signed app. Set `FLOW_CODESIGN_IDENTITY` to a Developer ID Application identity to sign during packaging, or sign the built app before release. The GitHub Actions release workflow signs, notarizes, staples, packages, creates the GitHub release, and updates the Homebrew tap.
+
+### Automated GitHub Release
+
+Pushing a branch named `release/v<version>` or `release/<version>` runs `.github/workflows/release-native-macos.yml`. The branch version must match `pyproject.toml`, for example `release/v0.8.0` for `version = "0.8.0"`.
+
+The workflow:
+
+- installs Python and Node dependencies
+- runs unit and native smoke tests
+- builds `.build/native/Flow.app`
+- imports the Developer ID certificate from GitHub Secrets
+- signs the app with `FLOW_CODESIGN_IDENTITY`
+- submits the zip to Apple notarization
+- staples the app and repackages the final archive
+- creates the GitHub release with `dist/Flow-<version>-macos-<arch>.zip`
+- renders the Cask and commits it to the Homebrew tap
+
+Create a protected GitHub Environment named `release`, restrict it to release branches, and require a reviewer before deployment. Store the release credentials as environment secrets on that environment, not as repository files or plain repository variables.
+
+Required `release` environment secrets:
+
+| Secret | Description |
+|--------|-------------|
+| `APPLE_DEVELOPER_ID_CERTIFICATE_BASE64` | Base64-encoded `.p12` export for the Developer ID Application certificate |
+| `APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD` | Password for the `.p12` certificate export |
+| `APPLE_CODESIGN_IDENTITY` | Exact identity name, such as `Developer ID Application: Example LLC (TEAMID)` |
+| `APPLE_NOTARY_KEY_BASE64` | Base64-encoded App Store Connect API `.p8` key for `notarytool` |
+| `APPLE_NOTARY_KEY_ID` | App Store Connect API key ID |
+| `APPLE_NOTARY_ISSUER_ID` | App Store Connect issuer ID |
+| `HOMEBREW_TAP_TOKEN` | Fine-grained token with Contents read/write access only to the Homebrew tap repository |
+
+Optional GitHub variable:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HOMEBREW_TAP_REPOSITORY` | `<owner>/homebrew-flow` | Tap repository updated by the workflow |
+
+Prepare the certificate secret locally:
+
+```bash
+base64 -i DeveloperIDApplication.p12 | pbcopy
+```
+
+Prepare the notarization key secret locally:
+
+```bash
+base64 -i AuthKey_<KEYID>.p8 | pbcopy
+```
+
+Keep the exported `.p12` and `.p8` files out of the repository. Prefer a CI-specific Developer ID Application certificate and a team App Store Connect API key dedicated to notarization. If either key is exposed, revoke it in Apple Developer/App Store Connect and replace the GitHub environment secret.
+
+For the complete end-to-end setup, including GitHub Environment configuration and first-party Homebrew update behavior, see `docs/release-automation-setup.md`.
 
 ## Configuration
 

@@ -12,6 +12,7 @@ struct FlowMacApp: App {
     @NSApplicationDelegateAdaptor(AppActivationDelegate.self) private var appDelegate
     @StateObject private var store: WorkspaceStore
     @StateObject private var sidecarRuntime: SidecarRuntimeModel
+    @StateObject private var updateController = NativeReleaseUpdateController()
 
     init() {
         let context = AppBootstrap.makeContext()
@@ -28,6 +29,9 @@ struct FlowMacApp: App {
                     minHeight: MainWindowMetrics.minimumHeight
                 )
                 .preferredColorScheme(.dark)
+                .onAppear {
+                    updateController.checkAutomaticallyIfNeeded()
+                }
         }
         .defaultSize(
             width: MainWindowMetrics.defaultWidth,
@@ -36,6 +40,11 @@ struct FlowMacApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             SidebarCommands()
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates...") {
+                    updateController.checkForUpdates(userInitiated: true)
+                }
+            }
         }
     }
 }

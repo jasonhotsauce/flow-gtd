@@ -10,6 +10,12 @@ SIDECAR_RUNTIME_DIR="$RESOURCES_DIR/sidecar-runtime"
 SIDECAR_DIR="$ROOT_DIR/sidecar"
 INFO_PLIST="$ROOT_DIR/NativeSupport/FlowMacApp-Info.plist"
 
+VERSION="$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$ROOT_DIR/pyproject.toml" | head -n 1)"
+if [[ -z "$VERSION" ]]; then
+  echo "Could not read version from pyproject.toml" >&2
+  exit 1
+fi
+
 mkdir -p "$BUILD_DIR" "$MACOS_DIR" "$RESOURCES_DIR"
 
 SDK_PATH="$(xcrun --show-sdk-path)"
@@ -89,6 +95,8 @@ swiftc \
   -o "$MACOS_DIR/FlowMacApp"
 
 cp "$INFO_PLIST" "$APP_DIR/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP_DIR/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$APP_DIR/Contents/Info.plist"
 printf 'APPL????' > "$APP_DIR/Contents/PkgInfo"
 rm -rf "$SIDECAR_RUNTIME_DIR"
 mkdir -p "$SIDECAR_RUNTIME_DIR/node/bin"
