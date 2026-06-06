@@ -12,6 +12,13 @@ def read(path: str) -> str:
     return (REPO_ROOT / path).read_text(encoding="utf-8")
 
 
+def png_color_type(path: Path) -> int:
+    data = path.read_bytes()
+    assert data.startswith(b"\x89PNG\r\n\x1a\n")
+    assert data[12:16] == b"IHDR"
+    return data[25]
+
+
 def load_renderer():
     renderer_path = REPO_ROOT / "scripts" / "render_homebrew_cask.py"
     assert renderer_path.exists(), "missing Homebrew cask renderer"
@@ -170,6 +177,12 @@ def test_native_app_declares_and_builds_first_party_app_icon():
     assert "FlowIcon.png" in build_script
     assert "Flow.icns" in build_script
     assert "iconutil -c icns" in build_script
+
+
+def test_native_app_icon_source_has_transparent_background():
+    icon_path = REPO_ROOT / "NativeSupport" / "FlowIcon.png"
+
+    assert png_color_type(icon_path) in {4, 6}
 
 
 def test_package_script_requires_native_app_icon_resource():
