@@ -194,6 +194,10 @@ def test_github_actions_release_workflow_builds_unsigned_archive_and_updates_tap
     assert "Check existing release" in workflow
     assert "steps.existing-release.outputs.exists != 'true'" in workflow
     assert "skipping release creation and continuing tap update" in workflow
+    assert "Use existing release asset for tap repair" in workflow
+    assert "steps.existing-release.outputs.exists == 'true'" in workflow
+    assert "gh release download" in workflow
+    assert "--clobber" in workflow
     assert "HOMEBREW_TAP_DEPLOY_KEY" in workflow
     assert "HOMEBREW_TAP_TOKEN" not in workflow
     assert "homebrew_tap_deploy_key" in workflow
