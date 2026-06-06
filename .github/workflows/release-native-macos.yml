@@ -67,15 +67,18 @@ jobs:
           echo "release_arch=$release_arch" >> "$GITHUB_OUTPUT"
           echo "asset=Flow-${version}-macos-${release_arch}.zip" >> "$GITHUB_OUTPUT"
 
-      - name: Stop if release already exists
+      - name: Check existing release
+        id: existing-release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists." >&2
-            exit 1
+            echo "Release $TAG already exists; skipping release creation and continuing tap update."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Python
@@ -125,6 +128,7 @@ jobs:
             --output "$RUNNER_TEMP/flow-gtd.rb"
 
       - name: Create GitHub release
+        if: steps.existing-release.outputs.exists != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}

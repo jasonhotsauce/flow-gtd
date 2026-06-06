@@ -191,6 +191,9 @@ def test_github_actions_release_workflow_builds_unsigned_archive_and_updates_tap
     assert re.search(r"permissions:\n  contents: read", workflow)
     assert re.search(r"environment:\n      name: release", workflow)
     assert "contents: write" in workflow
+    assert "Check existing release" in workflow
+    assert "steps.existing-release.outputs.exists != 'true'" in workflow
+    assert "skipping release creation and continuing tap update" in workflow
     assert "HOMEBREW_TAP_DEPLOY_KEY" in workflow
     assert "HOMEBREW_TAP_TOKEN" not in workflow
     assert "homebrew_tap_deploy_key" in workflow
