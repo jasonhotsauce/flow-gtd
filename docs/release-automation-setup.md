@@ -54,22 +54,32 @@ environment variable named:
 HOMEBREW_TAP_REPOSITORY=<owner>/<tap-repo>
 ```
 
-## 3. Create A Fine-Grained GitHub Token For The Tap
+## 3. Create A Write Deploy Key For The Tap
 
-Create a fine-grained GitHub token that can write only to the Homebrew tap
-repository.
+Create an SSH deploy key that can write only to the Homebrew tap repository.
+This is narrower than a personal access token and avoids cross-repository PAT
+scope mistakes.
 
-Minimum access:
+Generate the key:
 
-```text
-Repository: <owner>/homebrew-flow
-Contents: Read and write
+```bash
+ssh-keygen -t ed25519 -C "flow-gtd-homebrew-release" -f ~/.ssh/flow_gtd_homebrew_release -N ""
 ```
 
-Save this token later as:
+Add the public key to the tap repository:
 
 ```text
-HOMEBREW_TAP_TOKEN
+homebrew-flow -> Settings -> Deploy keys -> Add deploy key
+Title: Flow GTD release workflow
+Key: contents of ~/.ssh/flow_gtd_homebrew_release.pub
+Allow write access: enabled
+```
+
+Save the private key contents later as the source repository environment
+secret:
+
+```text
+HOMEBREW_TAP_DEPLOY_KEY
 ```
 
 ## 4. Create The GitHub Release Environment
@@ -102,7 +112,7 @@ enable it manually in the GitHub UI.
 Add these as environment secrets on `release`:
 
 ```text
-HOMEBREW_TAP_TOKEN
+HOMEBREW_TAP_DEPLOY_KEY
 ```
 
 Add this variable only if the tap is not `<owner>/homebrew-flow`:

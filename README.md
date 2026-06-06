@@ -155,15 +155,15 @@ The workflow:
 - builds `.build/native/Flow.app`
 - packages the unsigned app archive
 - creates the GitHub release with `dist/Flow-<version>-macos-<arch>.zip`
-- renders the Cask and commits it to the Homebrew tap
+- renders the Cask and commits it to the Homebrew tap over a repository-scoped deploy key
 
-Create a protected GitHub Environment named `release`, restrict it to release branches, and require a reviewer before deployment. Store the Homebrew tap token as an environment secret on that environment, not as a repository file or plain repository variable.
+Create a protected GitHub Environment named `release`, restrict it to release branches, and require a reviewer before deployment. Store the Homebrew tap deploy key as an environment secret on that environment, not as a repository file or plain repository variable.
 
 Required `release` environment secrets:
 
 | Secret | Description |
 |--------|-------------|
-| `HOMEBREW_TAP_TOKEN` | Fine-grained token with Contents read/write access only to the Homebrew tap repository |
+| `HOMEBREW_TAP_DEPLOY_KEY` | Private SSH deploy key with write access only to the Homebrew tap repository |
 
 Optional GitHub variable:
 

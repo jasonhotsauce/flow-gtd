@@ -137,17 +137,24 @@ jobs:
 
       - name: Update Homebrew tap
         env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
-          if [[ -z "$HOMEBREW_TAP_TOKEN" ]]; then
-            echo "Missing HOMEBREW_TAP_TOKEN secret." >&2
+          if [[ -z "$HOMEBREW_TAP_DEPLOY_KEY" ]]; then
+            echo "Missing HOMEBREW_TAP_DEPLOY_KEY secret." >&2
             exit 1
           fi
 
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$HOMEBREW_TAP_DEPLOY_KEY" > "$HOME/.ssh/homebrew_tap_deploy_key"
+          chmod 600 "$HOME/.ssh/homebrew_tap_deploy_key"
+          ssh-keyscan github.com >> "$HOME/.ssh/known_hosts"
+          git config --global core.sshCommand "ssh -i $HOME/.ssh/homebrew_tap_deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+
           tap_dir="$RUNNER_TEMP/homebrew-flow"
-          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPOSITORY}.git" "$tap_dir"
+          git clone "git@github.com:${HOMEBREW_TAP_REPOSITORY}.git" "$tap_dir"
           mkdir -p "$tap_dir/$(dirname "$HOMEBREW_CASK_PATH")"
           cp "$RUNNER_TEMP/flow-gtd.rb" "$tap_dir/$HOMEBREW_CASK_PATH"
           cd "$tap_dir"

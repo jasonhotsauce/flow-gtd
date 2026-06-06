@@ -191,7 +191,11 @@ def test_github_actions_release_workflow_builds_unsigned_archive_and_updates_tap
     assert re.search(r"permissions:\n  contents: read", workflow)
     assert re.search(r"environment:\n      name: release", workflow)
     assert "contents: write" in workflow
-    assert "HOMEBREW_TAP_TOKEN" in workflow
+    assert "HOMEBREW_TAP_DEPLOY_KEY" in workflow
+    assert "HOMEBREW_TAP_TOKEN" not in workflow
+    assert "homebrew_tap_deploy_key" in workflow
+    assert "git@github.com:${HOMEBREW_TAP_REPOSITORY}.git" in workflow
+    assert "x-access-token" not in workflow
     assert "scripts/build_native_app.sh" in workflow
     assert "Package unsigned app" in workflow
     assert "scripts/package_native_app.sh" in workflow
@@ -211,7 +215,8 @@ def test_readme_documents_github_actions_release_automation():
 
     assert "release/v<version>" in readme
     assert "release/<version>" in readme
-    assert "HOMEBREW_TAP_TOKEN" in readme
+    assert "HOMEBREW_TAP_DEPLOY_KEY" in readme
+    assert "HOMEBREW_TAP_TOKEN" not in readme
     assert "packages the unsigned app archive" in readme
     assert "APPLE_DEVELOPER_ID_CERTIFICATE_BASE64" not in readme
     assert "APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD" not in readme
@@ -240,3 +245,5 @@ def test_native_app_has_first_party_homebrew_update_checker():
     assert "Sparkle" not in updater_source
     assert "first-party Homebrew update behavior" in readme
     assert "Flow checks for updates automatically on launch" in setup_doc
+    assert "HOMEBREW_TAP_DEPLOY_KEY" in setup_doc
+    assert "HOMEBREW_TAP_TOKEN" not in setup_doc
