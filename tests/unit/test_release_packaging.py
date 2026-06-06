@@ -101,6 +101,7 @@ def test_package_native_app_script_validates_and_zips_flow_app(tmp_path):
     (app_dir / "Contents" / "Resources" / "sidecar-runtime" / "node" / "bin" / "node").chmod(0o755)
     (app_dir / "Contents" / "Resources" / "sidecar-runtime" / "dist" / "main.js").write_text("", encoding="utf-8")
     (app_dir / "Contents" / "Resources" / "sidecar-runtime" / "package.json").write_text("{}", encoding="utf-8")
+    (app_dir / "Contents" / "Resources" / "Flow.icns").write_bytes(b"fake icon")
 
     env = os.environ.copy()
     env.update(
@@ -156,6 +157,25 @@ def test_native_build_stamps_app_bundle_version_from_project_version():
     assert "CFBundleShortVersionString $VERSION" in build_script
     assert "CFBundleVersion $VERSION" in build_script
     assert "pyproject.toml" in build_script
+
+
+def test_native_app_declares_and_builds_first_party_app_icon():
+    plist = read("NativeSupport/FlowMacApp-Info.plist")
+    build_script = read("scripts/build_native_app.sh")
+
+    assert "<key>CFBundleIconFile</key>" in plist
+    assert "<string>Flow.icns</string>" in plist
+    assert (REPO_ROOT / "NativeSupport" / "FlowIcon.png").exists()
+    assert "ICON_SOURCE" in build_script
+    assert "FlowIcon.png" in build_script
+    assert "Flow.icns" in build_script
+    assert "iconutil -c icns" in build_script
+
+
+def test_package_script_requires_native_app_icon_resource():
+    package_script = read("scripts/package_native_app.sh")
+
+    assert 'require_path "$APP_DIR/Contents/Resources/Flow.icns"' in package_script
 
 
 def test_package_script_supports_signed_release_gate():

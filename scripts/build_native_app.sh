@@ -9,6 +9,9 @@ RESOURCES_DIR="$APP_DIR/Contents/Resources"
 SIDECAR_RUNTIME_DIR="$RESOURCES_DIR/sidecar-runtime"
 SIDECAR_DIR="$ROOT_DIR/sidecar"
 INFO_PLIST="$ROOT_DIR/NativeSupport/FlowMacApp-Info.plist"
+ICON_SOURCE="$ROOT_DIR/NativeSupport/FlowIcon.png"
+ICONSET_DIR="$BUILD_DIR/Flow.iconset"
+ICON_FILE="$RESOURCES_DIR/Flow.icns"
 
 VERSION="$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$ROOT_DIR/pyproject.toml" | head -n 1)"
 if [[ -z "$VERSION" ]]; then
@@ -38,6 +41,16 @@ fi
 
 if [[ ! -f "$SIDECAR_DIR/package.json" ]]; then
   echo "Missing sidecar package.json at $SIDECAR_DIR" >&2
+  exit 1
+fi
+
+if [[ ! -f "$ICON_SOURCE" ]]; then
+  echo "Missing app icon source at $ICON_SOURCE" >&2
+  exit 1
+fi
+
+if ! command -v iconutil >/dev/null 2>&1; then
+  echo "iconutil is required to build the native app icon." >&2
   exit 1
 fi
 
@@ -98,6 +111,19 @@ cp "$INFO_PLIST" "$APP_DIR/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP_DIR/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$APP_DIR/Contents/Info.plist"
 printf 'APPL????' > "$APP_DIR/Contents/PkgInfo"
+rm -rf "$ICONSET_DIR"
+mkdir -p "$ICONSET_DIR"
+sips -z 16 16 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_16x16.png" >/dev/null
+sips -z 32 32 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_16x16@2x.png" >/dev/null
+sips -z 32 32 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_32x32.png" >/dev/null
+sips -z 64 64 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_32x32@2x.png" >/dev/null
+sips -z 128 128 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_128x128.png" >/dev/null
+sips -z 256 256 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_128x128@2x.png" >/dev/null
+sips -z 256 256 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_256x256.png" >/dev/null
+sips -z 512 512 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_256x256@2x.png" >/dev/null
+sips -z 512 512 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512.png" >/dev/null
+sips -z 1024 1024 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512@2x.png" >/dev/null
+iconutil -c icns "$ICONSET_DIR" -o "$ICON_FILE"
 rm -rf "$SIDECAR_RUNTIME_DIR"
 mkdir -p "$SIDECAR_RUNTIME_DIR/node/bin"
 cp "$BUNDLED_NODE_PATH" "$SIDECAR_RUNTIME_DIR/node/bin/node"
