@@ -237,7 +237,7 @@ final class SidecarFlowRepository: FlowRepository {
             payload: [
                 "id": id,
                 "value": value
-            ],
+            ]
         )
     }
 
@@ -247,7 +247,7 @@ final class SidecarFlowRepository: FlowRepository {
             payload: [
                 "id": id,
                 "enabled": enabled
-            ],
+            ]
         )
     }
 
@@ -281,7 +281,7 @@ final class SidecarFlowRepository: FlowRepository {
                 "planDate": planDate,
                 "topItemIDs": topItemIDs,
                 "bonusItemIDs": bonusItemIDs
-            ],
+            ]
         )
     }
 
@@ -307,7 +307,7 @@ final class SidecarFlowRepository: FlowRepository {
             payload: [
                 "actionIDs": actionIDs,
                 "referenceDate": ISO8601DateFormatter().string(from: referenceDate)
-            ],
+            ]
         )
     }
 
