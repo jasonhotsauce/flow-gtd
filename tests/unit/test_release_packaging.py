@@ -131,7 +131,8 @@ def test_makefile_publish_is_native_release_driven():
 
     assert "NORMALIZED_RELEASE_ARCH :=" in makefile
     assert "RELEASE_ASSET := Flow-$(VERSION)-macos-$(NORMALIZED_RELEASE_ARCH).zip" in makefile
-    assert re.search(r"^release:.*release-preflight.*native-release-archive-signed", makefile, re.MULTILINE)
+    assert re.search(r"^release:.*release-preflight.*native-release-archive", makefile, re.MULTILINE)
+    assert not re.search(r"^release:.*native-release-archive-signed", makefile, re.MULTILINE)
     assert re.search(r"^build-native:.*scripts/build_native_app\.sh", makefile, re.MULTILINE)
     assert re.search(r"^test-native:.*scripts/test_native_app\.sh", makefile, re.MULTILINE)
     assert re.search(r"^native-release-archive:.*build-native", makefile, re.MULTILINE)
@@ -174,11 +175,11 @@ def test_readme_documents_homebrew_cask_install_and_release_flow():
     assert "make native-release-archive" in readme
     assert "make brew-cask" in readme
     assert "make brew-cask-local" in readme
-    assert "FLOW_CODESIGN_IDENTITY" in readme
+    assert "No Apple Developer ID certificate or App Store Connect API key is required" in readme
     assert "Homebrew Formula" not in readme
 
 
-def test_github_actions_release_workflow_builds_signs_notarizes_and_updates_tap():
+def test_github_actions_release_workflow_builds_unsigned_archive_and_updates_tap():
     workflow_path = REPO_ROOT / ".github" / "workflows" / "release-native-macos.yml"
     assert workflow_path.exists(), "missing native macOS release workflow"
 
@@ -190,24 +191,19 @@ def test_github_actions_release_workflow_builds_signs_notarizes_and_updates_tap(
     assert re.search(r"permissions:\n  contents: read", workflow)
     assert re.search(r"environment:\n      name: release", workflow)
     assert "contents: write" in workflow
-    assert "APPLE_DEVELOPER_ID_CERTIFICATE_BASE64" in workflow
-    assert "APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD" in workflow
-    assert "APPLE_CODESIGN_IDENTITY" in workflow
-    assert "APPLE_NOTARY_KEY_BASE64" in workflow
-    assert "APPLE_NOTARY_KEY_ID" in workflow
-    assert "APPLE_NOTARY_ISSUER_ID" in workflow
     assert "HOMEBREW_TAP_TOKEN" in workflow
     assert "scripts/build_native_app.sh" in workflow
-    assert "FLOW_REQUIRE_SIGNED" in workflow
-    assert "FLOW_CODESIGN_IDENTITY" in workflow
-    assert "xcrun notarytool submit" in workflow
-    assert "xcrun stapler staple" in workflow
+    assert "Package unsigned app" in workflow
     assert "scripts/package_native_app.sh" in workflow
     assert "gh release create" in workflow
     assert "scripts/render_homebrew_cask.py" in workflow
     assert "Casks/flow-gtd.rb" in workflow
-    assert "Clean up release credentials" in workflow
-    assert "security delete-keychain" in workflow
+    assert "APPLE_DEVELOPER_ID_CERTIFICATE" not in workflow
+    assert "APPLE_CODESIGN_IDENTITY" not in workflow
+    assert "APPLE_NOTARY" not in workflow
+    assert "FLOW_REQUIRE_SIGNED" not in workflow
+    assert "notarytool" not in workflow
+    assert "stapler" not in workflow
 
 
 def test_readme_documents_github_actions_release_automation():
@@ -215,13 +211,14 @@ def test_readme_documents_github_actions_release_automation():
 
     assert "release/v<version>" in readme
     assert "release/<version>" in readme
-    assert "APPLE_DEVELOPER_ID_CERTIFICATE_BASE64" in readme
-    assert "APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD" in readme
-    assert "APPLE_CODESIGN_IDENTITY" in readme
-    assert "APPLE_NOTARY_KEY_BASE64" in readme
-    assert "APPLE_NOTARY_KEY_ID" in readme
-    assert "APPLE_NOTARY_ISSUER_ID" in readme
     assert "HOMEBREW_TAP_TOKEN" in readme
+    assert "packages the unsigned app archive" in readme
+    assert "APPLE_DEVELOPER_ID_CERTIFICATE_BASE64" not in readme
+    assert "APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD" not in readme
+    assert "APPLE_CODESIGN_IDENTITY" not in readme
+    assert "APPLE_NOTARY_KEY_BASE64" not in readme
+    assert "APPLE_NOTARY_KEY_ID" not in readme
+    assert "APPLE_NOTARY_ISSUER_ID" not in readme
 
 
 def test_native_app_has_first_party_homebrew_update_checker():

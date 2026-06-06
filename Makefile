@@ -141,7 +141,7 @@ bump-major: ## Bump major version (0.1.0 -> 1.0.0)
 # Release
 # ============================================================================
 .PHONY: release
-release: release-preflight native-release-archive-signed ## Create GitHub release with native app zip asset (requires gh CLI)
+release: release-preflight native-release-archive ## Create GitHub release with native app zip asset (requires gh CLI)
 	@echo "$(YELLOW)Creating release v$(VERSION)...$(RESET)"
 	@if ! command -v gh &> /dev/null; then \
 		echo "$(RED)Error: GitHub CLI (gh) is not installed.$(RESET)"; \
@@ -191,7 +191,7 @@ release-dry: ## Show what release would do (dry run)
 	@echo ""
 	@echo "Commands that would be executed:"
 	@echo "  ./scripts/build_native_app.sh"
-	@echo "  FLOW_REQUIRE_SIGNED=1 FLOW_RELEASE_VERSION=\"$(VERSION)\" FLOW_RELEASE_ARCH=\"$(NORMALIZED_RELEASE_ARCH)\" ./scripts/package_native_app.sh"
+	@echo "  FLOW_RELEASE_VERSION=\"$(VERSION)\" FLOW_RELEASE_ARCH=\"$(NORMALIZED_RELEASE_ARCH)\" ./scripts/package_native_app.sh"
 	@echo "  git tag -a \"v$(VERSION)\" -m \"Release v$(VERSION)\""
 	@echo "  git push origin \"v$(VERSION)\""
 	@echo "  gh release create \"v$(VERSION)\" \"$(RELEASE_ASSET_PATH)\" --title \"v$(VERSION)\" --generate-notes"

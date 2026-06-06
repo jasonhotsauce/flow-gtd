@@ -19,7 +19,7 @@ env:
 
 jobs:
   release:
-    name: Build, sign, notarize, and publish
+    name: Build, package, and publish
     runs-on: macos-14
     environment:
       name: release
@@ -99,30 +99,6 @@ jobs:
         working-directory: sidecar
         run: npm ci
 
-      - name: Import Developer ID certificate
-        env:
-          APPLE_DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 }}
-          APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [[ -z "$APPLE_DEVELOPER_ID_CERTIFICATE_BASE64" || -z "$APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD" ]]; then
-            echo "Missing Apple Developer ID certificate secrets." >&2
-            exit 1
-          fi
-
-          certificate_path="$RUNNER_TEMP/developer_id_application.p12"
-          keychain_path="$RUNNER_TEMP/flow-release-signing.keychain-db"
-          keychain_password="$(openssl rand -base64 32)"
-
-          echo "$APPLE_DEVELOPER_ID_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
-          security create-keychain -p "$keychain_password" "$keychain_path"
-          security set-keychain-settings -lut 21600 "$keychain_path"
-          security unlock-keychain -p "$keychain_password" "$keychain_path"
-          security import "$certificate_path" -P "$APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
-          security list-keychains -d user -s "$keychain_path" login.keychain-db
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path"
-          security find-identity -v -p codesigning "$keychain_path"
-
       - name: Run unit tests
         run: poetry run pytest tests/unit -v
 
@@ -132,42 +108,10 @@ jobs:
       - name: Build native app
         run: ./scripts/build_native_app.sh
 
-      - name: Sign and package app for notarization
-        env:
-          FLOW_CODESIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
-          FLOW_RELEASE_VERSION: ${{ steps.version.outputs.version }}
-          FLOW_RELEASE_ARCH: ${{ steps.version.outputs.release_arch }}
-          FLOW_REQUIRE_SIGNED: "1"
-        run: ./scripts/package_native_app.sh
-
-      - name: Notarize app archive
-        env:
-          APPLE_NOTARY_KEY_BASE64: ${{ secrets.APPLE_NOTARY_KEY_BASE64 }}
-          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
-          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
-          ASSET: ${{ steps.version.outputs.asset }}
-        run: |
-          set -euo pipefail
-          if [[ -z "$APPLE_NOTARY_KEY_BASE64" || -z "$APPLE_NOTARY_KEY_ID" || -z "$APPLE_NOTARY_ISSUER_ID" ]]; then
-            echo "Missing Apple notarization secrets." >&2
-            exit 1
-          fi
-
-          notary_key="$RUNNER_TEMP/AuthKey_${APPLE_NOTARY_KEY_ID}.p8"
-          echo "$APPLE_NOTARY_KEY_BASE64" | base64 --decode > "$notary_key"
-          xcrun notarytool submit "dist/$ASSET" \
-            --key "$notary_key" \
-            --key-id "$APPLE_NOTARY_KEY_ID" \
-            --issuer "$APPLE_NOTARY_ISSUER_ID" \
-            --wait
-          xcrun stapler staple ".build/native/Flow.app"
-          xcrun stapler validate ".build/native/Flow.app"
-
-      - name: Package final stapled app
+      - name: Package unsigned app
         env:
           FLOW_RELEASE_VERSION: ${{ steps.version.outputs.version }}
           FLOW_RELEASE_ARCH: ${{ steps.version.outputs.release_arch }}
-          FLOW_REQUIRE_SIGNED: "1"
         run: ./scripts/package_native_app.sh
 
       - name: Render Homebrew Cask
@@ -216,9 +160,3 @@ jobs:
           fi
           git commit -m "Update Flow GTD ${TAG}"
           git push origin HEAD
-
-      - name: Clean up release credentials
-        if: always()
-        run: |
-          security delete-keychain "$RUNNER_TEMP/flow-release-signing.keychain-db" >/dev/null 2>&1 || true
-          rm -f "$RUNNER_TEMP/developer_id_application.p12" "$RUNNER_TEMP"/AuthKey_*.p8

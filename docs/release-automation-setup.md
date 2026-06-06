@@ -1,13 +1,18 @@
 # Native macOS Release Automation Setup
 
 This guide configures the release path so pushing `release/v<version>` or
-`release/<version>` runs build, test, package, sign, notarize, GitHub release,
-and Homebrew Cask publication.
+`release/<version>` runs build, test, package, GitHub release, and Homebrew
+Cask publication.
 
 The current workflow deploys the native app through Homebrew Cask. The app also
 includes a first-party update checker that reads GitHub's latest release
 metadata, compares it to the installed bundle version, and delegates update
 installation to Homebrew.
+
+This is an unsigned distribution path. It does not require an Apple Developer
+account, Developer ID certificate, App Store Connect API key, or notarization.
+The tradeoff is that macOS may show Gatekeeper trust warnings because the app is
+not Developer ID signed or notarized.
 
 ## 1. Confirm The Release Source Of Truth
 
@@ -67,79 +72,7 @@ Save this token later as:
 HOMEBREW_TAP_TOKEN
 ```
 
-## 4. Export The Apple Developer ID Certificate
-
-On the Mac that has the Developer ID Application certificate installed:
-
-```bash
-security find-identity -v -p codesigning
-```
-
-Copy the exact identity string, for example:
-
-```text
-Developer ID Application: Example LLC (TEAMID)
-```
-
-Export the certificate and private key from Keychain Access as a `.p12` file.
-Use a strong export password.
-
-Encode it for GitHub Secrets:
-
-```bash
-base64 -i DeveloperIDApplication.p12 | pbcopy
-```
-
-Save the copied value later as:
-
-```text
-APPLE_DEVELOPER_ID_CERTIFICATE_BASE64
-```
-
-Save the `.p12` export password as:
-
-```text
-APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD
-```
-
-Save the exact signing identity as:
-
-```text
-APPLE_CODESIGN_IDENTITY
-```
-
-## 5. Create The Apple Notarization API Key
-
-In App Store Connect, create an API key that can be used by `notarytool`.
-Download the `.p8` key once and keep it secure.
-
-Record:
-
-```text
-Key ID
-Issuer ID
-```
-
-Encode the key for GitHub Secrets:
-
-```bash
-base64 -i AuthKey_<KEYID>.p8 | pbcopy
-```
-
-Save the copied value later as:
-
-```text
-APPLE_NOTARY_KEY_BASE64
-```
-
-Save the other values as:
-
-```text
-APPLE_NOTARY_KEY_ID
-APPLE_NOTARY_ISSUER_ID
-```
-
-## 6. Create The GitHub Release Environment
+## 4. Create The GitHub Release Environment
 
 In the source repository:
 
@@ -169,12 +102,6 @@ enable it manually in the GitHub UI.
 Add these as environment secrets on `release`:
 
 ```text
-APPLE_DEVELOPER_ID_CERTIFICATE_BASE64
-APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD
-APPLE_CODESIGN_IDENTITY
-APPLE_NOTARY_KEY_BASE64
-APPLE_NOTARY_KEY_ID
-APPLE_NOTARY_ISSUER_ID
 HOMEBREW_TAP_TOKEN
 ```
 
@@ -184,7 +111,7 @@ Add this variable only if the tap is not `<owner>/homebrew-flow`:
 HOMEBREW_TAP_REPOSITORY
 ```
 
-## 7. Check GitHub Actions Permissions
+## 5. Check GitHub Actions Permissions
 
 In the source repository:
 
@@ -202,7 +129,7 @@ Workflow permissions allow the workflow to request contents: write.
 The workflow itself defaults to `contents: read` and grants `contents: write`
 only on the release job so it can create the GitHub release.
 
-## 8. Cut A Release Branch
+## 6. Cut A Release Branch
 
 Update the version in `pyproject.toml`, then run local checks:
 
@@ -225,7 +152,7 @@ git push origin release/v0.8.0
 Do not pre-create the GitHub release or tag. The workflow intentionally fails
 if `v<version>` already exists.
 
-## 9. Approve The Release Deployment
+## 7. Approve The Release Deployment
 
 Open:
 
@@ -241,20 +168,15 @@ After approval, the workflow:
 2. Verifies the branch name matches the version.
 3. Fails if the GitHub release already exists.
 4. Installs Python and Node dependencies.
-5. Imports the Developer ID certificate into a temporary keychain.
-6. Runs unit tests.
-7. Runs native smoke tests.
-8. Builds `.build/native/Flow.app`.
-9. Signs and packages the app.
-10. Submits the archive to Apple notarization.
-11. Staples the notarization ticket.
-12. Repackages the stapled app.
-13. Renders the Homebrew Cask with the archive SHA.
-14. Creates the GitHub release.
-15. Commits `Casks/flow-gtd.rb` to the Homebrew tap.
-16. Deletes temporary signing and notarization files.
+5. Runs unit tests.
+6. Runs native smoke tests.
+7. Builds `.build/native/Flow.app`.
+8. Packages the unsigned app archive.
+9. Renders the Homebrew Cask with the archive SHA.
+10. Creates the GitHub release.
+11. Commits `Casks/flow-gtd.rb` to the Homebrew tap.
 
-## 10. Verify The Published Release
+## 8. Verify The Published Release
 
 Confirm the GitHub release exists:
 
@@ -277,14 +199,17 @@ brew install --cask flow-gtd
 open -a "Flow GTD"
 ```
 
-Validate the installed app:
+Validate the installed app state:
 
 ```bash
 codesign -dvvv --entitlements :- "/Applications/Flow.app"
 spctl -a -vv "/Applications/Flow.app"
 ```
 
-## 11. Update Behavior For Installed Users
+Unsigned builds are expected to fail strict Developer ID assessment. That is the
+accepted tradeoff for releasing without an Apple Developer account.
+
+## 9. Update Behavior For Installed Users
 
 Homebrew deployment updates the Cask. Users can update with:
 
