@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "flow-gtd"
-version = "0.7.6"
+version = "0.7.7"
 description = "Local-first, AI-augmented GTD native macOS app"
 authors = ["Flow Team"]
 readme = "README.md"
