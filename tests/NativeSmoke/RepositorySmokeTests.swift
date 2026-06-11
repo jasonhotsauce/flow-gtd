@@ -20,6 +20,8 @@ struct RepositorySmokeTests {
         try SidecarWriteRepositorySmokeTests.run()
         try SidecarAssistantRepositorySmokeTests.run()
         try smokeTestSelectionNavigation()
+        try smokeTestProjectTaskCreationContract()
+        try smokeTestTaskProjectAssignmentContract()
         try smokeTestInspectorInteractionContract()
         try smokeTestWindowChromeClearance()
         try smokeTestMainWindowAdjustabilityContract()
@@ -165,6 +167,57 @@ struct RepositorySmokeTests {
         }
     }
 
+    private static func smokeTestTaskProjectAssignmentContract() throws {
+        let repository = StubRepository()
+        let store = WorkspaceStore(repository: repository)
+        store.refresh()
+        store.select(section: .inbox)
+
+        guard let task = store.selectedTask else {
+            throw FlowDataError.message("Expected Inbox selection to provide a task for project assignment.")
+        }
+        guard let project = store.snapshot.projects.first else {
+            throw FlowDataError.message("Expected sample workspace to provide a target project for assignment.")
+        }
+
+        store.assignTask(task, to: project)
+
+        guard repository.assignedTaskProjectPairs.count == 1,
+              repository.assignedTaskProjectPairs.first?.0 == task.id,
+              repository.assignedTaskProjectPairs.first?.1 == project.id else {
+            throw FlowDataError.message("Expected store project assignment to route through the repository once.")
+        }
+        guard store.selectedTaskID == task.id else {
+            throw FlowDataError.message("Expected project assignment refresh to preserve the selected task.")
+        }
+    }
+
+    private static func smokeTestProjectTaskCreationContract() throws {
+        let repository = StubRepository()
+        let store = WorkspaceStore(repository: repository)
+        store.refresh()
+
+        guard let project = store.snapshot.projects.first else {
+            throw FlowDataError.message("Expected sample workspace to provide a project for direct task creation.")
+        }
+
+        let succeeded = store.createProjectTask(projectID: project.id, title: " Draft launch checklist ")
+
+        guard succeeded else {
+            throw FlowDataError.message("Expected project task creation to report success.")
+        }
+        guard repository.createdProjectTasks.count == 1,
+              repository.createdProjectTasks.first?.0 == project.id,
+              repository.createdProjectTasks.first?.1 == "Draft launch checklist" else {
+            throw FlowDataError.message("Expected store project task creation to trim input and route through the repository once.")
+        }
+        guard store.selectedSection == .projects,
+              store.selectedTaskID == repository.createdProjectTaskID,
+              store.isInspectorPresented else {
+            throw FlowDataError.message("Expected project task creation to stay in Projects and select the new task.")
+        }
+    }
+
     private static func smokeTestInspectorInteractionContract() throws {
         guard WorkspaceInspectorMetrics.collapsedByDefault else {
             throw FlowDataError.message("Expected the workspace inspector contract to default to collapsed.")
@@ -191,6 +244,10 @@ struct RepositorySmokeTests {
 
         guard workspaceSource.contains("SurfaceCard(title: \"Assistant Context\"") == false else {
             throw FlowDataError.message("Expected assistant context to stop living in the always-visible task inspector.")
+        }
+
+        guard workspaceSource.contains("ProjectAssignmentMenu(") else {
+            throw FlowDataError.message("Expected the inspector to expose a project assignment control for the selected task.")
         }
     }
 
@@ -346,6 +403,11 @@ struct RepositorySmokeTests {
 
         guard projectsSource.contains("project.tasks.prefix(3)") == false else {
             throw FlowDataError.message("Expected Projects workspace to render the full project task list instead of truncating after three rows.")
+        }
+
+        guard projectsSource.contains("ProjectTaskComposer("),
+              projectsSource.contains("Label(\"Add Task\", systemImage: \"plus.circle.fill\")") else {
+            throw FlowDataError.message("Expected each Projects card to expose the inline project task entry point.")
         }
     }
 
@@ -600,6 +662,9 @@ private func insertSeedItem(
 private final class StubRepository: FlowRepository {
     let weeklyReviewPackage: FlowWeeklyReviewPackage
     private(set) var appliedWeeklyReviewActionIDs: [String] = []
+    private(set) var assignedTaskProjectPairs: [(String, String)] = []
+    private(set) var createdProjectTasks: [(String, String)] = []
+    let createdProjectTaskID = "stub-created-project-task"
     private var assistantTurns: [FlowAssistantTurn] = []
     private var assistantSessions: [FlowAssistantSession] = []
     private var assistantMessages: [FlowAssistantMessage] = []
@@ -618,9 +683,32 @@ private final class StubRepository: FlowRepository {
         SampleWorkspaceFactory.makeSnapshot().inboxItems.first!
     }
 
+    func createProjectTask(projectID: String, title: String) throws -> FlowTask {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        createdProjectTasks.append((projectID, trimmed))
+        return FlowTask(
+            id: createdProjectTaskID,
+            title: trimmed,
+            summary: "Linked to Native App Launch.",
+            status: .active,
+            source: .project,
+            projectID: projectID,
+            projectName: "Native App Launch",
+            dueLabel: nil,
+            tags: [],
+            estimatedMinutes: nil,
+            isFlagged: false,
+            lastUpdatedLabel: "Created just now"
+        )
+    }
+
     func clarifyCapture(id: String, title: String, destination: ClarifyDestination, projectTitle: String?) throws {}
 
     func rejectCapture(id: String) throws {}
+
+    func assignTaskToProject(taskID: String, projectID: String) throws {
+        assignedTaskProjectPairs.append((taskID, projectID))
+    }
 
     func loadAssistantSessions(limit: Int) throws -> [FlowAssistantSession] {
         Array(assistantSessions.prefix(limit))

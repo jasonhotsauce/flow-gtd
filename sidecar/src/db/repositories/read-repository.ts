@@ -30,6 +30,7 @@ interface TaskRow {
   due_date: string | null;
   estimated_duration: number | null;
   updated_at: string | null;
+  project_id?: string | null;
   project_title?: string | null;
 }
 
@@ -410,7 +411,7 @@ export class FlowReadRepository {
     ).filter((task) => !plannedIDs.has(task.id) && !mustAddressIDs.has(task.id));
     const projectTasks = this.fetchTasks(
       `
-        SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, p.title AS project_title
+        SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, i.parent_id AS project_id, p.title AS project_title
         FROM items i
         LEFT JOIN items p ON p.id = i.parent_id AND p.type = 'project'
         WHERE i.type = 'action' AND i.status = 'active' AND i.parent_id IS NOT NULL
@@ -541,7 +542,7 @@ export class FlowReadRepository {
   private fetchPlannedItems(): FlowTask[] {
     return this.fetchTasks(
       `
-        SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, p.title AS project_title
+        SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, i.parent_id AS project_id, p.title AS project_title
         FROM daily_plan_entries d
         JOIN items i ON i.id = d.item_id
         LEFT JOIN items p ON p.id = i.parent_id AND p.type = 'project'
@@ -559,7 +560,7 @@ export class FlowReadRepository {
   private fetchLaterItems(plannedIDs: Set<string>): FlowTask[] {
     return this.fetchTasks(
       `
-        SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, p.title AS project_title
+        SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, i.parent_id AS project_id, p.title AS project_title
         FROM items i
         LEFT JOIN items p ON p.id = i.parent_id AND p.type = 'project'
         WHERE i.status IN ('active', 'waiting') AND i.type IN ('action', 'inbox')
@@ -591,7 +592,7 @@ export class FlowReadRepository {
       const title = String(row.title ?? "");
       const tasks = this.fetchTasks(
         `
-          SELECT id, title, status, context_tags, due_date, estimated_duration, updated_at
+          SELECT id, title, status, context_tags, due_date, estimated_duration, updated_at, parent_id AS project_id
           FROM items
           WHERE parent_id = ?
           ORDER BY status = 'done' ASC, updated_at DESC, created_at DESC
@@ -778,7 +779,7 @@ export class FlowReadRepository {
   private fetchPlanItems(planDate: string, bucket: string): FlowTask[] {
     return this.fetchTasks(
       `
-        SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, p.title AS project_title
+        SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, i.parent_id AS project_id, p.title AS project_title
         FROM daily_plan_entries d
         JOIN items i ON i.id = d.item_id
         LEFT JOIN items p ON p.id = i.parent_id AND p.type = 'project'
@@ -815,6 +816,7 @@ export class FlowReadRepository {
           : sourceSummary(source),
         status: (row.status as FlowTaskStatus) || "active",
         source: inferTaskSource(source, resolvedProjectName),
+        projectID: row.project_id ?? undefined,
         projectName: resolvedProjectName ?? undefined,
         dueLabel: formatDueLabel(row.due_date),
         tags: decodeTags(row.context_tags),

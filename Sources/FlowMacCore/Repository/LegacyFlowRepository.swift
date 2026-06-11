@@ -4,6 +4,8 @@ import SQLite3
 protocol FlowRepository {
     func loadWorkspaceSnapshot() throws -> WorkspaceSnapshot
     func capture(title: String) throws -> FlowTask
+    func createProjectTask(projectID: String, title: String) throws -> FlowTask
+    func assignTaskToProject(taskID: String, projectID: String) throws
     func clarifyCapture(id: String, title: String, destination: ClarifyDestination, projectTitle: String?) throws
     func rejectCapture(id: String) throws
     func loadAssistantSessions(limit: Int) throws -> [FlowAssistantSession]
@@ -110,6 +112,7 @@ final class LegacyFlowRepository: FlowRepository {
             summary: "Captured in the native macOS shell.",
             status: .active,
             source: .capture,
+            projectID: nil,
             projectName: nil,
             dueLabel: nil,
             tags: [],
@@ -166,6 +169,168 @@ final class LegacyFlowRepository: FlowRepository {
         }
 
         return task
+    }
+
+    func createProjectTask(projectID: String, title: String) throws -> FlowTask {
+        let trimmedProjectID = projectID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedProjectID.isEmpty == false else {
+            throw FlowDataError.message("Project ID cannot be empty.")
+        }
+        guard trimmedTitle.isEmpty == false else {
+            throw FlowDataError.message("Project task title cannot be empty.")
+        }
+
+        try bootstrapDatabaseIfNeeded()
+
+        return try withDatabase { db in
+            let projectTitle = try requireActiveProjectTitle(db, projectID: trimmedProjectID)
+            let taskID = UUID().uuidString
+            let now = isoTimestamp()
+            let batchID = try insertMutationBatch(
+                db,
+                source: "project_task",
+                requiresConfirmation: false,
+                createdAt: now
+            )
+
+            let sql = """
+                INSERT INTO items (
+                    id, type, title, status, context_tags, parent_id, created_at,
+                    due_date, meta_payload, original_ek_id, estimated_duration, updated_at
+                ) VALUES (?, 'action', ?, 'active', '[]', ?, ?, NULL, '{}', NULL, NULL, ?)
+            """
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+                throw sqliteError(db, fallback: "Unable to prepare project task insert.")
+            }
+            defer { sqlite3_finalize(statement) }
+
+            bindText(taskID, to: statement, index: 1)
+            bindText(trimmedTitle, to: statement, index: 2)
+            bindText(trimmedProjectID, to: statement, index: 3)
+            bindText(now, to: statement, index: 4)
+            bindText(now, to: statement, index: 5)
+
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw sqliteError(db, fallback: "Unable to insert project task.")
+            }
+
+            try upsertTask(
+                db,
+                id: taskID,
+                title: trimmedTitle,
+                status: "active",
+                projectID: trimmedProjectID,
+                sourceInboxItemID: taskID,
+                createdAt: now,
+                updatedAt: now
+            )
+            try insertMutationRecord(
+                db,
+                batchID: batchID,
+                targetTable: "tasks",
+                targetID: taskID,
+                action: "project_task_create",
+                payloadJSON: mutationPayloadJSON([
+                    "project_id": trimmedProjectID,
+                    "title": trimmedTitle
+                ]),
+                createdAt: now
+            )
+
+            return FlowTask(
+                id: taskID,
+                title: trimmedTitle,
+                summary: "Linked to \(projectTitle).",
+                status: .active,
+                source: .project,
+                projectID: trimmedProjectID,
+                projectName: projectTitle,
+                dueLabel: nil,
+                tags: [],
+                estimatedMinutes: nil,
+                isFlagged: false,
+                lastUpdatedLabel: "Created just now"
+            )
+        }
+    }
+
+    func assignTaskToProject(taskID: String, projectID: String) throws {
+        let trimmedTaskID = taskID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedProjectID = projectID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedTaskID.isEmpty == false else {
+            throw FlowDataError.message("Task ID cannot be empty.")
+        }
+        guard trimmedProjectID.isEmpty == false else {
+            throw FlowDataError.message("Project ID cannot be empty.")
+        }
+
+        try bootstrapDatabaseIfNeeded()
+
+        try withDatabase { db in
+            _ = try requireActiveProjectTitle(db, projectID: trimmedProjectID)
+            let task = try requireAssignableTask(db, taskID: trimmedTaskID)
+            let now = isoTimestamp()
+            let batchID = try insertMutationBatch(
+                db,
+                source: "project_task",
+                requiresConfirmation: false,
+                createdAt: now
+            )
+
+            let updateSQL = """
+                UPDATE items
+                SET type = 'action', parent_id = ?, updated_at = ?
+                WHERE id = ?
+            """
+            var update: OpaquePointer?
+            guard sqlite3_prepare_v2(db, updateSQL, -1, &update, nil) == SQLITE_OK else {
+                throw sqliteError(db, fallback: "Unable to prepare task project assignment.")
+            }
+            defer { sqlite3_finalize(update) }
+
+            bindText(trimmedProjectID, to: update, index: 1)
+            bindText(now, to: update, index: 2)
+            bindText(trimmedTaskID, to: update, index: 3)
+
+            guard sqlite3_step(update) == SQLITE_DONE else {
+                throw sqliteError(db, fallback: "Unable to assign task to project.")
+            }
+
+            try upsertTask(
+                db,
+                id: trimmedTaskID,
+                title: task.title,
+                status: task.status,
+                projectID: trimmedProjectID,
+                sourceInboxItemID: task.sourceInboxItemID ?? trimmedTaskID,
+                createdAt: task.createdAt,
+                updatedAt: now
+            )
+            try updateInboxClarifyState(
+                db,
+                id: trimmedTaskID,
+                inboxState: "clarified",
+                taskID: trimmedTaskID,
+                clarifiedTaskID: trimmedTaskID,
+                clarifiedProjectID: trimmedProjectID,
+                clarifiedAt: now,
+                updatedAt: now
+            )
+            try insertMutationRecord(
+                db,
+                batchID: batchID,
+                targetTable: "tasks",
+                targetID: trimmedTaskID,
+                action: "assign_project",
+                payloadJSON: mutationPayloadJSON([
+                    "project_id": trimmedProjectID,
+                    "task_id": trimmedTaskID
+                ]),
+                createdAt: now
+            )
+        }
     }
 
     func markTaskDone(id: String) throws {
@@ -1616,14 +1781,15 @@ final class LegacyFlowRepository: FlowRepository {
         let projectTasks = try fetchCandidateTasks(
             db,
             sql: """
-                SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, p.title
+                SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, i.parent_id, p.title
                 FROM items i
                 LEFT JOIN items p ON p.id = i.parent_id AND p.type = 'project'
                 WHERE i.type = 'action' AND i.status = 'active' AND i.parent_id IS NOT NULL
                 ORDER BY i.updated_at DESC
             """,
             source: .project,
-            projectColumnIndex: 7
+            projectIDColumnIndex: 7,
+            projectColumnIndex: 8
         ).filter { plannedIDs.contains($0.id) == false && mustAddressIDs.contains($0.id) == false }
 
         var riskFlags: [String] = []
@@ -1654,7 +1820,7 @@ final class LegacyFlowRepository: FlowRepository {
         try fetchCandidateTasks(
             db,
             sql: """
-                SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, p.title
+                SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, i.parent_id, p.title
                 FROM daily_plan_entries d
                 JOIN items i ON i.id = d.item_id
                 LEFT JOIN items p ON p.id = i.parent_id AND p.type = 'project'
@@ -1663,7 +1829,8 @@ final class LegacyFlowRepository: FlowRepository {
             """,
             bindings: [planDate, bucket],
             source: .planned,
-            projectColumnIndex: 7
+            projectIDColumnIndex: 7,
+            projectColumnIndex: 8
         )
     }
 
@@ -1672,9 +1839,17 @@ final class LegacyFlowRepository: FlowRepository {
         sql: String,
         bindings: [String] = [],
         source: FlowTaskSource,
+        projectIDColumnIndex: Int? = nil,
         projectColumnIndex: Int? = nil
     ) throws -> [FlowTask] {
-        try fetchTasks(db, sql: sql, bindings: bindings, source: source, projectColumnIndex: projectColumnIndex)
+        try fetchTasks(
+            db,
+            sql: sql,
+            bindings: bindings,
+            source: source,
+            projectIDColumnIndex: projectIDColumnIndex,
+            projectColumnIndex: projectColumnIndex
+        )
     }
 
     private func replaceDailyPlanEntries(_ db: OpaquePointer?, planDate: String, topItemIDs: [String], bonusItemIDs: [String]) throws {
@@ -1768,6 +1943,50 @@ final class LegacyFlowRepository: FlowRepository {
             return nil
         }
         return nullableText(statement, column: 0)
+    }
+
+    private func requireActiveProjectTitle(_ db: OpaquePointer?, projectID: String) throws -> String {
+        let sql = "SELECT title FROM items WHERE id = ? AND type = 'project' AND status = 'active' LIMIT 1"
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw sqliteError(db, fallback: "Unable to prepare project lookup.")
+        }
+        defer { sqlite3_finalize(statement) }
+
+        bindText(projectID, to: statement, index: 1)
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            throw FlowDataError.message("Project \(projectID) does not exist.")
+        }
+        return text(statement, column: 0)
+    }
+
+    private func requireAssignableTask(
+        _ db: OpaquePointer?,
+        taskID: String
+    ) throws -> (title: String, status: String, createdAt: String, sourceInboxItemID: String?) {
+        let sql = """
+            SELECT i.title, i.status, i.created_at, t.source_inbox_item_id
+            FROM items i
+            LEFT JOIN tasks t ON t.id = i.id
+            WHERE i.id = ? AND i.type IN ('inbox', 'action') AND i.status != 'archived'
+            LIMIT 1
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw sqliteError(db, fallback: "Unable to prepare task lookup.")
+        }
+        defer { sqlite3_finalize(statement) }
+
+        bindText(taskID, to: statement, index: 1)
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            throw FlowDataError.message("Task \(taskID) does not exist.")
+        }
+        return (
+            title: text(statement, column: 0),
+            status: text(statement, column: 1),
+            createdAt: text(statement, column: 2),
+            sourceInboxItemID: nullableText(statement, column: 3)
+        )
     }
 
     private func updateLegacyItemForClarifiedTask(
@@ -1947,6 +2166,7 @@ final class LegacyFlowRepository: FlowRepository {
             summary: "Assistant-generated project next action awaiting execution.",
             status: .active,
             source: .assistant,
+            projectID: projectID,
             projectName: nil,
             dueLabel: nil,
             tags: [],
@@ -2224,25 +2444,25 @@ final class LegacyFlowRepository: FlowRepository {
 
     private func fetchPlannedItems(_ db: OpaquePointer?) throws -> [FlowTask] {
         let sql = """
-            SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, p.title
+            SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, i.parent_id, p.title
             FROM daily_plan_entries d
             JOIN items i ON i.id = d.item_id
             LEFT JOIN items p ON p.id = i.parent_id AND p.type = 'project'
             WHERE i.status = 'active'
             ORDER BY d.plan_date DESC, d.bucket ASC, d.position ASC
         """
-        return try fetchTasks(db, sql: sql, source: .planned, projectColumnIndex: 7)
+        return try fetchTasks(db, sql: sql, source: .planned, projectIDColumnIndex: 7, projectColumnIndex: 8)
     }
 
     private func fetchLaterItems(_ db: OpaquePointer?, excluding plannedIDs: Set<String>) throws -> [FlowTask] {
         let sql = """
-            SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, p.title
+            SELECT i.id, i.title, i.status, i.context_tags, i.due_date, i.estimated_duration, i.updated_at, i.parent_id, p.title
             FROM items i
             LEFT JOIN items p ON p.id = i.parent_id AND p.type = 'project'
             WHERE i.status IN ('active', 'waiting') AND i.type IN ('action', 'inbox')
             ORDER BY i.due_date IS NOT NULL DESC, i.due_date ASC, i.updated_at DESC
         """
-        return try fetchTasks(db, sql: sql, source: .project, projectColumnIndex: 7)
+        return try fetchTasks(db, sql: sql, source: .project, projectIDColumnIndex: 7, projectColumnIndex: 8)
             .filter { plannedIDs.contains($0.id) == false }
     }
 
@@ -2299,6 +2519,7 @@ final class LegacyFlowRepository: FlowRepository {
             sql: sql,
             bindings: [projectID],
             source: .project,
+            projectID: projectID,
             projectName: projectTitle
         )
     }
@@ -2676,6 +2897,8 @@ final class LegacyFlowRepository: FlowRepository {
         sql: String,
         bindings: [String] = [],
         source: FlowTaskSource,
+        projectID: String? = nil,
+        projectIDColumnIndex: Int? = nil,
         projectName: String? = nil,
         projectColumnIndex: Int? = nil
     ) throws -> [FlowTask] {
@@ -2691,6 +2914,14 @@ final class LegacyFlowRepository: FlowRepository {
 
         var tasks: [FlowTask] = []
         while sqlite3_step(statement) == SQLITE_ROW {
+            let resolvedProjectID: String?
+            if let projectIDColumnIndex {
+                let value = text(statement, column: Int32(projectIDColumnIndex))
+                resolvedProjectID = value.isEmpty ? projectID : value
+            } else {
+                resolvedProjectID = projectID
+            }
+
             let resolvedProjectName: String?
             if let projectColumnIndex {
                 let value = text(statement, column: Int32(projectColumnIndex))
@@ -2706,6 +2937,7 @@ final class LegacyFlowRepository: FlowRepository {
                     summary: resolvedProjectName.map { "Linked to \($0)." } ?? sourceSummary(for: source),
                     status: FlowTaskStatus(rawValue: text(statement, column: 2)) ?? .active,
                     source: inferredSource(source: source, projectName: resolvedProjectName),
+                    projectID: resolvedProjectID,
                     projectName: resolvedProjectName,
                     dueLabel: formattedDueLabel(rawValue: nullableText(statement, column: 4)),
                     tags: decodedTags(nullableText(statement, column: 3)),

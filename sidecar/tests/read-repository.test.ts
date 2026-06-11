@@ -122,6 +122,7 @@ describe("FlowReadRepository", () => {
       expect(snapshot.inboxItems.map((task) => task.id)).toContain("inbox-1");
       expect(snapshot.todayItems.map((task) => task.id)).toContain("action-1");
       expect(snapshot.projects[0]?.nextActionTitle).toBe("Implement IPC");
+      expect(snapshot.projects[0]?.tasks[0]?.projectID).toBe("project-1");
       expect(snapshot.review.completedThisWeek).toBe(1);
       expect(snapshot.staleItems.map((task) => task.id)).toContain("stale-1");
       expect(snapshot.assistantSuggestions.length).toBeGreaterThan(0);

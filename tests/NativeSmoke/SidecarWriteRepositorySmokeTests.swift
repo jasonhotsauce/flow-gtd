@@ -44,6 +44,18 @@ enum SidecarWriteRepositorySmokeTests {
             destination: .project,
             projectTitle: nil
         )
+        let directProjectTask = try repository.createProjectTask(
+            projectID: projectCapture.id,
+            title: "Draft project launch checklist"
+        )
+        let linkedTask = try repository.capture(title: "Link this existing task")
+        try repository.clarifyCapture(
+            id: linkedTask.id,
+            title: "Link this existing task",
+            destination: .task,
+            projectTitle: nil
+        )
+        try repository.assignTaskToProject(taskID: linkedTask.id, projectID: projectCapture.id)
 
         let memory = try repository.createMemoryRecord(
             kind: "explicit_preference",
@@ -90,6 +102,18 @@ enum SidecarWriteRepositorySmokeTests {
         }
         guard snapshot.projects.contains(where: { $0.id == projectCapture.id && $0.title == "Project Promotion" }) else {
             throw FlowDataError.message("Expected sidecar-owned project clarify flow to work without an optional project title payload.")
+        }
+        guard snapshot.projects.contains(where: { project in
+            project.id == projectCapture.id
+                && project.tasks.contains(where: { $0.id == directProjectTask.id && $0.projectID == projectCapture.id })
+        }) else {
+            throw FlowDataError.message("Expected sidecar-owned direct project task creation to link the new task to the selected project.")
+        }
+        guard snapshot.projects.contains(where: { project in
+            project.id == projectCapture.id
+                && project.tasks.contains(where: { $0.id == linkedTask.id && $0.projectID == projectCapture.id })
+        }) else {
+            throw FlowDataError.message("Expected sidecar-owned task project assignment to link the existing task to the selected project.")
         }
         guard snapshot.projects.flatMap(\.tasks).contains(where: { $0.id == captured.id && $0.status == .done }) else {
             throw FlowDataError.message("Expected sidecar-owned task status updates to persist through the sidecar repository.")

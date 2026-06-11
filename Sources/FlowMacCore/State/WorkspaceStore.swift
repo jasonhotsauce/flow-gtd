@@ -515,6 +515,35 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
+    @discardableResult
+    func createProjectTask(projectID: String, title: String) -> Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return false }
+
+        do {
+            let created = try repository.createProjectTask(projectID: projectID, title: trimmed)
+            refresh()
+            selectedSection = .projects
+            selectedTaskID = created.id
+            isInspectorPresented = true
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func assignTask(_ task: FlowTask, to project: FlowProject) {
+        do {
+            try repository.assignTaskToProject(taskID: task.id, projectID: project.id)
+            refresh()
+            selectedTaskID = task.id
+            isInspectorPresented = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func markDone(_ task: FlowTask) {
         do {
             try repository.markTaskDone(id: task.id)

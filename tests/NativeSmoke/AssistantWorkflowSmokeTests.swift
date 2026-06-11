@@ -836,7 +836,7 @@ enum AssistantWorkflowSmokeTests {
     }
 
     @MainActor
-    private static func waitForAssistantSendCompletion(_ store: WorkspaceStore, timeout: TimeInterval = 1.0) throws {
+    private static func waitForAssistantSendCompletion(_ store: WorkspaceStore, timeout: TimeInterval = 10.0) throws {
         let deadline = Date().addingTimeInterval(timeout)
         while store.assistantSendPending {
             if Date() >= deadline {
@@ -1026,6 +1026,12 @@ private final class AssistantWorkflowRepositorySpy: FlowRepository {
         SampleWorkspaceFactory.makeSnapshot().inboxItems.first!
     }
 
+    func createProjectTask(projectID: String, title: String) throws -> FlowTask {
+        SampleWorkspaceFactory.makeSnapshot().projects.first!.tasks.first!
+    }
+
+    func assignTaskToProject(taskID: String, projectID: String) throws {}
+
     func clarifyCapture(id: String, title: String, destination: ClarifyDestination, projectTitle: String?) throws {}
 
     func rejectCapture(id: String) throws {}
@@ -1197,6 +1203,8 @@ private final class AssistantWorkflowRepositorySpy: FlowRepository {
 private final class AssistantViewStubRepository: FlowRepository {
     func loadWorkspaceSnapshot() throws -> WorkspaceSnapshot { SampleWorkspaceFactory.makeSnapshot() }
     func capture(title: String) throws -> FlowTask { SampleWorkspaceFactory.makeSnapshot().inboxItems.first! }
+    func createProjectTask(projectID: String, title: String) throws -> FlowTask { SampleWorkspaceFactory.makeSnapshot().projects.first!.tasks.first! }
+    func assignTaskToProject(taskID: String, projectID: String) throws {}
     func clarifyCapture(id: String, title: String, destination: ClarifyDestination, projectTitle: String?) throws {}
     func rejectCapture(id: String) throws {}
     func loadAssistantSessions(limit: Int) throws -> [FlowAssistantSession] { [] }

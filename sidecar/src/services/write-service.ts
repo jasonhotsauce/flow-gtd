@@ -7,6 +7,8 @@ import { AssistantSessionMessageService } from "./assistant-session-message-serv
 
 export type SidecarWriteKind =
   | "capture"
+  | "create-project-task"
+  | "assign-task-project"
   | "clarify-capture"
   | "reject-capture"
   | "mark-task-done"
@@ -58,6 +60,17 @@ export async function executeWrite(options: SidecarWriteOptions): Promise<unknow
         return { message: assistantRepository.undoLastMutation() ?? null };
       case "capture":
         return repository.capture(String(options.payload.title ?? ""));
+      case "create-project-task":
+        return repository.createProjectTask(
+          String(options.payload.projectID ?? ""),
+          String(options.payload.title ?? "")
+        );
+      case "assign-task-project":
+        repository.assignTaskToProject(
+          String(options.payload.taskID ?? ""),
+          String(options.payload.projectID ?? "")
+        );
+        return { ok: true };
       case "clarify-capture":
         if (
           options.payload.destination !== "task" &&
@@ -135,6 +148,8 @@ export async function executeWrite(options: SidecarWriteOptions): Promise<unknow
           String(options.payload.status ?? "")
         );
         return { ok: true };
+      default:
+        throw new Error(`Unsupported write kind: ${String(options.kind)}`);
     }
   } finally {
     owner.close();

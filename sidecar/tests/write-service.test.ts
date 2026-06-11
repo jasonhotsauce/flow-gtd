@@ -36,6 +36,198 @@ async function withFlowDBPath<T>(dbPath: string, fn: () => T | Promise<T>): Prom
 }
 
 describe("executeWrite", () => {
+  it("creates a new task directly inside an existing project", async () => {
+    await withDatabase(async (dbPath, readRepository) => {
+      const db = (readRepository as unknown as { db: { prepare: Function } }).db;
+      const projectCapture = (await withFlowDBPath(dbPath, () =>
+        executeWrite({
+          kind: "capture",
+          payload: { title: "Native Launch" }
+        })
+      )) as { id: string };
+      await withFlowDBPath(dbPath, () =>
+        executeWrite({
+          kind: "clarify-capture",
+          payload: {
+            id: projectCapture.id,
+            title: "Native Launch",
+            destination: "project"
+          }
+        })
+      );
+
+      const task = (await withFlowDBPath(dbPath, () =>
+        executeWrite({
+          kind: "create-project-task",
+          payload: {
+            projectID: projectCapture.id,
+            title: "Draft launch checklist"
+          }
+        })
+      )) as {
+        id: string;
+        title: string;
+        status: string;
+        source: string;
+        projectName?: string;
+        projectID?: string;
+      };
+
+      expect(task.title).toBe("Draft launch checklist");
+      expect(task.status).toBe("active");
+      expect(task.source).toBe("project");
+      expect(task.projectName).toBe("Native Launch");
+      expect(task.projectID).toBe(projectCapture.id);
+
+      const snapshot = readRepository.loadWorkspaceSnapshot();
+      const project = snapshot.projects.find((entry) => entry.id === projectCapture.id);
+      expect(project?.tasks.map((entry) => entry.id)).toContain(task.id);
+      expect(snapshot.inboxItems.map((entry) => entry.id)).not.toContain(task.id);
+
+      const legacyRow = db
+        .prepare("SELECT type, parent_id FROM items WHERE id = ?")
+        .get(task.id) as { type: string; parent_id: string | null };
+      const taskRow = db
+        .prepare("SELECT project_id FROM tasks WHERE id = ?")
+        .get(task.id) as { project_id: string | null };
+      expect(legacyRow).toEqual({ type: "action", parent_id: projectCapture.id });
+      expect(taskRow.project_id).toBe(projectCapture.id);
+    });
+  });
+
+  it("rejects direct project task creation without a real project", async () => {
+    await withDatabase(async (dbPath, readRepository) => {
+      const before = readRepository.loadWorkspaceSnapshot();
+
+      await expect(
+        withFlowDBPath(dbPath, () =>
+          executeWrite({
+            kind: "create-project-task",
+            payload: {
+              projectID: "missing-project",
+              title: "Should not persist"
+            }
+          })
+        )
+      ).rejects.toThrow(/project/i);
+
+      await expect(
+        withFlowDBPath(dbPath, () =>
+          executeWrite({
+            kind: "create-project-task",
+            payload: {
+              projectID: "missing-project",
+              title: "   "
+            }
+          })
+        )
+      ).rejects.toThrow(/title|task/i);
+
+      expect(readRepository.loadWorkspaceSnapshot()).toEqual(before);
+    });
+  });
+
+  it("assigns an existing task to an existing project", async () => {
+    await withDatabase(async (dbPath, readRepository) => {
+      const db = (readRepository as unknown as { db: { prepare: Function } }).db;
+      const task = (await withFlowDBPath(dbPath, () =>
+        executeWrite({
+          kind: "capture",
+          payload: { title: "Prepare launch notes" }
+        })
+      )) as { id: string };
+      await withFlowDBPath(dbPath, () =>
+        executeWrite({
+          kind: "clarify-capture",
+          payload: {
+            id: task.id,
+            title: "Prepare launch notes",
+            destination: "task"
+          }
+        })
+      );
+
+      const projectCapture = (await withFlowDBPath(dbPath, () =>
+        executeWrite({
+          kind: "capture",
+          payload: { title: "Launch Project" }
+        })
+      )) as { id: string };
+      await withFlowDBPath(dbPath, () =>
+        executeWrite({
+          kind: "clarify-capture",
+          payload: {
+            id: projectCapture.id,
+            title: "Launch Project",
+            destination: "project"
+          }
+        })
+      );
+
+      await withFlowDBPath(dbPath, () =>
+        executeWrite({
+          kind: "assign-task-project",
+          payload: { taskID: task.id, projectID: projectCapture.id }
+        })
+      );
+
+      const snapshot = readRepository.loadWorkspaceSnapshot();
+      const project = snapshot.projects.find((entry) => entry.id === projectCapture.id);
+      const linkedTask = project?.tasks.find((entry) => entry.id === task.id);
+      expect(linkedTask?.projectName).toBe("Launch Project");
+      expect(linkedTask?.projectID).toBe(projectCapture.id);
+
+      const legacyRow = db
+        .prepare("SELECT parent_id FROM items WHERE id = ?")
+        .get(task.id) as { parent_id: string | null };
+      const taskRow = db
+        .prepare("SELECT project_id FROM tasks WHERE id = ?")
+        .get(task.id) as { project_id: string | null };
+      expect(legacyRow.parent_id).toBe(projectCapture.id);
+      expect(taskRow.project_id).toBe(projectCapture.id);
+    });
+  });
+
+  it("rejects task assignment to a missing project without changing the task", async () => {
+    await withDatabase(async (dbPath, readRepository) => {
+      const db = (readRepository as unknown as { db: { prepare: Function } }).db;
+      const task = (await withFlowDBPath(dbPath, () =>
+        executeWrite({
+          kind: "capture",
+          payload: { title: "Keep this unlinked" }
+        })
+      )) as { id: string };
+      await withFlowDBPath(dbPath, () =>
+        executeWrite({
+          kind: "clarify-capture",
+          payload: {
+            id: task.id,
+            title: "Keep this unlinked",
+            destination: "task"
+          }
+        })
+      );
+
+      await expect(
+        withFlowDBPath(dbPath, () =>
+          executeWrite({
+            kind: "assign-task-project",
+            payload: { taskID: task.id, projectID: "missing-project" }
+          })
+        )
+      ).rejects.toThrow(/project/i);
+
+      const legacyRow = db
+        .prepare("SELECT parent_id FROM items WHERE id = ?")
+        .get(task.id) as { parent_id: string | null };
+      const taskRow = db
+        .prepare("SELECT project_id FROM tasks WHERE id = ?")
+        .get(task.id) as { project_id: string | null };
+      expect(legacyRow.parent_id).toBeNull();
+      expect(taskRow.project_id).toBeNull();
+    });
+  });
+
   it("captures, clarifies, saves a daily plan, and updates task status", async () => {
     await withDatabase(async (dbPath, readRepository) => {
       const capture = (await withFlowDBPath(dbPath, () =>

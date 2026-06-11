@@ -97,6 +97,148 @@ export class FlowWriteRepository {
     };
   }
 
+  createProjectTask(projectID: string, title: string): FlowTask {
+    const trimmedProjectID = trimRequired(projectID, "Project ID cannot be empty.");
+    const trimmedTitle = trimRequired(title, "Project task title cannot be empty.");
+    const project = this.requireActiveProject(trimmedProjectID);
+    const id = crypto.randomUUID();
+    const now = nowIso();
+
+    this.executeMutation(
+      "project_task",
+      {
+        actionType: "project_task_create",
+        targetTable: "tasks",
+        targetID: id,
+        previewText: trimmedTitle,
+        rationale: "Create a task directly in an existing project.",
+        confidence: 1,
+        requiresConfirmation: false,
+        verificationStatus: "validated",
+        idempotencyKey: `project-task-create:${id}`,
+        payload: {
+          title: trimmedTitle,
+          projectID: trimmedProjectID
+        }
+      },
+      () => {
+        this.db
+          .prepare(
+            `
+              INSERT INTO items (
+                id, type, title, status, context_tags, parent_id, created_at,
+                due_date, meta_payload, original_ek_id, estimated_duration, updated_at
+              ) VALUES (?, 'action', ?, 'active', '[]', ?, ?, NULL, '{}', NULL, NULL, ?)
+            `
+          )
+          .run(id, trimmedTitle, trimmedProjectID, now, now);
+        this.db
+          .prepare(
+            `
+              INSERT INTO tasks (
+                id, title, status, project_id, source_inbox_item_id,
+                time_sensitivity, effort_band, created_at, updated_at
+              ) VALUES (?, ?, 'active', ?, NULL, 'flexible', 'medium', ?, ?)
+            `
+          )
+          .run(id, trimmedTitle, trimmedProjectID, now, now);
+      }
+    );
+
+    return {
+      id,
+      title: trimmedTitle,
+      summary: `Linked to ${project.title}.`,
+      status: "active",
+      source: "project",
+      projectID: trimmedProjectID,
+      projectName: project.title,
+      dueLabel: undefined,
+      tags: [],
+      estimatedMinutes: undefined,
+      isFlagged: false,
+      lastUpdatedLabel: "Created just now"
+    };
+  }
+
+  assignTaskToProject(taskID: string, projectID: string): void {
+    const trimmedTaskID = trimRequired(taskID, "Task ID cannot be empty.");
+    const trimmedProjectID = trimRequired(projectID, "Project ID cannot be empty.");
+    this.requireActiveProject(trimmedProjectID);
+    const task = this.requireAssignableTask(trimmedTaskID);
+    const now = nowIso();
+
+    this.executeMutation(
+      "project_task",
+      {
+        actionType: "assign_project",
+        targetTable: "tasks",
+        targetID: trimmedTaskID,
+        previewText: `Assign ${task.title} to project ${trimmedProjectID}`,
+        rationale: "Link an existing task to a specific project.",
+        confidence: 1,
+        requiresConfirmation: false,
+        verificationStatus: "validated",
+        idempotencyKey: `assign-project:${trimmedTaskID}:${trimmedProjectID}`,
+        payload: {
+          taskID: trimmedTaskID,
+          projectID: trimmedProjectID
+        }
+      },
+      () => {
+        this.requireChanges(
+          this.db
+            .prepare(
+              `
+                UPDATE items
+                SET type = 'action', parent_id = ?, updated_at = ?
+                WHERE id = ?
+              `
+            )
+            .run(trimmedProjectID, now, trimmedTaskID),
+          `Task ${trimmedTaskID} does not exist.`
+        );
+        this.db
+          .prepare(
+            `
+              INSERT INTO tasks (
+                id, title, status, project_id, source_inbox_item_id,
+                time_sensitivity, effort_band, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, 'flexible', 'medium', ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                title = excluded.title,
+                status = excluded.status,
+                project_id = excluded.project_id,
+                updated_at = excluded.updated_at
+            `
+          )
+          .run(
+            trimmedTaskID,
+            task.title,
+            task.status,
+            trimmedProjectID,
+            task.source_inbox_item_id ?? trimmedTaskID,
+            task.created_at,
+            now
+          );
+        this.db
+          .prepare(
+            `
+              UPDATE inbox_items
+              SET inbox_state = 'clarified',
+                  task_id = ?,
+                  clarified_task_id = ?,
+                  clarified_project_id = ?,
+                  clarified_at = COALESCE(clarified_at, ?),
+                  updated_at = ?
+              WHERE id = ?
+            `
+          )
+          .run(trimmedTaskID, trimmedTaskID, trimmedProjectID, now, now, trimmedTaskID);
+      }
+    );
+  }
+
   clarifyCapture(
     id: string,
     title: string,
@@ -632,6 +774,61 @@ export class FlowWriteRepository {
       )
       .run(id, trimmed, now, now);
     return id;
+  }
+
+  private requireActiveProject(projectID: string): { id: string; title: string } {
+    const row = this.db
+      .prepare(
+        `
+          SELECT id, title
+          FROM items
+          WHERE id = ? AND type = 'project' AND status = 'active'
+          LIMIT 1
+        `
+      )
+      .get(projectID) as { id?: string; title?: string } | undefined;
+    if (!row?.id || !row.title) {
+      throw new Error(`Project ${projectID} does not exist.`);
+    }
+    return { id: row.id, title: row.title };
+  }
+
+  private requireAssignableTask(taskID: string): {
+    id: string;
+    title: string;
+    status: string;
+    created_at: string;
+    source_inbox_item_id?: string | null;
+  } {
+    const row = this.db
+      .prepare(
+        `
+          SELECT i.id, i.title, i.status, i.created_at, t.source_inbox_item_id
+          FROM items i
+          LEFT JOIN tasks t ON t.id = i.id
+          WHERE i.id = ?
+            AND i.type IN ('inbox', 'action')
+            AND i.status != 'archived'
+          LIMIT 1
+        `
+      )
+      .get(taskID) as {
+        id?: string;
+        title?: string;
+        status?: string;
+        created_at?: string;
+        source_inbox_item_id?: string | null;
+      } | undefined;
+    if (!row?.id || !row.title || !row.status || !row.created_at) {
+      throw new Error(`Task ${taskID} does not exist.`);
+    }
+    return {
+      id: row.id,
+      title: row.title,
+      status: row.status,
+      created_at: row.created_at,
+      source_inbox_item_id: row.source_inbox_item_id
+    };
   }
 
   private requireExistingCreatedAt(id: string): string {

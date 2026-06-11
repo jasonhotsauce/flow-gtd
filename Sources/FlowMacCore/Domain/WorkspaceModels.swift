@@ -76,6 +76,7 @@ struct FlowTask: Identifiable, Hashable, Codable {
     var summary: String
     var status: FlowTaskStatus
     var source: FlowTaskSource
+    var projectID: String?
     var projectName: String?
     var dueLabel: String?
     var tags: [String]
@@ -323,6 +324,7 @@ enum SampleWorkspaceFactory {
                 summary: "Turn the migration scope into a concise story for the first beta.",
                 status: .active,
                 source: .planned,
+                projectID: "sample-project-1",
                 projectName: "Native App Launch",
                 dueLabel: "Today",
                 tags: ["launch", "messaging"],
@@ -336,6 +338,7 @@ enum SampleWorkspaceFactory {
                 summary: "Reduce setup friction and keep the first session focused.",
                 status: .active,
                 source: .planned,
+                projectID: nil,
                 projectName: "First Run",
                 dueLabel: "2 PM",
                 tags: ["onboarding", "ux"],
@@ -349,6 +352,7 @@ enum SampleWorkspaceFactory {
                 summary: "Make sure imported reminders and Flow notifications are clearly separated.",
                 status: .active,
                 source: .planned,
+                projectID: nil,
                 projectName: "Trust",
                 dueLabel: "Tomorrow",
                 tags: ["reminders", "copy"],
@@ -365,6 +369,7 @@ enum SampleWorkspaceFactory {
                 summary: "Clarify how warnings and blocks show up before confirmation.",
                 status: .waiting,
                 source: .assistant,
+                projectID: nil,
                 projectName: "Assistant Safety",
                 dueLabel: "This week",
                 tags: ["assistant", "verifier"],
@@ -378,6 +383,7 @@ enum SampleWorkspaceFactory {
                 summary: "Keep preferences inspectable without exposing internals.",
                 status: .active,
                 source: .project,
+                projectID: nil,
                 projectName: "Memory UX",
                 dueLabel: nil,
                 tags: ["memory", "content"],
@@ -394,6 +400,7 @@ enum SampleWorkspaceFactory {
                 summary: "Open question from the native migration pass.",
                 status: .active,
                 source: .capture,
+                projectID: nil,
                 projectName: nil,
                 dueLabel: nil,
                 tags: ["review", "question"],
@@ -407,6 +414,7 @@ enum SampleWorkspaceFactory {
                 summary: "Use them to calibrate spacing, material, and hierarchy.",
                 status: .active,
                 source: .capture,
+                projectID: nil,
                 projectName: nil,
                 dueLabel: nil,
                 tags: ["visual", "reference"],
@@ -430,6 +438,7 @@ enum SampleWorkspaceFactory {
                     summary: "Keep them useful, understated, and desktop-appropriate.",
                     status: .active,
                     source: .project,
+                    projectID: "sample-project-1",
                     projectName: "Native App Launch",
                     dueLabel: nil,
                     tags: ["ui", "empty-state"],

@@ -47,6 +47,27 @@ final class SidecarFlowRepository: FlowRepository {
         )
     }
 
+    func createProjectTask(projectID: String, title: String) throws -> FlowTask {
+        try mutate(
+            kind: "create-project-task",
+            payload: [
+                "projectID": projectID,
+                "title": title
+            ],
+            as: FlowTask.self
+        )
+    }
+
+    func assignTaskToProject(taskID: String, projectID: String) throws {
+        try mutateAck(
+            kind: "assign-task-project",
+            payload: [
+                "taskID": taskID,
+                "projectID": projectID
+            ]
+        )
+    }
+
     func clarifyCapture(id: String, title: String, destination: ClarifyDestination, projectTitle: String?) throws {
         var payload: [String: Any] = [
             "id": id,

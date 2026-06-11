@@ -26,6 +26,7 @@ export interface FlowTask {
   summary: string;
   status: FlowTaskStatus;
   source: FlowTaskSource;
+  projectID?: string;
   projectName?: string;
   dueLabel?: string;
   tags: string[];

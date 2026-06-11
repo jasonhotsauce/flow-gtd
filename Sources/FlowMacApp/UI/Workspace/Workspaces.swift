@@ -421,6 +421,8 @@ struct InboxWorkspaceView: View {
 
 struct ProjectsWorkspaceView: View {
     @ObservedObject var store: WorkspaceStore
+    @State private var activeComposerProjectID: String?
+    @State private var projectTaskDraft = ""
 
     var body: some View {
         WorkspaceShell(store: store) {
@@ -457,6 +459,33 @@ struct ProjectsWorkspaceView: View {
                                         DetailTile(label: "Next Action", value: nextActionTitle, accent: FlowTheme.coolAccent)
                                     }
 
+                                    if activeComposerProjectID == project.id {
+                                        ProjectTaskComposer(
+                                            project: project,
+                                            draft: $projectTaskDraft,
+                                            onSubmit: {
+                                                if store.createProjectTask(projectID: project.id, title: projectTaskDraft) {
+                                                    projectTaskDraft = ""
+                                                    activeComposerProjectID = nil
+                                                }
+                                            },
+                                            onCancel: {
+                                                projectTaskDraft = ""
+                                                activeComposerProjectID = nil
+                                            }
+                                        )
+                                    } else {
+                                        Button {
+                                            projectTaskDraft = ""
+                                            activeComposerProjectID = project.id
+                                        } label: {
+                                            Label("Add Task", systemImage: "plus.circle.fill")
+                                                .frame(maxWidth: .infinity)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .tint(FlowTheme.tealAccent)
+                                    }
+
                                     VStack(spacing: 12) {
                                         ForEach(project.tasks) { task in
                                             TaskRow(
@@ -483,6 +512,66 @@ struct ProjectsWorkspaceView: View {
                 }
             }
         }
+    }
+}
+
+private struct ProjectTaskComposer: View {
+    let project: FlowProject
+    @Binding var draft: String
+    let onSubmit: () -> Void
+    let onCancel: () -> Void
+
+    private var trimmedDraft: String {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TextField("Next action for \(project.title)", text: $draft)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(FlowTheme.textPrimary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(FlowTheme.surfaceRaised.opacity(0.86))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(FlowTheme.tealAccent.opacity(0.28), lineWidth: 1)
+                        )
+                )
+                .onSubmit {
+                    guard trimmedDraft.isEmpty == false else { return }
+                    onSubmit()
+                }
+
+            HStack(spacing: 8) {
+                Button {
+                    onSubmit()
+                } label: {
+                    Label("Add", systemImage: "plus.circle.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(FlowTheme.tealAccent)
+                .disabled(trimmedDraft.isEmpty)
+
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.bordered)
+
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 12, weight: .semibold))
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(FlowTheme.sidebar.opacity(0.82))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(FlowTheme.tealAccent.opacity(0.2), lineWidth: 1)
+                )
+        )
     }
 }
 
@@ -896,6 +985,14 @@ private struct InspectorPanel: View {
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundStyle(FlowTheme.textSecondary)
 
+                            ProjectAssignmentMenu(
+                                task: task,
+                                projects: store.snapshot.projects,
+                                onAssign: { project in
+                                    store.assignTask(task, to: project)
+                                }
+                            )
+
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                                 DetailTile(label: "Status", value: task.status.label, accent: FlowTheme.taskAccent(for: task.status))
                                 DetailTile(label: "Source", value: task.source.rawValue.capitalized, accent: FlowTheme.coolAccent)
@@ -907,9 +1004,6 @@ private struct InspectorPanel: View {
                                 }
                                 if let updated = task.lastUpdatedLabel {
                                     DetailTile(label: "Updated", value: updated, accent: FlowTheme.roseAccent)
-                                }
-                                if let projectName = task.projectName {
-                                    DetailTile(label: "Project", value: projectName, accent: FlowTheme.coolAccent)
                                 }
                             }
 
@@ -959,6 +1053,58 @@ private struct InspectorPanel: View {
             return FlowTheme.accent(for: store.selectedSection)
         }
         return FlowTheme.taskAccent(for: task.status)
+    }
+}
+
+private struct ProjectAssignmentMenu: View {
+    let task: FlowTask
+    let projects: [FlowProject]
+    let onAssign: (FlowProject) -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(projects) { project in
+                Button {
+                    onAssign(project)
+                } label: {
+                    Label(
+                        project.title,
+                        systemImage: task.projectID == project.id ? "checkmark" : "folder"
+                    )
+                }
+                .disabled(task.projectID == project.id)
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "folder.badge.plus")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(FlowTheme.tealAccent)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Project")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(FlowTheme.textMuted)
+                    Text(task.projectName ?? "Choose project")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(FlowTheme.textPrimary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(FlowTheme.textMuted)
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(FlowTheme.surfaceRaised.opacity(0.82))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(FlowTheme.tealAccent.opacity(0.24), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(projects.isEmpty)
     }
 }
 
